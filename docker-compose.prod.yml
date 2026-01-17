@@ -55,8 +55,8 @@ services:
     command: uvicorn aexy.main:app --host 0.0.0.0 --port 8000 --workers 4
     networks:
       - aexy-network
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
 
   celery-worker:
     build:
@@ -120,8 +120,8 @@ services:
       - backend
     networks:
       - aexy-network
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
 
   # Backup service - runs daily at 2 AM
   backup:
