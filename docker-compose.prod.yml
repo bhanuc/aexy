@@ -43,8 +43,10 @@ services:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-aexy}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-aexy}
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=${SECRET_KEY:?Set SECRET_KEY in .env.prod}
-      - FRONTEND_URL=${FRONTEND_URL:-https://app.aexy.io}
+      - FRONTEND_URL=${FRONTEND_URL:-https://aexy.io}
+      - BACKEND_URL=${BACKEND_URL:-https://server.aexy.io}
       - ENVIRONMENT=production
       # LLM
       - LLM_PROVIDER=${LLM_PROVIDER:-gemini}

@@ -1,10 +1,12 @@
 """Authentication endpoints for GitHub and Google OAuth."""
 
+import json
 import secrets
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
 import httpx
+import redis
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
 from jose import jwt
@@ -19,8 +21,21 @@ from aexy.services.github_service import GitHubAPIError, GitHubAuthError, GitHub
 router = APIRouter()
 settings = get_settings()
 
-# In-memory state store (use Redis in production)
-oauth_states: dict[str, datetime] = {}
+# Redis client for OAuth state (shared across workers)
+_redis_client = None
+
+def get_redis_client():
+    """Get or create Redis client for OAuth state storage."""
+    global _redis_client
+    if _redis_client is None:
+        _redis_client = redis.from_url(
+            settings.redis_url or "redis://localhost:6379/0",
+            decode_responses=True
+        )
+    return _redis_client
+
+# OAuth state TTL (10 minutes)
+OAUTH_STATE_TTL = 600
 
 # Google OAuth configuration
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -46,9 +61,8 @@ GOOGLE_CRM_SCOPES = [
     "https://www.googleapis.com/auth/calendar.events",
 ]
 
-# Store state with metadata (scope type and redirect URL)
-# Format: state -> {"created_at": datetime, "scope_type": "login"|"crm", "redirect_url": str|None}
-oauth_state_meta: dict[str, dict] = {}
+# Redis key prefix for OAuth states
+OAUTH_STATE_PREFIX = "oauth_state:"
 
 
 def create_access_token(developer_id: str) -> str:
@@ -66,13 +80,11 @@ def create_access_token(developer_id: str) -> str:
 async def github_login() -> RedirectResponse:
     """Initiate GitHub OAuth flow."""
     state = secrets.token_urlsafe(32)
-    oauth_states[state] = datetime.now(timezone.utc)
 
-    # Clean old states (older than 10 minutes)
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=10)
-    for old_state in list(oauth_states.keys()):
-        if oauth_states[old_state] < cutoff:
-            del oauth_states[old_state]
+    # Store state in Redis with TTL (auto-expires, no cleanup needed)
+    redis_client = get_redis_client()
+    state_data = {"created_at": datetime.now(timezone.utc).isoformat(), "type": "github"}
+    redis_client.setex(f"{OAUTH_STATE_PREFIX}{state}", OAUTH_STATE_TTL, json.dumps(state_data))
 
     github_service = GitHubService()
     auth_url = github_service.get_oauth_url(state)
@@ -101,9 +113,11 @@ async def github_callback(
 
     # For OAuth flow, verify state
     if not is_installation_callback:
-        if not state or state not in oauth_states:
+        redis_client = get_redis_client()
+        state_key = f"{OAUTH_STATE_PREFIX}{state}"
+        if not state or not redis_client.exists(state_key):
             return RedirectResponse(url=f"{frontend_url}/?error=invalid_state")
-        del oauth_states[state]
+        redis_client.delete(state_key)
 
     github_service = GitHubService()
 
@@ -183,14 +197,8 @@ async def github_callback(
 
 
 def _clean_old_oauth_states():
-    """Clean expired OAuth states."""
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=10)
-    for old_state in list(oauth_states.keys()):
-        if oauth_states[old_state] < cutoff:
-            del oauth_states[old_state]
-    for old_state in list(oauth_state_meta.keys()):
-        if oauth_state_meta[old_state].get("created_at", datetime.min.replace(tzinfo=timezone.utc)) < cutoff:
-            del oauth_state_meta[old_state]
+    """Clean expired OAuth states - no-op since Redis handles TTL automatically."""
+    pass
 
 
 @router.get("/google/login")
@@ -203,14 +211,15 @@ async def google_login() -> RedirectResponse:
         )
 
     state = secrets.token_urlsafe(32)
-    oauth_states[state] = datetime.now(timezone.utc)
-    oauth_state_meta[state] = {
-        "created_at": datetime.now(timezone.utc),
+
+    # Store state in Redis with metadata
+    redis_client = get_redis_client()
+    state_data = {
+        "created_at": datetime.now(timezone.utc).isoformat(),
         "scope_type": "login",
         "redirect_url": None,
     }
-
-    _clean_old_oauth_states()
+    redis_client.setex(f"{OAUTH_STATE_PREFIX}{state}", OAUTH_STATE_TTL, json.dumps(state_data))
 
     # Build Google OAuth URL
     params = {
@@ -241,14 +250,15 @@ async def google_connect_crm(redirect_url: str | None = None) -> RedirectRespons
         )
 
     state = secrets.token_urlsafe(32)
-    oauth_states[state] = datetime.now(timezone.utc)
-    oauth_state_meta[state] = {
-        "created_at": datetime.now(timezone.utc),
+
+    # Store state in Redis with metadata
+    redis_client = get_redis_client()
+    state_data = {
+        "created_at": datetime.now(timezone.utc).isoformat(),
         "scope_type": "crm",
         "redirect_url": redirect_url,
     }
-
-    _clean_old_oauth_states()
+    redis_client.setex(f"{OAUTH_STATE_PREFIX}{state}", OAUTH_STATE_TTL, json.dumps(state_data))
 
     # Build Google OAuth URL with CRM scopes
     params = {
@@ -279,13 +289,16 @@ async def google_callback(
     if error:
         return RedirectResponse(url=f"{frontend_url}/?error={error}")
 
-    # Verify state
-    if not state or state not in oauth_states:
+    # Verify state from Redis
+    redis_client = get_redis_client()
+    state_key = f"{OAUTH_STATE_PREFIX}{state}"
+    state_data_raw = redis_client.get(state_key)
+    if not state or not state_data_raw:
         return RedirectResponse(url=f"{frontend_url}/?error=invalid_state")
-    del oauth_states[state]
+    redis_client.delete(state_key)
 
     # Get metadata about this OAuth flow
-    state_meta = oauth_state_meta.pop(state, {})
+    state_meta = json.loads(state_data_raw)
     scope_type = state_meta.get("scope_type", "login")
     custom_redirect_url = state_meta.get("redirect_url")
 
