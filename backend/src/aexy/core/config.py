@@ -122,6 +122,7 @@ class Settings(BaseSettings):
     debug: bool = False
     api_v1_prefix: str = "/api/v1"
     frontend_url: str = "http://localhost:3000"
+    backend_url: str = "http://localhost:8000"
 
     # Database
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/aexy"

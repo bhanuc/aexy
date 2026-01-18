@@ -61,6 +61,12 @@ router = APIRouter(
     tags=["Google Integration"],
 )
 
+# Separate router for static OAuth callback (no workspace_id in path)
+callback_router = APIRouter(
+    prefix="/integrations/google",
+    tags=["Google Integration"],
+)
+
 # Google OAuth configuration
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -145,10 +151,10 @@ async def get_connect_url(
     # Build state parameter with workspace and developer info
     state = f"{workspace_id}:{current_user.id}:{redirect_url or ''}"
 
-    # Build OAuth URL
+    # Build OAuth URL - use static callback URL (workspace_id is in state)
     params = {
         "client_id": settings.google_client_id,
-        "redirect_uri": f"{settings.backend_url}/api/v1/workspaces/{workspace_id}/integrations/google/callback",
+        "redirect_uri": settings.google_redirect_uri,
         "response_type": "code",
         "scope": " ".join(GOOGLE_SCOPES),
         "access_type": "offline",
@@ -366,6 +372,131 @@ async def oauth_callback(
     except Exception as e:
         logger.exception(f"OAuth callback error: {e}")
         redirect = custom_redirect or f"{frontend_url}/crm/settings/integrations"
+        return RedirectResponse(
+            url=f"{redirect}?google=error&message={urllib.parse.quote(str(e))}",
+            status_code=status.HTTP_302_FOUND,
+        )
+
+
+@callback_router.get("/callback")
+async def google_oauth_callback(
+    code: str = Query(...),
+    state: str = Query(...),
+    error: str = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Handle Google OAuth callback (static URL).
+
+    This is the main callback endpoint for Google OAuth.
+    Workspace ID is extracted from the state parameter.
+    """
+    import httpx
+
+    settings = get_settings()
+    frontend_url = settings.frontend_url
+
+    # Parse state: workspace_id:developer_id:custom_redirect
+    state_parts = state.split(":")
+    workspace_id = state_parts[0] if len(state_parts) > 0 else ""
+    developer_id = state_parts[1] if len(state_parts) > 1 else ""
+    custom_redirect = ":".join(state_parts[2:]) if len(state_parts) > 2 else ""
+
+    if error:
+        redirect = custom_redirect or f"{frontend_url}/crm/settings?section=integrations"
+        return RedirectResponse(
+            url=f"{redirect}?google=error&message={urllib.parse.quote(error)}",
+            status_code=status.HTTP_302_FOUND,
+        )
+
+    if not workspace_id:
+        redirect = custom_redirect or f"{frontend_url}/crm/settings?section=integrations"
+        return RedirectResponse(
+            url=f"{redirect}?google=error&message=Invalid+state",
+            status_code=status.HTTP_302_FOUND,
+        )
+
+    try:
+        # Exchange code for tokens
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                GOOGLE_TOKEN_URL,
+                data={
+                    "client_id": settings.google_client_id,
+                    "client_secret": settings.google_client_secret,
+                    "code": code,
+                    "grant_type": "authorization_code",
+                    "redirect_uri": settings.google_redirect_uri,
+                },
+            )
+
+            if response.status_code != 200:
+                logger.error(f"Token exchange failed: {response.text}")
+                redirect = custom_redirect or f"{frontend_url}/crm/settings?section=integrations"
+                return RedirectResponse(
+                    url=f"{redirect}?google=error&message=Token+exchange+failed",
+                    status_code=status.HTTP_302_FOUND,
+                )
+
+            token_data = response.json()
+
+        # Get user info
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                GOOGLE_USERINFO_URL,
+                headers={"Authorization": f"Bearer {token_data['access_token']}"},
+            )
+            user_info = response.json() if response.status_code == 200 else {}
+
+        # Create or update integration
+        result = await db.execute(
+            select(GoogleIntegration).where(GoogleIntegration.workspace_id == workspace_id)
+        )
+        integration = result.scalar_one_or_none()
+
+        token_expiry = datetime.now(timezone.utc)
+        if "expires_in" in token_data:
+            from datetime import timedelta
+            token_expiry = datetime.now(timezone.utc) + timedelta(seconds=token_data["expires_in"])
+
+        if integration:
+            # Update existing
+            integration.access_token = token_data["access_token"]
+            integration.refresh_token = token_data.get("refresh_token", integration.refresh_token)
+            integration.token_expiry = token_expiry
+            integration.google_email = user_info.get("email", integration.google_email)
+            integration.google_user_id = user_info.get("id")
+            integration.granted_scopes = token_data.get("scope", "").split()
+            integration.is_active = True
+            integration.last_error = None
+        else:
+            # Create new
+            integration = GoogleIntegration(
+                id=str(uuid4()),
+                workspace_id=workspace_id,
+                connected_by_id=developer_id if developer_id else None,
+                access_token=token_data["access_token"],
+                refresh_token=token_data.get("refresh_token"),
+                token_expiry=token_expiry,
+                google_email=user_info.get("email"),
+                google_user_id=user_info.get("id"),
+                granted_scopes=token_data.get("scope", "").split(),
+                gmail_sync_enabled=True,
+                calendar_sync_enabled=True,
+                is_active=True,
+            )
+            db.add(integration)
+
+        await db.commit()
+
+        redirect = custom_redirect or f"{frontend_url}/crm/settings?section=integrations"
+        return RedirectResponse(
+            url=f"{redirect}?google=connected",
+            status_code=status.HTTP_302_FOUND,
+        )
+
+    except Exception as e:
+        logger.exception(f"OAuth callback error: {e}")
+        redirect = custom_redirect or f"{frontend_url}/crm/settings?section=integrations"
         return RedirectResponse(
             url=f"{redirect}?google=error&message={urllib.parse.quote(str(e))}",
             status_code=status.HTTP_302_FOUND,
