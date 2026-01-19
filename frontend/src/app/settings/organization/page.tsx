@@ -440,14 +440,23 @@ function SeatUsageBar({ used, total }: { used: number; total: number }) {
 interface PendingInviteRowProps {
   invite: WorkspacePendingInvite;
   onRevoke: (inviteId: string) => void;
-  onResend: (inviteId: string) => void;
+  onResend: (inviteId: string) => Promise<void>;
   isRevoking: boolean;
-  isResending: boolean;
 }
 
-function PendingInviteRow({ invite, onRevoke, onResend, isRevoking, isResending }: PendingInviteRowProps) {
+function PendingInviteRow({ invite, onRevoke, onResend, isRevoking }: PendingInviteRowProps) {
+  const [isResending, setIsResending] = useState(false);
   const expiresAt = invite.expires_at ? new Date(invite.expires_at) : null;
   const isExpired = expiresAt && expiresAt < new Date();
+
+  const handleResend = async () => {
+    setIsResending(true);
+    try {
+      await onResend(invite.id);
+    } finally {
+      setIsResending(false);
+    }
+  };
 
   return (
     <div className="p-4 flex items-center justify-between hover:bg-slate-700/30 transition">
@@ -485,7 +494,7 @@ function PendingInviteRow({ invite, onRevoke, onResend, isRevoking, isResending 
           {invite.role}
         </span>
         <button
-          onClick={() => onResend(invite.id)}
+          onClick={handleResend}
           disabled={isResending}
           className="p-2 text-blue-400 hover:text-blue-300 hover:bg-slate-700 rounded-lg transition disabled:opacity-50"
           title="Resend invite"
@@ -602,8 +611,9 @@ export default function OrganizationSettingsPage() {
     revokeInvite,
     resendInvite,
     isRevoking,
-    isResending,
   } = usePendingInvites(currentWorkspaceId);
+
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const {
     appSettings,
@@ -648,7 +658,10 @@ export default function OrganizationSettingsPage() {
   };
 
   const handleResendInvite = async (inviteId: string) => {
+    const invite = pendingInvites.find(i => i.id === inviteId);
     await resendInvite(inviteId);
+    setSuccessMessage(`Invitation resent to ${invite?.email || 'user'}`);
+    setTimeout(() => setSuccessMessage(null), 3000);
   };
 
   const isLoading = workspacesLoading || currentWorkspaceLoading || membersLoading || pendingInvitesLoading;
@@ -666,6 +679,14 @@ export default function OrganizationSettingsPage() {
 
   return (
     <div className="min-h-screen bg-slate-900">
+      {/* Success Toast */}
+      {successMessage && (
+        <div className="fixed top-4 right-4 z-50 bg-green-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
+          <Check className="h-5 w-5" />
+          {successMessage}
+        </div>
+      )}
+
       {/* Header */}
       <header className="border-b border-slate-700 bg-slate-800/50">
         <div className="max-w-5xl mx-auto px-4 py-4">
@@ -884,7 +905,6 @@ export default function OrganizationSettingsPage() {
                       onRevoke={handleRevokeInvite}
                       onResend={handleResendInvite}
                       isRevoking={isRevoking}
-                      isResending={isResending}
                     />
                   ))}
                 </div>

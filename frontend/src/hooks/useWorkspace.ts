@@ -352,7 +352,6 @@ export function usePendingInvites(workspaceId: string | null) {
     revokeInvite: revokeMutation.mutateAsync,
     resendInvite: resendMutation.mutateAsync,
     isRevoking: revokeMutation.isPending,
-    isResending: resendMutation.isPending,
   };
 }
 

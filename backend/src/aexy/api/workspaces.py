@@ -728,7 +728,12 @@ async def resend_pending_invite(
     current_user: Developer = Depends(get_current_developer),
     db: AsyncSession = Depends(get_db),
 ):
-    """Resend a pending invite by extending its expiry date."""
+    """Resend a pending invite by extending its expiry date and sending email."""
+    import logging
+    from aexy.services.email_service import EmailService
+    from aexy.core.config import settings
+
+    logger = logging.getLogger(__name__)
     service = WorkspaceService(db)
 
     if not await service.check_permission(workspace_id, str(current_user.id), "admin"):
@@ -743,6 +748,61 @@ async def resend_pending_invite(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Invite not found",
         )
+
+    # Get workspace name for email
+    workspace = await service.get_workspace(workspace_id)
+    workspace_name = workspace.name if workspace else "the workspace"
+
+    # Send invite email
+    try:
+        email_service = EmailService()
+        if email_service.is_configured:
+            invite_url = f"{settings.frontend_url}/invite/{invite.token}"
+            subject = f"You've been invited to join {workspace_name} on Aexy"
+            body_text = f"""
+Hi,
+
+{current_user.name or current_user.email} has invited you to join {workspace_name} on Aexy.
+
+Click the link below to accept the invitation:
+{invite_url}
+
+This invitation will expire on {invite.expires_at.strftime('%B %d, %Y')}.
+
+If you didn't expect this invitation, you can safely ignore this email.
+
+Best,
+The Aexy Team
+            """.strip()
+
+            body_html = f"""
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;">
+    <h2 style="color: #1f2937;">You've been invited to join {workspace_name}</h2>
+    <p style="color: #4b5563;">{current_user.name or current_user.email} has invited you to join {workspace_name} on Aexy.</p>
+    <p style="margin: 24px 0;">
+        <a href="{invite_url}" style="background-color: #7c3aed; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block;">
+            Accept Invitation
+        </a>
+    </p>
+    <p style="color: #6b7280; font-size: 14px;">This invitation will expire on {invite.expires_at.strftime('%B %d, %Y')}.</p>
+    <p style="color: #9ca3af; font-size: 12px; margin-top: 32px;">If you didn't expect this invitation, you can safely ignore this email.</p>
+</div>
+            """.strip()
+
+            await email_service.send_templated_email(
+                db=db,
+                recipient_email=invite.email,
+                subject=subject,
+                body_text=body_text,
+                body_html=body_html,
+            )
+            logger.info(f"Resent invite email to {invite.email} for workspace {workspace_id}")
+        else:
+            logger.warning(f"Email service not configured, skipping invite email to {invite.email}")
+    except Exception as e:
+        logger.error(f"Failed to send invite email to {invite.email}: {e}")
+        # Don't fail the request if email fails
+
     await db.commit()
     return pending_invite_to_response(invite)
 

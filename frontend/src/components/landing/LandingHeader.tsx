@@ -160,6 +160,9 @@ export function LandingHeader({ showGetStarted = true }: LandingHeaderProps) {
             )}
           </div>
 
+          <Link href="/story" className="text-white/60 hover:text-white transition text-sm">
+            Our Story
+          </Link>
           <Link href="/mission" className="text-white/60 hover:text-white transition text-sm">
             Mission
           </Link>
@@ -243,6 +246,7 @@ export function LandingFooter() {
           <div>
             <h4 className="text-white font-semibold mb-4">Resources</h4>
             <ul className="space-y-2 text-white/40 text-sm">
+              <li><Link href="/story" className="hover:text-white transition">Our Story</Link></li>
               <li><Link href="/mission" className="hover:text-white transition">Mission</Link></li>
               <li><Link href="/manifesto" className="hover:text-white transition">Engineering OS</Link></li>
               <li><Link href="/pricing" className="hover:text-white transition">Pricing</Link></li>
