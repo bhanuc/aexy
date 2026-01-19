@@ -831,7 +831,7 @@ async def get_campaign_devices(
 @router.get("/analytics/overview", response_model=WorkspaceEmailOverview)
 async def get_workspace_email_overview(
     workspace_id: str,
-    period: str = Query("30d", pattern="^(7d|30d|90d)$"),
+    days: int = Query(30, ge=1, le=365),
     db: AsyncSession = Depends(get_db),
     current_user: Developer = Depends(get_current_developer),
 ):
@@ -843,7 +843,7 @@ async def get_workspace_email_overview(
     analytics_service = EmailAnalyticsService(db)
     overview = await analytics_service.get_workspace_overview(
         workspace_id=workspace_id,
-        period=period,
+        days=days,
     )
 
     return overview
@@ -875,8 +875,8 @@ async def get_workspace_email_trends(
 @router.get("/analytics/top-campaigns")
 async def get_top_campaigns(
     workspace_id: str,
-    period: str = Query("30d", pattern="^(7d|30d|90d)$"),
-    metric: str = Query("open_rate", pattern="^(open_rate|click_rate|sent_count)$"),
+    days: int = Query(30, ge=1, le=365),
+    metric: str = Query("opens", pattern="^(opens|clicks|conversions|open_rate|click_rate|sent_count)$"),
     limit: int = Query(10, ge=1, le=50),
     db: AsyncSession = Depends(get_db),
     current_user: Developer = Depends(get_current_developer),
@@ -884,13 +884,21 @@ async def get_top_campaigns(
     """Get top performing campaigns."""
     await check_workspace_permission(db, workspace_id, current_user.id, "member")
 
+    # Map frontend metric names to service metric names
+    metric_map = {
+        "opens": "open_rate",
+        "clicks": "click_rate",
+        "conversions": "sent_count",
+    }
+    service_metric = metric_map.get(metric, metric)
+
     from aexy.services.email_analytics_service import EmailAnalyticsService
 
     analytics_service = EmailAnalyticsService(db)
     campaigns = await analytics_service.get_top_campaigns(
         workspace_id=workspace_id,
-        period=period,
-        metric=metric,  # type: ignore
+        days=days,
+        metric=service_metric,  # type: ignore
         limit=limit,
     )
 
