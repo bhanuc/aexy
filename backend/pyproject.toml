@@ -30,6 +30,8 @@ dependencies = [
     "langchain-anthropic>=0.2.0",
     # SMS
     "twilio>=9.0.0",
+    # Email (SMTP)
+    "aiosmtplib>=3.0.0",
     # Caching and job queue
     "redis>=5.0.0",
     "celery>=5.3.0",

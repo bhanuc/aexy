@@ -239,6 +239,44 @@ class Settings(BaseSettings):
         default=True,
         description="Enable/disable email notifications",
     )
+    email_provider: str = Field(
+        default="ses",
+        description="Email provider to use: 'ses' for AWS SES or 'smtp' for SMTP",
+    )
+
+    # SMTP Settings (used when email_provider='smtp')
+    smtp_host: str = Field(
+        default="",
+        description="SMTP server hostname",
+    )
+    smtp_port: int = Field(
+        default=587,
+        description="SMTP server port (587 for TLS, 465 for SSL, 25 for plain)",
+    )
+    smtp_username: str = Field(
+        default="",
+        description="SMTP authentication username",
+    )
+    smtp_password: str = Field(
+        default="",
+        description="SMTP authentication password",
+    )
+    smtp_use_tls: bool = Field(
+        default=True,
+        description="Use STARTTLS for SMTP connection",
+    )
+    smtp_use_ssl: bool = Field(
+        default=False,
+        description="Use SSL/TLS for SMTP connection (mutually exclusive with smtp_use_tls)",
+    )
+    smtp_sender_email: str = Field(
+        default="",
+        description="Sender email address for SMTP (defaults to ses_sender_email if not set)",
+    )
+    smtp_sender_name: str = Field(
+        default="",
+        description="Sender display name for SMTP (defaults to ses_sender_name if not set)",
+    )
 
     # Google OAuth (for authentication and integrations)
     google_client_id: str = Field(
