@@ -165,6 +165,7 @@ export function useWorkspaceMembers(workspaceId: string | null) {
       workspaceApi.inviteMember(workspaceId!, email, role),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["workspaceMembers", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["pendingInvites", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["workspace", workspaceId] });
     },
   });
