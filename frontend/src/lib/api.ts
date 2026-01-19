@@ -7512,6 +7512,11 @@ export const crmApi = {
       });
       return response.data;
     },
+
+    recalculateCounts: async (workspaceId: string): Promise<{ status: string; counts: Record<string, number> }> => {
+      const response = await api.post(`/workspaces/${workspaceId}/crm/objects/recalculate-counts`);
+      return response.data;
+    },
   },
 
   // Attributes

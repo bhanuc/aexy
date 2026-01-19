@@ -137,6 +137,37 @@ class CRMObjectService:
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
+    async def recalculate_record_counts(self, workspace_id: str) -> dict[str, int]:
+        """Recalculate record counts for all objects in a workspace.
+
+        Returns a dict mapping object_id to the new record count.
+        """
+        # Get all objects in the workspace
+        objects_stmt = select(CRMObject).where(CRMObject.workspace_id == workspace_id)
+        objects_result = await self.db.execute(objects_stmt)
+        objects = list(objects_result.scalars().all())
+
+        counts = {}
+        for obj in objects:
+            # Count non-archived records for this object
+            count_stmt = select(func.count(CRMRecord.id)).where(
+                and_(
+                    CRMRecord.object_id == obj.id,
+                    CRMRecord.is_archived == False,
+                )
+            )
+            count_result = await self.db.execute(count_stmt)
+            actual_count = count_result.scalar() or 0
+
+            # Update if different
+            if obj.record_count != actual_count:
+                obj.record_count = actual_count
+
+            counts[str(obj.id)] = actual_count
+
+        await self.db.commit()
+        return counts
+
     async def update_object(
         self,
         object_id: str,
