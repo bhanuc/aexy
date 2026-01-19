@@ -204,6 +204,12 @@ export default function Home() {
               )}
             </div>
 
+            <Link href="/story" className="text-white/60 hover:text-white transition text-sm">
+              Our Story
+            </Link>
+            <Link href="/mission" className="text-white/60 hover:text-white transition text-sm">
+              Mission
+            </Link>
             <Link href="/manifesto" className="text-white/60 hover:text-white transition text-sm">
               Engineering OS
             </Link>
@@ -299,6 +305,15 @@ export default function Home() {
                 SOC 2 certified
               </span>
             </div>
+
+            <Link
+              href="/story"
+              className="inline-flex items-center gap-2 text-white/50 hover:text-white transition mt-6 text-sm group"
+            >
+              <Heart className="h-4 w-4" />
+              Read our story
+              <ArrowRight className="h-3 w-3 group-hover:translate-x-1 transition-transform" />
+            </Link>
           </div>
 
           {/* Hero Visual */}
@@ -1176,10 +1191,11 @@ export default function Home() {
             <div>
               <h4 className="text-white font-semibold mb-4">Resources</h4>
               <ul className="space-y-2 text-white/40 text-sm">
+                <li><Link href="/story" className="hover:text-white transition">Our Story</Link></li>
+                <li><Link href="/mission" className="hover:text-white transition">Mission</Link></li>
                 <li><Link href="/manifesto" className="hover:text-white transition">Engineering OS</Link></li>
                 <li><Link href="/pricing" className="hover:text-white transition">Pricing</Link></li>
                 <li><a href="https://github.com/aexy-io/aexy" className="hover:text-white transition">GitHub</a></li>
-                <li><Link href="#" className="hover:text-white transition">Changelog</Link></li>
               </ul>
             </div>
             <div>
