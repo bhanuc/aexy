@@ -367,6 +367,24 @@ async def seed_standard_objects(
     ]
 
 
+@router.post("/objects/recalculate-counts")
+async def recalculate_record_counts(
+    workspace_id: str,
+    current_user: Developer = Depends(get_current_developer),
+    db: AsyncSession = Depends(get_db),
+):
+    """Recalculate record counts for all CRM objects in the workspace.
+
+    This fixes any discrepancies between stored counts and actual record counts.
+    """
+    await check_workspace_permission(workspace_id, current_user, db, "admin")
+
+    service = CRMObjectService(db)
+    counts = await service.recalculate_record_counts(workspace_id)
+
+    return {"status": "ok", "counts": counts}
+
+
 @router.post("/objects/seed-template")
 async def seed_from_template(
     workspace_id: str,

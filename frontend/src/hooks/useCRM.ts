@@ -81,6 +81,13 @@ export function useCRMObjects(workspaceId: string | null) {
     },
   });
 
+  const recalculateCountsMutation = useMutation({
+    mutationFn: () => crmApi.objects.recalculateCounts(workspaceId!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["crmObjects", workspaceId] });
+    },
+  });
+
   return {
     objects: objects || [],
     isLoading,
@@ -90,10 +97,12 @@ export function useCRMObjects(workspaceId: string | null) {
     updateObject: updateMutation.mutateAsync,
     deleteObject: deleteMutation.mutateAsync,
     seedObjects: seedMutation.mutateAsync,
+    recalculateCounts: recalculateCountsMutation.mutateAsync,
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,
     isDeleting: deleteMutation.isPending,
     isSeeding: seedMutation.isPending,
+    isRecalculating: recalculateCountsMutation.isPending,
   };
 }
 
