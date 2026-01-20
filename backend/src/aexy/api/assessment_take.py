@@ -322,6 +322,9 @@ async def get_assessment_info(
     # Proctoring settings
     proctoring = assessment.proctoring_settings or {}
 
+    # Assessment doesn't have a dedicated instructions field, use security_settings or None
+    instructions = (assessment.security_settings or {}).get("instructions")
+
     return AssessmentInfoResponse(
         assessment_id=str(assessment.id),
         title=assessment.title,
@@ -330,7 +333,7 @@ async def get_assessment_info(
         total_questions=assessment.total_questions or 0,
         total_duration_minutes=assessment.total_duration_minutes or 0,
         topics=topics_data,
-        instructions=assessment.instructions,
+        instructions=instructions,
         proctoring_enabled=proctoring.get("enabled", False),
         webcam_required=proctoring.get("webcam_required", False),
         fullscreen_required=proctoring.get("fullscreen_required", False),
