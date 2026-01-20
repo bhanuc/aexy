@@ -19,6 +19,11 @@ import {
   EmailProvider,
   VisualBlock,
   SavedDesign,
+  SubscriptionCategory,
+  EmailSubscriber,
+  SubscriberStatus,
+  SubscriberImportRequest,
+  SubscriberImportResponse,
 } from "@/lib/api";
 
 // ==================== Templates Hooks ====================
@@ -573,5 +578,124 @@ export function usePreviewTemplate(workspaceId: string | null) {
   return useMutation({
     mutationFn: ({ templateId, data }: { templateId: string; data: Record<string, string> }) =>
       emailMarketingApi.templates.preview(workspaceId!, templateId, data),
+  });
+}
+
+// ==================== Subscription Categories Hooks ====================
+
+export function useSubscriptionCategories(workspaceId: string | null) {
+  const queryClient = useQueryClient();
+
+  const {
+    data: categories,
+    isLoading,
+    error,
+    refetch,
+  } = useQuery<SubscriptionCategory[]>({
+    queryKey: ["subscriptionCategories", workspaceId],
+    queryFn: () => emailMarketingApi.categories.list(workspaceId!),
+    enabled: !!workspaceId,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data: { name: string; slug?: string; description?: string; default_subscribed?: boolean }) =>
+      emailMarketingApi.categories.create(workspaceId!, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["subscriptionCategories", workspaceId] });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ categoryId, data }: { categoryId: string; data: { name?: string; description?: string; is_active?: boolean } }) =>
+      emailMarketingApi.categories.update(workspaceId!, categoryId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["subscriptionCategories", workspaceId] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (categoryId: string) => emailMarketingApi.categories.delete(workspaceId!, categoryId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["subscriptionCategories", workspaceId] });
+    },
+  });
+
+  return {
+    categories: categories || [],
+    isLoading,
+    error,
+    refetch,
+    createCategory: createMutation.mutateAsync,
+    updateCategory: updateMutation.mutateAsync,
+    deleteCategory: deleteMutation.mutateAsync,
+    isCreating: createMutation.isPending,
+    isUpdating: updateMutation.isPending,
+    isDeleting: deleteMutation.isPending,
+  };
+}
+
+// ==================== Subscribers Hooks ====================
+
+export function useSubscribers(workspaceId: string | null, params?: { status?: SubscriberStatus; limit?: number; offset?: number }) {
+  const queryClient = useQueryClient();
+
+  const {
+    data: subscribers,
+    isLoading,
+    error,
+    refetch,
+  } = useQuery<EmailSubscriber[]>({
+    queryKey: ["subscribers", workspaceId, params],
+    queryFn: () => emailMarketingApi.subscribers.list(workspaceId!, params),
+    enabled: !!workspaceId,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (subscriberId: string) => emailMarketingApi.subscribers.delete(workspaceId!, subscriberId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["subscribers", workspaceId] });
+    },
+  });
+
+  const unsubscribeMutation = useMutation({
+    mutationFn: ({ subscriberId, reason }: { subscriberId: string; reason?: string }) =>
+      emailMarketingApi.subscribers.unsubscribe(workspaceId!, subscriberId, reason),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["subscribers", workspaceId] });
+    },
+  });
+
+  const resubscribeMutation = useMutation({
+    mutationFn: (subscriberId: string) => emailMarketingApi.subscribers.resubscribe(workspaceId!, subscriberId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["subscribers", workspaceId] });
+    },
+  });
+
+  return {
+    subscribers: subscribers || [],
+    isLoading,
+    error,
+    refetch,
+    deleteSubscriber: deleteMutation.mutateAsync,
+    unsubscribe: unsubscribeMutation.mutateAsync,
+    resubscribe: resubscribeMutation.mutateAsync,
+    isDeleting: deleteMutation.isPending,
+  };
+}
+
+export function useImportSubscribers(workspaceId: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: SubscriberImportRequest) => emailMarketingApi.subscribers.import(workspaceId!, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["subscribers", workspaceId] });
+    },
+  });
+}
+
+export function useExportSubscribers(workspaceId: string | null) {
+  return useMutation({
+    mutationFn: (params?: { status?: SubscriberStatus }) => emailMarketingApi.subscribers.export(workspaceId!, params),
   });
 }

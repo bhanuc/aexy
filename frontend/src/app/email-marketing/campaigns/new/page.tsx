@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -8,17 +8,19 @@ import {
   Mail,
   Loader2,
   AlertCircle,
-  Calendar,
   Users,
   FileText,
   Send,
   Clock,
+  Upload,
+  Tag,
+  Check,
 } from "lucide-react";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useAuth } from "@/hooks/useAuth";
 import { AppHeader } from "@/components/layout/AppHeader";
-import { useEmailTemplates, useEmailCampaigns } from "@/hooks/useEmailMarketing";
-import { EmailCampaignCreate, CampaignType } from "@/lib/api";
+import { useEmailTemplates, useEmailCampaigns, useSubscriptionCategories, useImportSubscribers } from "@/hooks/useEmailMarketing";
+import { EmailCampaignCreate, CampaignType, FilterCondition } from "@/lib/api";
 
 type Step = "details" | "content" | "audience" | "review";
 
@@ -43,9 +45,24 @@ export default function NewCampaignPage() {
   const [htmlContent, setHtmlContent] = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
   const [audienceType, setAudienceType] = useState<"all" | "segment" | "list">("all");
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
+  const [emailListText, setEmailListText] = useState("");
 
   const { templates, isLoading: templatesLoading } = useEmailTemplates(workspaceId);
   const { createCampaign } = useEmailCampaigns(workspaceId);
+  const { categories, isLoading: categoriesLoading } = useSubscriptionCategories(workspaceId);
+  const importSubscribers = useImportSubscribers(workspaceId);
+
+  // Parse email list from textarea
+  const parsedEmails = useMemo(() => {
+    if (!emailListText.trim()) return [];
+    // Split by newlines, commas, or semicolons and filter valid emails
+    const emails = emailListText
+      .split(/[\n,;]+/)
+      .map((e) => e.trim().toLowerCase())
+      .filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+    return [...new Set(emails)]; // Remove duplicates
+  }, [emailListText]);
 
   const steps: { id: Step; label: string; icon: React.ElementType }[] = [
     { id: "details", label: "Details", icon: Mail },
@@ -61,6 +78,20 @@ export default function NewCampaignPage() {
     setError(null);
 
     try {
+      // Build audience filters based on selection
+      let audienceFilters: FilterCondition[] | undefined;
+      let recipientEmails: string[] | undefined;
+
+      if (audienceType === "segment" && selectedCategoryIds.length > 0) {
+        audienceFilters = [{
+          attribute: "category_id",
+          operator: "in",
+          value: selectedCategoryIds,
+        }];
+      } else if (audienceType === "list" && parsedEmails.length > 0) {
+        recipientEmails = parsedEmails;
+      }
+
       const data: EmailCampaignCreate = {
         name,
         subject,
@@ -71,6 +102,8 @@ export default function NewCampaignPage() {
         template_id: templateId || undefined,
         html_content: htmlContent || undefined,
         scheduled_at: scheduledAt ? new Date(scheduledAt).toISOString() : undefined,
+        audience_filters: audienceFilters,
+        recipient_emails: recipientEmails,
       };
 
       const campaign = await createCampaign(data);
@@ -94,7 +127,14 @@ export default function NewCampaignPage() {
       case "content":
         return templateId || htmlContent;
       case "audience":
-        return true;
+        // Validate based on audience type
+        if (audienceType === "segment") {
+          return selectedCategoryIds.length > 0;
+        }
+        if (audienceType === "list") {
+          return parsedEmails.length > 0;
+        }
+        return true; // "all" is always valid
       case "review":
         return true;
       default:
@@ -348,35 +388,127 @@ export default function NewCampaignPage() {
 
                 <div className="space-y-3">
                   {[
-                    { value: "all", label: "All Subscribers", desc: "Send to your entire subscriber list" },
-                    { value: "segment", label: "Segment", desc: "Target specific subscriber segments" },
-                    { value: "list", label: "Upload List", desc: "Upload a custom recipient list" },
-                  ].map((option) => (
-                    <button
-                      key={option.value}
-                      onClick={() => setAudienceType(option.value as "all" | "segment" | "list")}
-                      className={`w-full p-4 rounded-lg border transition text-left flex items-center gap-4 ${
-                        audienceType === option.value
-                          ? "bg-sky-500/20 border-sky-500 text-white"
-                          : "bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-600"
-                      }`}
-                    >
-                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                        audienceType === option.value ? "border-sky-500" : "border-slate-600"
-                      }`}>
-                        {audienceType === option.value && (
-                          <div className="w-2 h-2 rounded-full bg-sky-500" />
-                        )}
-                      </div>
-                      <div>
-                        <p className="font-medium">{option.label}</p>
-                        <p className="text-sm text-slate-400">{option.desc}</p>
-                      </div>
-                    </button>
-                  ))}
+                    { value: "all", label: "All Subscribers", desc: "Send to your entire subscriber list", icon: Users },
+                    { value: "segment", label: "Segment", desc: "Target specific subscriber categories", icon: Tag },
+                    { value: "list", label: "Upload List", desc: "Paste a custom recipient list", icon: Upload },
+                  ].map((option) => {
+                    const Icon = option.icon;
+                    return (
+                      <button
+                        key={option.value}
+                        onClick={() => setAudienceType(option.value as "all" | "segment" | "list")}
+                        className={`w-full p-4 rounded-lg border transition text-left flex items-center gap-4 ${
+                          audienceType === option.value
+                            ? "bg-sky-500/20 border-sky-500 text-white"
+                            : "bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-600"
+                        }`}
+                      >
+                        <div className={`p-2 rounded-lg ${
+                          audienceType === option.value ? "bg-sky-500/30" : "bg-slate-700"
+                        }`}>
+                          <Icon className="h-5 w-5" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium">{option.label}</p>
+                          <p className="text-sm text-slate-400">{option.desc}</p>
+                        </div>
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                          audienceType === option.value ? "border-sky-500 bg-sky-500" : "border-slate-600"
+                        }`}>
+                          {audienceType === option.value && (
+                            <Check className="h-3 w-3 text-white" />
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
 
-                <div>
+                {/* Segment Selection */}
+                {audienceType === "segment" && (
+                  <div className="mt-6 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+                    <label className="block text-sm text-slate-400 mb-3">Select Categories</label>
+                    {categoriesLoading ? (
+                      <div className="p-4 text-center">
+                        <Loader2 className="h-5 w-5 text-slate-500 animate-spin mx-auto" />
+                      </div>
+                    ) : categories.length === 0 ? (
+                      <div className="p-4 text-center">
+                        <Tag className="h-8 w-8 text-slate-600 mx-auto mb-2" />
+                        <p className="text-slate-400 text-sm">No subscription categories found</p>
+                        <Link
+                          href="/email-marketing/settings"
+                          className="text-sky-400 hover:text-sky-300 text-sm"
+                        >
+                          Create categories in settings
+                        </Link>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {categories.filter(c => c.is_active).map((category) => (
+                          <label
+                            key={category.id}
+                            className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition ${
+                              selectedCategoryIds.includes(category.id)
+                                ? "bg-sky-500/20 border border-sky-500/30"
+                                : "bg-slate-800 border border-slate-700 hover:border-slate-600"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedCategoryIds.includes(category.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedCategoryIds([...selectedCategoryIds, category.id]);
+                                } else {
+                                  setSelectedCategoryIds(selectedCategoryIds.filter(id => id !== category.id));
+                                }
+                              }}
+                              className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500"
+                            />
+                            <div>
+                              <p className="text-white font-medium">{category.name}</p>
+                              {category.description && (
+                                <p className="text-slate-400 text-sm">{category.description}</p>
+                              )}
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                    {selectedCategoryIds.length > 0 && (
+                      <p className="text-sm text-sky-400 mt-3">
+                        {selectedCategoryIds.length} categor{selectedCategoryIds.length === 1 ? "y" : "ies"} selected
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Upload List */}
+                {audienceType === "list" && (
+                  <div className="mt-6 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+                    <label className="block text-sm text-slate-400 mb-3">Paste Email Addresses</label>
+                    <textarea
+                      value={emailListText}
+                      onChange={(e) => setEmailListText(e.target.value)}
+                      placeholder="Enter email addresses (one per line, or comma/semicolon separated)&#10;&#10;example@email.com&#10;another@email.com"
+                      rows={8}
+                      className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500 font-mono text-sm"
+                    />
+                    <div className="flex items-center justify-between mt-3">
+                      <p className="text-xs text-slate-500">
+                        Separate emails with newlines, commas, or semicolons
+                      </p>
+                      {parsedEmails.length > 0 && (
+                        <p className="text-sm text-sky-400">
+                          {parsedEmails.length} valid email{parsedEmails.length === 1 ? "" : "s"} found
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="pt-4 border-t border-slate-800">
                   <label className="block text-sm text-slate-400 mb-2">Schedule (Optional)</label>
                   <div className="flex items-center gap-3">
                     <Clock className="h-5 w-5 text-slate-400" />
@@ -437,7 +569,27 @@ export default function NewCampaignPage() {
 
                   <div className="p-4 bg-slate-800/50 rounded-lg">
                     <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Audience</p>
-                    <p className="text-white capitalize">{audienceType === "all" ? "All Subscribers" : audienceType}</p>
+                    {audienceType === "all" && (
+                      <p className="text-white">All Subscribers</p>
+                    )}
+                    {audienceType === "segment" && (
+                      <>
+                        <p className="text-white">Segment: {selectedCategoryIds.length} categor{selectedCategoryIds.length === 1 ? "y" : "ies"}</p>
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {selectedCategoryIds.map((id) => {
+                            const cat = categories.find(c => c.id === id);
+                            return cat ? (
+                              <span key={id} className="px-2 py-0.5 bg-sky-500/20 text-sky-400 rounded text-xs">
+                                {cat.name}
+                              </span>
+                            ) : null;
+                          })}
+                        </div>
+                      </>
+                    )}
+                    {audienceType === "list" && (
+                      <p className="text-white">Custom List: {parsedEmails.length} recipient{parsedEmails.length === 1 ? "" : "s"}</p>
+                    )}
                   </div>
 
                   {scheduledAt && (
