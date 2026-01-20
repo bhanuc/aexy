@@ -129,7 +129,7 @@ async def get_invitation_by_token(
 ) -> AssessmentInvitation:
     """Get invitation by token and validate it."""
     query = select(AssessmentInvitation).where(
-        AssessmentInvitation.token == token
+        AssessmentInvitation.invitation_token == token
     )
     result = await db.execute(query)
     invitation = result.scalar_one_or_none()
