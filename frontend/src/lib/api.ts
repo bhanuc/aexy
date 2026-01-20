@@ -9926,11 +9926,15 @@ export interface EmailCampaignCreate {
   template_id?: string;
   html_content?: string;
   text_content?: string;
-  from_name?: string;
-  from_email?: string;
+  from_name: string;
+  from_email: string;
   reply_to?: string;
   campaign_type?: CampaignType;
-  audience_filter?: Record<string, unknown>;
+  preview_text?: string;
+  scheduled_at?: string;
+  list_id?: string;
+  audience_filters?: FilterCondition[];
+  recipient_emails?: string[];  // For manual upload list
 }
 
 export interface EmailCampaignUpdate {
@@ -10049,6 +10053,56 @@ export interface SavedDesign {
   is_template: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export type SubscriberStatus = "active" | "unsubscribed" | "bounced" | "complained";
+export type FilterOperator = "equals" | "not_equals" | "contains" | "not_contains" | "starts_with" | "ends_with" | "gt" | "gte" | "lt" | "lte" | "between" | "is_empty" | "is_not_empty" | "in" | "not_in";
+
+export interface FilterCondition {
+  attribute: string;
+  operator: FilterOperator;
+  value: unknown;
+  conjunction?: "and" | "or";
+}
+
+export interface SubscriptionCategory {
+  id: string;
+  workspace_id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  default_subscribed: boolean;
+  required: boolean;
+  display_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmailSubscriber {
+  id: string;
+  workspace_id: string;
+  record_id: string | null;
+  email: string;
+  status: SubscriberStatus;
+  status_changed_at: string | null;
+  status_reason: string | null;
+  is_verified: boolean;
+  verified_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SubscriberImportRequest {
+  subscribers: Array<{ email: string; first_name?: string; last_name?: string }>;
+  category_ids?: string[];
+  skip_verification?: boolean;
+}
+
+export interface SubscriberImportResponse {
+  imported: number;
+  skipped: number;
+  errors: string[];
 }
 
 // ==================== Email Marketing API ====================
@@ -10202,6 +10256,70 @@ export const emailMarketingApi = {
 
     getTrends: async (workspaceId: string, params?: { days?: number }): Promise<{ trends: { date: string; sent: number; opens: number; clicks: number }[] }> => {
       const response = await api.get(`/workspaces/${workspaceId}/email-marketing/analytics/trends`, { params });
+      return response.data;
+    },
+  },
+
+  // Subscription Categories
+  categories: {
+    list: async (workspaceId: string): Promise<SubscriptionCategory[]> => {
+      const response = await api.get(`/workspaces/${workspaceId}/subscriptions/categories`);
+      return response.data;
+    },
+
+    get: async (workspaceId: string, categoryId: string): Promise<SubscriptionCategory> => {
+      const response = await api.get(`/workspaces/${workspaceId}/subscriptions/categories/${categoryId}`);
+      return response.data;
+    },
+
+    create: async (workspaceId: string, data: { name: string; slug?: string; description?: string; default_subscribed?: boolean }): Promise<SubscriptionCategory> => {
+      const response = await api.post(`/workspaces/${workspaceId}/subscriptions/categories`, data);
+      return response.data;
+    },
+
+    update: async (workspaceId: string, categoryId: string, data: { name?: string; description?: string; is_active?: boolean }): Promise<SubscriptionCategory> => {
+      const response = await api.patch(`/workspaces/${workspaceId}/subscriptions/categories/${categoryId}`, data);
+      return response.data;
+    },
+
+    delete: async (workspaceId: string, categoryId: string): Promise<void> => {
+      await api.delete(`/workspaces/${workspaceId}/subscriptions/categories/${categoryId}`);
+    },
+  },
+
+  // Subscribers
+  subscribers: {
+    list: async (workspaceId: string, params?: { status?: SubscriberStatus; limit?: number; offset?: number }): Promise<EmailSubscriber[]> => {
+      const response = await api.get(`/workspaces/${workspaceId}/subscriptions/subscribers`, { params });
+      return response.data;
+    },
+
+    get: async (workspaceId: string, subscriberId: string): Promise<EmailSubscriber> => {
+      const response = await api.get(`/workspaces/${workspaceId}/subscriptions/subscribers/${subscriberId}`);
+      return response.data;
+    },
+
+    delete: async (workspaceId: string, subscriberId: string): Promise<void> => {
+      await api.delete(`/workspaces/${workspaceId}/subscriptions/subscribers/${subscriberId}`);
+    },
+
+    import: async (workspaceId: string, data: SubscriberImportRequest): Promise<SubscriberImportResponse> => {
+      const response = await api.post(`/workspaces/${workspaceId}/subscriptions/subscribers/import`, data);
+      return response.data;
+    },
+
+    export: async (workspaceId: string, params?: { status?: SubscriberStatus }): Promise<{ subscribers: EmailSubscriber[]; total: number }> => {
+      const response = await api.get(`/workspaces/${workspaceId}/subscriptions/subscribers/export`, { params });
+      return response.data;
+    },
+
+    unsubscribe: async (workspaceId: string, subscriberId: string, reason?: string): Promise<{ status: string; subscriber_id: string }> => {
+      const response = await api.post(`/workspaces/${workspaceId}/subscriptions/subscribers/${subscriberId}/unsubscribe`, { reason });
+      return response.data;
+    },
+
+    resubscribe: async (workspaceId: string, subscriberId: string): Promise<{ status: string; subscriber_id: string }> => {
+      const response = await api.post(`/workspaces/${workspaceId}/subscriptions/subscribers/${subscriberId}/resubscribe`);
       return response.data;
     },
   },
