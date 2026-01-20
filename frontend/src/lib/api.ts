@@ -9894,30 +9894,30 @@ export interface EmailCampaign {
   id: string;
   workspace_id: string;
   name: string;
-  subject: string;
-  template_id: string | null;
+  subject?: string;
+  template_id?: string | null;
   template_name?: string;
-  html_content: string | null;
-  text_content: string | null;
-  from_name: string | null;
-  from_email: string | null;
-  reply_to: string | null;
+  html_content?: string | null;
+  text_content?: string | null;
+  from_name?: string | null;
+  from_email?: string | null;
+  reply_to?: string | null;
   campaign_type: CampaignType;
   status: CampaignStatus;
-  audience_filter: Record<string, unknown> | null;
+  audience_filter?: Record<string, unknown> | null;
   scheduled_at: string | null;
-  sent_at: string | null;
-  completed_at: string | null;
+  sent_at?: string | null;
+  completed_at?: string | null;
   total_recipients: number;
   sent_count: number;
-  delivered_count: number;
+  delivered_count?: number;
   open_count: number;
   click_count: number;
-  bounce_count: number;
-  unsubscribe_count: number;
-  complaint_count: number;
+  bounce_count?: number;
+  unsubscribe_count?: number;
+  complaint_count?: number;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
 }
 
 export interface EmailCampaignCreate {

@@ -272,6 +272,9 @@ export default function RecordDetailPage() {
           onValueChange={handleValueChange}
           isCollapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+          notes={notes}
+          onTogglePin={handleTogglePin}
+          onDeleteNote={handleDeleteNote}
         />
       </div>
     </div>

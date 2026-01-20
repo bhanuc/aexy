@@ -389,6 +389,8 @@ export default function CRMPage() {
     isLoading,
     createObject,
     isCreating,
+    recalculateCounts,
+    isRecalculating,
   } = useCRMObjects(workspaceId);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -406,6 +408,19 @@ export default function CRMPage() {
 
     setHasCheckedOnboarding(true);
   }, []);
+
+  // Recalculate record counts if they seem stale (all zeros when objects exist)
+  useEffect(() => {
+    if (objects.length > 0 && !isLoading && !isRecalculating) {
+      const allCountsZero = objects.every((obj) => obj.record_count === 0);
+      const hasRecalculated = sessionStorage.getItem("crm_counts_recalculated");
+
+      if (allCountsZero && !hasRecalculated) {
+        sessionStorage.setItem("crm_counts_recalculated", "true");
+        recalculateCounts().catch(console.error);
+      }
+    }
+  }, [objects, isLoading, isRecalculating, recalculateCounts]);
 
   const filteredObjects = objects.filter(
     (obj) =>
@@ -488,6 +503,17 @@ export default function CRMPage() {
                 <p className="text-slate-400">Manage your contacts, companies, and deals</p>
               </div>
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    sessionStorage.removeItem("crm_counts_recalculated");
+                    recalculateCounts().catch(console.error);
+                  }}
+                  disabled={isRecalculating}
+                  className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-lg transition-colors text-sm disabled:opacity-50"
+                  title="Refresh record counts"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isRecalculating ? "animate-spin" : ""}`} />
+                </button>
                 <button
                   onClick={() => router.push("/crm/automations")}
                   className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-lg transition-colors text-sm"

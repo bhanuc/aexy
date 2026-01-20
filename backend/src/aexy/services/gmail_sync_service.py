@@ -128,6 +128,8 @@ async def auto_enrich_contact_from_email(
                 source="email_sync",
             )
             db.add(company_record)
+            # Update object record count
+            company_obj.record_count = (company_obj.record_count or 0) + 1
             await db.flush()
             logger.info(f"Auto-created company {company_name} from email domain")
 
@@ -183,6 +185,8 @@ async def auto_enrich_contact_from_email(
             source="email_sync",
         )
         db.add(existing_record)
+        # Update object record count
+        person_obj.record_count = (person_obj.record_count or 0) + 1
         await db.flush()
         logger.info(f"Auto-created contact {display_name} from email sync")
 
@@ -395,6 +399,8 @@ async def auto_create_or_update_deal_from_email(
         source="email_sync",
     )
     db.add(deal_record)
+    # Update object record count
+    deal_obj.record_count = (deal_obj.record_count or 0) + 1
     await db.flush()
 
     # Create relations to company and contact
