@@ -5,50 +5,25 @@ import { usePathname, useParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-    LayoutDashboard,
-    Target,
-    Calendar,
-    Ticket,
-    FormInput,
     FileText,
-    ClipboardCheck,
-    GraduationCap,
-    Users,
-    Building2,
-    Mail,
     PanelLeftClose,
     PanelLeftOpen,
     Settings,
     ChevronRight,
     ChevronDown,
     LogOut,
-    MessageSquare,
-    Ban,
-    Clock,
-    KanbanSquare,
-    Milestone,
-    Repeat,
-    UserPlus,
-    FileSpreadsheet,
-    HelpCircle,
-    FileStack,
-    BarChart,
-    Inbox,
-    Headphones,
-    Activity,
-    Zap,
-    Send,
-    FileCode,
     Lock,
-    Boxes,
     Star,
     Folder,
+    Users,
 } from "lucide-react";
-import React, { useState, ReactNode } from "react";
+import React, { useState } from "react";
 import { Button } from "../ui/button";
 import { useNotionDocs } from "@/hooks/useNotionDocs";
 import { useDocumentSpaces } from "@/hooks/useDocumentSpaces";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { useSidebarLayout } from "@/hooks/useSidebarLayout";
+import { SidebarItemConfig, SidebarSectionConfig } from "@/config/sidebarLayouts";
 
 interface SidebarProps {
     className?: string;
@@ -58,92 +33,6 @@ interface SidebarProps {
     } | null;
     logout?: () => void;
 }
-
-interface SidebarItemType {
-    href: string;
-    label: string;
-    icon: any;
-    component?: ReactNode; // Custom component to render instead of simple link
-    items?: SidebarItemType[]; // Nested items
-}
-
-// Core navigation items
-const coreItems: SidebarItemType[] = [
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    {
-        href: "/tracking",
-        label: "Tracking",
-        icon: Target,
-        items: [
-            { href: "/tracking/standups", label: "Standups", icon: MessageSquare },
-            { href: "/tracking/blockers", label: "Blockers", icon: Ban },
-            { href: "/tracking/time", label: "Time", icon: Clock },
-        ]
-    },
-    {
-        href: "/sprints",
-        label: "Planning",
-        icon: Calendar,
-        items: [
-            { href: "/sprints", label: "Board", icon: KanbanSquare },
-            { href: "/sprints?tab=epics", label: "Epics", icon: Milestone }
-        ]
-    },
-    { href: "/tickets", label: "Tickets", icon: Ticket },
-    { href: "/forms", label: "Forms", icon: FormInput },
-    { href: "/learning", label: "Learning", icon: GraduationCap },
-];
-
-// Application items grouped together
-const applicationItems: SidebarItemType[] = [
-    {
-        href: "/reviews",
-        label: "Reviews",
-        icon: ClipboardCheck,
-        items: [
-            { href: "/reviews/cycles", label: "Cycles", icon: Repeat },
-            { href: "/reviews/goals", label: "Goals", icon: Target },
-            { href: "/reviews/peer-requests", label: "Peer Requests", icon: Users },
-            { href: "/reviews/manage", label: "Manage", icon: Settings },
-        ]
-    },
-    {
-        href: "/hiring",
-        label: "Hiring",
-        icon: Users,
-        items: [
-            { href: "/hiring/dashboard", label: "Dashboard", icon: LayoutDashboard },
-            { href: "/hiring/candidates", label: "Candidates", icon: UserPlus },
-            { href: "/hiring/assessments", label: "Assessments", icon: FileSpreadsheet },
-            { href: "/hiring/questions", label: "Questions", icon: HelpCircle },
-            { href: "/hiring/templates", label: "Templates", icon: FileStack },
-            { href: "/hiring/analytics", label: "Analytics", icon: BarChart },
-        ]
-    },
-    {
-        href: "/crm",
-        label: "CRM",
-        icon: Building2,
-        items: [
-            { href: "/crm", label: "Overview", icon: LayoutDashboard },
-            { href: "/crm/inbox", label: "Inbox", icon: Inbox },
-            { href: "/crm/agents", label: "Agents", icon: Headphones },
-            { href: "/crm/activities", label: "Activities", icon: Activity },
-            { href: "/crm/automations", label: "Automations", icon: Zap },
-            { href: "/crm/calendar", label: "Calendar", icon: Calendar },
-        ]
-    },
-    {
-        href: "/email-marketing",
-        label: "Email",
-        icon: Mail,
-        items: [
-            { href: "/email-marketing/campaigns", label: "Campaigns", icon: Send },
-            { href: "/email-marketing/templates", label: "Templates", icon: FileCode },
-            { href: "/email-marketing/settings", label: "Settings", icon: Settings },
-        ]
-    },
-];
 
 export function Sidebar({ className, user, logout }: SidebarProps) {
     const pathname = usePathname();
@@ -155,8 +44,10 @@ export function Sidebar({ className, user, logout }: SidebarProps) {
     const [isHidden, setIsHidden] = useState(false);
     const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({
         "/docs": false,
-        "applications": false,
     });
+
+    // Sidebar layout preference
+    const { layoutConfig } = useSidebarLayout();
 
     // Auto-hide sidebar on docs pages
     React.useEffect(() => {
@@ -187,13 +78,17 @@ export function Sidebar({ className, user, logout }: SidebarProps) {
 
     const isActive = (href: string) => {
         if (href === "/dashboard") return pathname === "/dashboard";
-        return pathname.startsWith(href);
+        // Handle query params in href
+        const hrefBase = href.split("?")[0];
+        return pathname.startsWith(hrefBase);
     };
 
-    const renderItem = (item: SidebarItemType, depth: number = 0) => {
+    // Render a navigation item
+    const renderItem = (item: SidebarItemConfig, depth: number = 0) => {
         const isExpanded = expandedItems[item.href];
         const active = isActive(item.href);
         const hasSubmenu = item.items && item.items.length > 0;
+        const Icon = item.icon;
 
         return (
             <div key={item.href} className="group">
@@ -206,7 +101,7 @@ export function Sidebar({ className, user, logout }: SidebarProps) {
                     style={depth > 0 ? { paddingLeft: `${(depth * 12) + 12}px` } : undefined}
                 >
                     <Link href={item.href} className="flex-1 flex items-center gap-x-3 truncate">
-                        <item.icon className="h-4 w-4 shrink-0" />
+                        <Icon className="h-4 w-4 shrink-0" />
                         {!isCollapsed && <span className="truncate">{item.label}</span>}
                     </Link>
 
@@ -252,7 +147,7 @@ export function Sidebar({ className, user, logout }: SidebarProps) {
     // Render a document item in the docs tree
     const renderDocItem = (doc: any, depth: number = 0) => {
         const hasChildren = doc.children && doc.children.length > 0;
-        const isActive = documentId === doc.id;
+        const isDocActive = documentId === doc.id;
         const isExpanded = expandedItems[`doc-${doc.id}`];
 
         return (
@@ -260,7 +155,7 @@ export function Sidebar({ className, user, logout }: SidebarProps) {
                 <div
                     className={cn(
                         "group flex items-center gap-1 rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors cursor-pointer",
-                        isActive && "bg-accent/50 text-accent-foreground font-medium"
+                        isDocActive && "bg-accent/50 text-accent-foreground font-medium"
                     )}
                     style={{ paddingLeft: `${(depth * 12) + 12}px` }}
                 >
@@ -288,7 +183,7 @@ export function Sidebar({ className, user, logout }: SidebarProps) {
         );
     };
 
-    // Render the docs section
+    // Render the docs section with tree structure
     const renderDocsSection = () => {
         const isExpanded = expandedItems["/docs"];
         const active = pathname.startsWith("/docs");
@@ -393,56 +288,30 @@ export function Sidebar({ className, user, logout }: SidebarProps) {
         );
     };
 
-    // Render the applications section
-    const renderApplicationsSection = () => {
-        const isExpanded = expandedItems["applications"];
-        const active = applicationItems.some(item => isActive(item.href));
+    // Render a section with optional label
+    const renderSection = (section: SidebarSectionConfig) => {
+        // Check if this is the "knowledge" section which contains docs
+        const hasDocsItem = section.items.some(item => item.href === "/docs");
 
         return (
-            <div className="group">
-                <div className={cn(
-                    "flex items-center gap-x-3 rounded-md px-3 py-2 text-sm font-medium transition-all hover:bg-accent hover:text-accent-foreground",
-                    active ? "bg-accent text-accent-foreground" : "text-muted-foreground",
-                    isCollapsed && "justify-center px-2"
-                )}>
-                    <button
-                        onClick={(e) => toggleExpand("applications", e)}
-                        className="flex-1 flex items-center gap-x-3 truncate text-left"
-                    >
-                        <Boxes className="h-4 w-4 shrink-0" />
-                        {!isCollapsed && <span className="truncate">Applications</span>}
-                    </button>
+            <div key={section.id} className="mb-2">
+                {/* Section label */}
+                {section.label && !isCollapsed && (
+                    <p className="px-3 py-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                        {section.label}
+                    </p>
+                )}
 
-                    {!isCollapsed && (
-                        <button
-                            onClick={(e) => toggleExpand("applications", e)}
-                            className="p-0.5 hover:bg-slate-700/50 rounded"
-                        >
-                            <motion.div
-                                animate={{ rotate: isExpanded ? 90 : 0 }}
-                                transition={{ duration: 0.2 }}
-                            >
-                                <ChevronRight className="h-3 w-3" />
-                            </motion.div>
-                        </button>
-                    )}
+                {/* Section items */}
+                <div className="space-y-1">
+                    {section.items.map(item => {
+                        // Special handling for Docs - render with tree structure
+                        if (item.href === "/docs") {
+                            return <React.Fragment key={item.href}>{renderDocsSection()}</React.Fragment>;
+                        }
+                        return renderItem(item);
+                    })}
                 </div>
-
-                <AnimatePresence>
-                    {!isCollapsed && isExpanded && (
-                        <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: "auto", opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.2, ease: "easeInOut" }}
-                            className="overflow-hidden"
-                        >
-                            <div className="ml-4 mt-1 border-l border-slate-800/50 pl-2 space-y-1">
-                                {applicationItems.map(item => renderItem(item, 1))}
-                            </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
             </div>
         );
     };
@@ -523,15 +392,9 @@ export function Sidebar({ className, user, logout }: SidebarProps) {
                     </div>
 
                     <div className="flex-1 overflow-y-auto py-4">
-                        <nav className="grid gap-1 px-2">
-                            {/* Core navigation items */}
-                            {coreItems.map(item => renderItem(item))}
-
-                            {/* Docs section with tree structure */}
-                            {renderDocsSection()}
-
-                            {/* Applications section */}
-                            {renderApplicationsSection()}
+                        <nav className="px-2">
+                            {/* Render sections based on layout config */}
+                            {layoutConfig.sections.map(section => renderSection(section))}
                         </nav>
                     </div>
 
