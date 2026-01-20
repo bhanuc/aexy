@@ -10,7 +10,7 @@ from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aexy.core.database import get_db
-from aexy.core.auth import get_current_developer
+from aexy.api.developers import get_current_developer
 from aexy.models import Developer
 from aexy.models.assessment import (
     Assessment,
