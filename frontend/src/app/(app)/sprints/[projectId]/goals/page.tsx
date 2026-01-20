@@ -19,22 +19,26 @@ import { useWorkspace } from "@/hooks/useWorkspace";
 import { useOKRGoals, useOKRGoal, useOKRKeyResults, useOKRDashboard } from "@/hooks/useOKRGoals";
 import { GoalCard } from "@/components/goals/GoalCard";
 import { KeyResultProgress } from "@/components/goals/KeyResultProgress";
+import { EntityTimeline } from "@/components/timeline/EntityTimeline";
 import {
   OKRGoal,
   OKRGoalType,
   OKRGoalStatus,
   OKRPeriodType,
   OKRGoalCreate,
+  OKRGoalUpdate,
 } from "@/lib/api";
 
 const STATUS_OPTIONS: { value: OKRGoalStatus | "all"; label: string }[] = [
   { value: "all", label: "All Statuses" },
+  { value: "not_started", label: "Not Started" },
   { value: "draft", label: "Draft" },
   { value: "active", label: "Active" },
   { value: "on_track", label: "On Track" },
   { value: "at_risk", label: "At Risk" },
   { value: "behind", label: "Behind" },
   { value: "achieved", label: "Achieved" },
+  { value: "missed", label: "Missed" },
   { value: "cancelled", label: "Cancelled" },
 ];
 
@@ -57,11 +61,34 @@ interface GoalFormData {
   description: string;
   goal_type: OKRGoalType;
   period_type: OKRPeriodType;
-  period_start: string;
-  period_end: string;
+  start_date: string;
+  end_date: string;
   target_value: number;
   unit: string;
   parent_goal_id?: string;
+  comment?: string;  // Optional comment for activity timeline when editing
+}
+
+// Helper to calculate period dates
+function getQuarterDates(): { start: string; end: string } {
+  const now = new Date();
+  const quarter = Math.floor(now.getMonth() / 3);
+  const year = now.getFullYear();
+  const startMonth = quarter * 3;
+  const start = new Date(year, startMonth, 1);
+  const end = new Date(year, startMonth + 3, 0);
+  return {
+    start: start.toISOString().split("T")[0],
+    end: end.toISOString().split("T")[0],
+  };
+}
+
+function getYearDates(): { start: string; end: string } {
+  const year = new Date().getFullYear();
+  return {
+    start: `${year}-01-01`,
+    end: `${year}-12-31`,
+  };
 }
 
 export default function GoalsPage() {
@@ -74,31 +101,38 @@ export default function GoalsPage() {
   const workspaceId = currentWorkspace?.id || null;
 
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingGoal, setEditingGoal] = useState<OKRGoal | null>(null);
   const [selectedGoal, setSelectedGoal] = useState<OKRGoal | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<OKRGoalStatus | "all">("all");
   const [typeFilter, setTypeFilter] = useState<OKRGoalType | "all">("objective");
   const [periodFilter, setPeriodFilter] = useState<OKRPeriodType | "all">("all");
 
-  const [formData, setFormData] = useState<GoalFormData>({
-    title: "",
-    description: "",
-    goal_type: "objective",
-    period_type: "quarter",
-    period_start: "",
-    period_end: "",
-    target_value: 100,
-    unit: "%",
-    parent_goal_id: undefined,
+  const [formData, setFormData] = useState<GoalFormData>(() => {
+    const dates = getQuarterDates();
+    return {
+      title: "",
+      description: "",
+      goal_type: "objective",
+      period_type: "quarter",
+      start_date: dates.start,
+      end_date: dates.end,
+      target_value: 100,
+      unit: "%",
+      parent_goal_id: undefined,
+    };
   });
+  const [formError, setFormError] = useState<string | null>(null);
 
   const {
     goals,
     total,
     isLoading,
     createGoal,
+    updateGoal,
     deleteGoal,
     isCreating,
+    isUpdating,
   } = useOKRGoals(workspaceId, {
     goal_type: typeFilter === "all" ? undefined : typeFilter,
     status: statusFilter === "all" ? undefined : statusFilter,
@@ -117,34 +151,6 @@ export default function GoalsPage() {
     return matchesSearch;
   });
 
-  const handleCreateGoal = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const data: OKRGoalCreate = {
-      title: formData.title,
-      description: formData.description || undefined,
-      goal_type: formData.goal_type,
-      period_type: formData.period_type,
-      period_start: formData.period_start || undefined,
-      period_end: formData.period_end || undefined,
-      target_value: formData.target_value,
-      unit: formData.unit || undefined,
-      parent_goal_id: formData.parent_goal_id,
-    };
-    await createGoal(data);
-    setShowCreateModal(false);
-    setFormData({
-      title: "",
-      description: "",
-      goal_type: "objective",
-      period_type: "quarter",
-      period_start: "",
-      period_end: "",
-      target_value: 100,
-      unit: "%",
-      parent_goal_id: undefined,
-    });
-  };
-
   const handleGoalClick = (goal: OKRGoal) => {
     setSelectedGoal(goal);
   };
@@ -153,6 +159,105 @@ export default function GoalsPage() {
     if (confirm("Are you sure you want to delete this goal?")) {
       await deleteGoal(goalId);
     }
+  };
+
+  const handleEditGoal = (goal: OKRGoal) => {
+    setEditingGoal(goal);
+    setFormData({
+      title: goal.title,
+      description: goal.description || "",
+      goal_type: goal.goal_type,
+      period_type: goal.period_type || "quarter",
+      start_date: goal.start_date || goal.period_start || "",
+      end_date: goal.end_date || goal.period_end || "",
+      target_value: goal.target_value || 100,
+      unit: goal.unit || "%",
+      parent_goal_id: goal.parent_goal_id || undefined,
+      comment: "",
+    });
+    setShowCreateModal(true);
+  };
+
+  const handleSubmitGoal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+
+    // Validate required fields
+    if (!formData.start_date || !formData.end_date) {
+      setFormError("Start date and end date are required");
+      return;
+    }
+
+    if (new Date(formData.start_date) > new Date(formData.end_date)) {
+      setFormError("Start date must be before end date");
+      return;
+    }
+
+    try {
+      if (editingGoal) {
+        // Update existing goal
+        const data: OKRGoalUpdate = {
+          title: formData.title,
+          description: formData.description || undefined,
+          period_type: formData.period_type,
+          start_date: formData.start_date,
+          end_date: formData.end_date,
+          target_value: formData.target_value,
+          unit: formData.unit || undefined,
+          comment: formData.comment || undefined,  // Include comment for activity timeline
+        };
+        await updateGoal({ goalId: editingGoal.id, data });
+      } else {
+        // Create new goal
+        const data: OKRGoalCreate = {
+          title: formData.title,
+          description: formData.description || undefined,
+          goal_type: formData.goal_type,
+          period_type: formData.period_type,
+          start_date: formData.start_date,
+          end_date: formData.end_date,
+          target_value: formData.target_value,
+          unit: formData.unit || undefined,
+          parent_goal_id: formData.parent_goal_id,
+        };
+        await createGoal(data);
+      }
+      handleCloseModal();
+    } catch (err: any) {
+      // Handle API validation errors
+      if (err?.response?.data?.detail) {
+        const detail = err.response.data.detail;
+        if (Array.isArray(detail)) {
+          const messages = detail.map((d: any) => `${d.loc?.slice(-1)?.[0] || "Field"}: ${d.msg}`).join(", ");
+          setFormError(messages);
+        } else if (typeof detail === "string") {
+          setFormError(detail);
+        } else {
+          setFormError(`Failed to ${editingGoal ? "update" : "create"} goal. Please check all fields.`);
+        }
+      } else {
+        setFormError(err?.message || `Failed to ${editingGoal ? "update" : "create"} goal. Please try again.`);
+      }
+    }
+  };
+
+  const handleCloseModal = () => {
+    setShowCreateModal(false);
+    setEditingGoal(null);
+    setFormError(null);
+    const dates = getQuarterDates();
+    setFormData({
+      title: "",
+      description: "",
+      goal_type: "objective",
+      period_type: "quarter",
+      start_date: dates.start,
+      end_date: dates.end,
+      target_value: 100,
+      unit: "%",
+      parent_goal_id: undefined,
+      comment: "",
+    });
   };
 
   if (!user) {
@@ -289,6 +394,7 @@ export default function GoalsPage() {
                 key={goal.id}
                 goal={goal}
                 onClick={handleGoalClick}
+                onEdit={handleEditGoal}
                 onDelete={handleDeleteGoal}
                 showKeyResults={goal.goal_type === "objective"}
                 keyResults={keyResults}
@@ -298,36 +404,47 @@ export default function GoalsPage() {
         </div>
       )}
 
-      {/* Create Goal Modal */}
+      {/* Create/Edit Goal Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto m-4">
             <div className="flex items-center justify-between p-4 border-b border-slate-700">
-              <h2 className="text-lg font-semibold text-white">Create Goal</h2>
+              <h2 className="text-lg font-semibold text-white">
+                {editingGoal ? "Edit Goal" : "Create Goal"}
+              </h2>
               <button
-                onClick={() => setShowCreateModal(false)}
+                onClick={handleCloseModal}
                 className="p-1 text-slate-400 hover:text-white transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <form onSubmit={handleCreateGoal} className="p-4 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">
-                  Goal Type *
-                </label>
-                <select
-                  value={formData.goal_type}
-                  onChange={(e) => setFormData({ ...formData, goal_type: e.target.value as OKRGoalType })}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                >
-                  <option value="objective">Objective</option>
-                  <option value="key_result">Key Result</option>
-                  <option value="initiative">Initiative</option>
-                </select>
-              </div>
+            <form onSubmit={handleSubmitGoal} className="p-4 space-y-4">
+              {/* Error Message */}
+              {formError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                  <p className="text-red-400 text-sm">{formError}</p>
+                </div>
+              )}
 
-              {formData.goal_type === "key_result" && (
+              {!editingGoal && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1">
+                    Goal Type *
+                  </label>
+                  <select
+                    value={formData.goal_type}
+                    onChange={(e) => setFormData({ ...formData, goal_type: e.target.value as OKRGoalType })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                  >
+                    <option value="objective">Objective</option>
+                    <option value="key_result">Key Result</option>
+                    <option value="initiative">Initiative</option>
+                  </select>
+                </div>
+              )}
+
+              {!editingGoal && formData.goal_type === "key_result" && (
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1">
                     Parent Objective
@@ -402,11 +519,25 @@ export default function GoalsPage() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">
-                  Period
+                  Period *
                 </label>
                 <select
                   value={formData.period_type}
-                  onChange={(e) => setFormData({ ...formData, period_type: e.target.value as OKRPeriodType })}
+                  onChange={(e) => {
+                    const newPeriod = e.target.value as OKRPeriodType;
+                    let dates = { start: formData.start_date, end: formData.end_date };
+                    if (newPeriod === "quarter") {
+                      dates = getQuarterDates();
+                    } else if (newPeriod === "year") {
+                      dates = getYearDates();
+                    }
+                    setFormData({
+                      ...formData,
+                      period_type: newPeriod,
+                      start_date: dates.start,
+                      end_date: dates.end,
+                    });
+                  }}
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                 >
                   <option value="quarter">Quarterly</option>
@@ -418,42 +549,65 @@ export default function GoalsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1">
-                    Start Date
+                    Start Date *
                   </label>
                   <input
                     type="date"
-                    value={formData.period_start}
-                    onChange={(e) => setFormData({ ...formData, period_start: e.target.value })}
+                    value={formData.start_date}
+                    onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                    required
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1">
-                    End Date
+                    End Date *
                   </label>
                   <input
                     type="date"
-                    value={formData.period_end}
-                    onChange={(e) => setFormData({ ...formData, period_end: e.target.value })}
+                    value={formData.end_date}
+                    onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                    required
                   />
                 </div>
               </div>
 
+              {/* Comment field - only show when editing */}
+              {editingGoal && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1">
+                    Comment (optional)
+                  </label>
+                  <textarea
+                    value={formData.comment || ""}
+                    onChange={(e) => setFormData({ ...formData, comment: e.target.value })}
+                    placeholder="Add a note about this change..."
+                    rows={2}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">
+                    This comment will be added to the goal&apos;s timeline
+                  </p>
+                </div>
+              )}
+
               <div className="flex justify-end gap-3 pt-4">
                 <button
                   type="button"
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={handleCloseModal}
                   className="px-4 py-2 text-slate-400 hover:text-white transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={isCreating || !formData.title}
+                  disabled={(isCreating || isUpdating) || !formData.title || !formData.start_date || !formData.end_date}
                   className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isCreating ? "Creating..." : "Create Goal"}
+                  {isCreating || isUpdating
+                    ? (editingGoal ? "Saving..." : "Creating...")
+                    : (editingGoal ? "Save Changes" : "Create Goal")}
                 </button>
               </div>
             </form>
@@ -691,6 +845,19 @@ function GoalDetailModal({ goal, workspaceId, onClose }: GoalDetailModalProps) {
               <p className="text-sm text-white">{formatDate(currentGoal.updated_at)}</p>
             </div>
           </div>
+
+          {/* Timeline / Activity */}
+          {workspaceId && (
+            <div className="pt-4 border-t border-slate-700">
+              <h4 className="text-sm font-medium text-white mb-4">Activity Timeline</h4>
+              <EntityTimeline
+                workspaceId={workspaceId}
+                entityType="goal"
+                entityId={currentGoal.id}
+                showCommentInput={true}
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>

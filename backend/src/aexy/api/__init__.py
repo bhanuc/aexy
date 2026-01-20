@@ -45,6 +45,8 @@ from aexy.api.stories import router as stories_router
 from aexy.api.releases import router as releases_router
 # Goals/OKRs
 from aexy.api.goals import router as goals_router
+# Entity Activities (Timeline)
+from aexy.api.entity_activity import router as entity_activity_router
 # Bugs
 from aexy.api.bugs import router as bugs_router
 # Dependencies
@@ -160,6 +162,8 @@ api_router.include_router(stories_router, tags=["stories"])
 api_router.include_router(releases_router, tags=["releases"])
 # Goals/OKRs
 api_router.include_router(goals_router, tags=["goals"])
+# Entity Activities (Timeline)
+api_router.include_router(entity_activity_router, tags=["entity-activities"])
 # Bugs
 api_router.include_router(bugs_router, tags=["bugs"])
 # Dependencies

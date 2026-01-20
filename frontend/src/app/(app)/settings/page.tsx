@@ -15,6 +15,7 @@ import {
   AlertTriangle,
   Contact,
   Mail,
+  Palette,
 } from "lucide-react";
 
 interface SettingsSectionProps {
@@ -72,6 +73,13 @@ export default function SettingsPage() {
 
       <main className="max-w-3xl mx-auto px-4 py-8">
         <div className="space-y-4">
+          <SettingsSection
+            href="/settings/appearance"
+            icon={<Palette className="h-5 w-5 text-indigo-400" />}
+            title="Appearance"
+            description="Customize sidebar layout and visual preferences"
+          />
+
           <SettingsSection
             href="/settings/repositories"
             icon={<FolderGit2 className="h-5 w-5 text-blue-400" />}

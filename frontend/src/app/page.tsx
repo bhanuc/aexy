@@ -300,18 +300,6 @@ export default function Home() {
               <motion.a
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                href="#"
-                className="group inline-flex items-center gap-2 px-4 py-2 bg-[#ff6154]/10 border border-[#ff6154]/20 rounded-full text-[#ff6154] text-sm hover:border-[#ff6154]/40 transition-all hover:scale-105"
-              >
-                <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M13.6 4.3h-3.4c-2.3 0-4.3 1.9-4.3 4.3v3.4c0 2.3 1.9 4.3 4.3 4.3h3.4c2.3 0 4.3-1.9 4.3-4.3v-3.4c0-2.3-1.9-4.3-4.3-4.3zm0 7.7h-3.4v-3.4h3.4v3.4z" /></svg>
-                <span>Product of the Day</span>
-                <ChevronRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
-              </motion.a>
-
-              <motion.a
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
                 href="https://github.com/aexy-io/aexy"
                 className="group inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 border border-emerald-500/30 rounded-full text-emerald-400 text-sm hover:border-emerald-500/50 transition-all hover:scale-105"
@@ -414,25 +402,36 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Trusted By Section */}
-      <section className="py-12 border-y border-white/5 bg-white/[0.02]">
-        <div className="max-w-7xl mx-auto px-6">
-          <p className="text-center text-sm text-white/40 mb-8 font-medium uppercase tracking-wider">Trusted by engineering teams at</p>
-          <div className="flex flex-wrap justify-center items-center gap-8 md:gap-16 opacity-50 grayscale hover:grayscale-0 transition-all duration-500">
-            {TRUSTED_COMPANIES.map((company, i) => (
-              <motion.div
-                key={company}
-                initial={{ opacity: 0 }}
-                whileInView={{ opacity: 1 }}
-                transition={{ delay: i * 0.1 }}
-                viewport={{ once: true }}
-                className="text-xl font-bold text-white flex items-center gap-2"
+      {/* Trusted By Section - Marquee */}
+      <section className="py-12 border-y border-white/5 bg-white/[0.02] overflow-hidden">
+        <div className="max-w-7xl mx-auto px-6 mb-8">
+          <p className="text-center text-sm text-white/40 font-medium uppercase tracking-wider">Trusted by engineering teams at</p>
+        </div>
+
+        <div className="relative flex overflow-hidden group">
+          <div className="absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-[#0a0a0f] to-transparent z-10" />
+          <div className="absolute inset-y-0 right-0 w-32 bg-gradient-to-l from-[#0a0a0f] to-transparent z-10" />
+
+          <motion.div
+            className="flex gap-16 whitespace-nowrap"
+            animate={{ x: "-50%" }}
+            transition={{
+              repeat: Infinity,
+              ease: "linear",
+              duration: 30,
+              repeatType: "loop"
+            }}
+          >
+            {[...TRUSTED_COMPANIES, ...TRUSTED_COMPANIES, ...TRUSTED_COMPANIES].map((company, i) => (
+              <div
+                key={`${company}-${i}`}
+                className="text-xl font-bold text-white/30 flex items-center gap-2 hover:text-white/60 transition-colors cursor-default"
               >
-                <div className="w-6 h-6 bg-white/20 rounded-full" />
+                <div className="w-6 h-6 bg-current rounded-full opacity-50" />
                 {company}
-              </motion.div>
+              </div>
             ))}
-          </div>
+          </motion.div>
         </div>
       </section>
 
@@ -1177,6 +1176,68 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Testimonials */}
+      <section className="py-24 px-6 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-primary-500/5 to-transparent opacity-50" />
+        <div className="max-w-7xl mx-auto relative">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4 tracking-tight">
+              Loved by Engineering Teams
+            </h2>
+            <p className="text-white/50 text-lg">
+              Join hundreds of high-performing organizations building with Aexy.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            {TESTIMONIALS.map((t, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.1 }}
+                viewport={{ once: true }}
+                whileHover={{ y: -5 }}
+                className="relative bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-3xl transition-all duration-300 group hover:border-white/20 hover:bg-white/[0.07] hover:shadow-2xl hover:shadow-primary-500/10"
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="relative">
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-lg">
+                      {t.avatar}
+                    </div>
+                    <div>
+                      <div className="text-white font-semibold">{t.author}</div>
+                      <div className="text-white/40 text-sm">{t.role}</div>
+                    </div>
+                  </div>
+                  <p className="text-white/80 leading-relaxed text-sm">"{t.quote}"</p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ Section */}
+      <section className="py-24 px-6 relative">
+        <div className="max-w-3xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+              Frequently Asked Questions
+            </h2>
+            <p className="text-white/50 text-lg">
+              Everything you need to know about Aexy.
+            </p>
+          </div>
+          <div className="space-y-4">
+            {FAQS.map((faq, i) => (
+              <FAQItem key={i} question={faq.question} answer={faq.answer} />
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* CTA */}
       <section className="py-24 px-6">
         <div className="max-w-4xl mx-auto">
@@ -1502,4 +1563,36 @@ function SyncStep({ icon, label, desc }: { icon: React.ReactNode; label: string;
 
 function SyncArrow() {
   return <div className="hidden md:block text-white/20"><ChevronRight className="h-6 w-6" /></div>;
+}
+
+function FAQItem({ question, answer }: { question: string; answer: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="border border-white/5 rounded-2xl bg-white/[0.02] overflow-hidden transition-all duration-200 hover:bg-white/[0.04]">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between p-6 text-left"
+      >
+        <span className="text-lg font-medium text-white">{question}</span>
+        <div className={`p-2 rounded-full transition-colors ${isOpen ? "bg-white/10 text-white" : "text-white/50"}`}>
+          {isOpen ? <Minus className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+        </div>
+      </button>
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <div className="px-6 pb-6 text-white/60 leading-relaxed">
+              {answer}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
 }
