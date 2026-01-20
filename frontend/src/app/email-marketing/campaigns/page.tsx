@@ -92,7 +92,7 @@ function CampaignCard({
             <h3 className="text-white font-medium group-hover:text-sky-400 transition">
               {campaign.name}
             </h3>
-            <p className="text-sm text-slate-500">{campaign.subject}</p>
+            {campaign.subject && <p className="text-sm text-slate-500">{campaign.subject}</p>}
           </div>
         </Link>
         <div className="flex items-center gap-2">
@@ -181,7 +181,7 @@ function CampaignCard({
           <p className="text-xs text-slate-500">Click Rate</p>
         </div>
         <div className="text-center p-3 bg-slate-800/50 rounded-lg">
-          <p className="text-lg font-semibold text-amber-400">{campaign.bounce_count}</p>
+          <p className="text-lg font-semibold text-amber-400">{campaign.bounce_count ?? 0}</p>
           <p className="text-xs text-slate-500">Bounces</p>
         </div>
       </div>
@@ -231,7 +231,7 @@ export default function CampaignsPage() {
 
   const filteredCampaigns = campaigns
     .filter((c) => c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                   c.subject.toLowerCase().includes(searchQuery.toLowerCase()))
+                   (c.subject?.toLowerCase() || "").includes(searchQuery.toLowerCase()))
     .sort((a, b) => {
       switch (sortBy) {
         case "oldest":
