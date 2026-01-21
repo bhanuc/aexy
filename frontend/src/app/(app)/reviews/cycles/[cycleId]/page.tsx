@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -16,10 +17,11 @@ import {
   Play,
   Pause,
   RotateCcw,
+  Loader2,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useReviewCycle } from "@/hooks/useReviews";
-import { ReviewCycleStatus } from "@/lib/api";
+import { ReviewCycleStatus, reviewsApi } from "@/lib/api";
 
 // Status colors
 const statusColors: Record<ReviewCycleStatus, { text: string; bg: string; label: string }> = {
@@ -45,6 +47,25 @@ export default function CycleDetailPage() {
   const cycleId = params.cycleId as string;
   const { user, isLoading: authLoading } = useAuth();
   const { cycle, isLoading, error, refetch } = useReviewCycle(cycleId);
+
+  const [isActivating, setIsActivating] = useState(false);
+  const [showStartConfirm, setShowStartConfirm] = useState(false);
+  const [activateError, setActivateError] = useState<string | null>(null);
+
+  const handleStartCycle = async () => {
+    if (!cycleId) return;
+    setIsActivating(true);
+    setActivateError(null);
+    try {
+      await reviewsApi.activateCycle(cycleId);
+      await refetch();
+      setShowStartConfirm(false);
+    } catch (err: any) {
+      setActivateError(err?.response?.data?.detail || "Failed to start cycle");
+    } finally {
+      setIsActivating(false);
+    }
+  };
 
   if (authLoading || isLoading) {
     return (
@@ -119,7 +140,10 @@ export default function CycleDetailPage() {
             </div>
             <div className="flex items-center gap-2">
               {cycle.status === "draft" && (
-                <button className="px-4 py-2 text-sm bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition flex items-center gap-2">
+                <button
+                  onClick={() => setShowStartConfirm(true)}
+                  className="px-4 py-2 text-sm bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition flex items-center gap-2"
+                >
                   <Play className="h-4 w-4" />
                   Start Cycle
                 </button>
@@ -252,7 +276,7 @@ export default function CycleDetailPage() {
               </div>
             </div>
 
-            {/* Participants Section - Placeholder */}
+            {/* Participants Section */}
             <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-6">
               <h2 className="text-lg font-medium text-white mb-4 flex items-center gap-2">
                 <Users className="h-5 w-5 text-blue-400" />
@@ -262,13 +286,24 @@ export default function CycleDetailPage() {
                 <p className="text-slate-400 text-sm">
                   {cycle.total_reviews} team member{cycle.total_reviews > 1 ? "s" : ""} enrolled in this review cycle.
                 </p>
+              ) : cycle.status === "draft" ? (
+                <div className="text-center py-8">
+                  <Users className="h-12 w-12 text-slate-600 mx-auto mb-3" />
+                  <p className="text-slate-400 text-sm mb-2">No participants enrolled yet.</p>
+                  <p className="text-slate-500 text-xs mb-4">
+                    Participants will be automatically enrolled from your workspace teams when you start the cycle.
+                  </p>
+                  <button
+                    onClick={() => setShowStartConfirm(true)}
+                    className="px-4 py-2 text-sm bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition"
+                  >
+                    Start Cycle to Add Participants
+                  </button>
+                </div>
               ) : (
                 <div className="text-center py-8">
                   <Users className="h-12 w-12 text-slate-600 mx-auto mb-3" />
-                  <p className="text-slate-400 text-sm mb-4">No participants enrolled yet.</p>
-                  <button className="px-4 py-2 text-sm bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition">
-                    Add Participants
-                  </button>
+                  <p className="text-slate-400 text-sm">No participants in this cycle.</p>
                 </div>
               )}
             </div>
@@ -346,6 +381,53 @@ export default function CycleDetailPage() {
             </div>
           </div>
         </div>
+
+        {/* Start Cycle Confirmation Modal */}
+        {showStartConfirm && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full mx-4">
+              <h3 className="text-lg font-medium text-white mb-2">Start Review Cycle?</h3>
+              <p className="text-slate-400 text-sm mb-4">
+                This will activate the cycle and automatically enroll all team members from your workspace.
+                Individual reviews will be created for each participant.
+              </p>
+              {activateError && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 mb-4">
+                  <p className="text-red-400 text-sm">{activateError}</p>
+                </div>
+              )}
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => {
+                    setShowStartConfirm(false);
+                    setActivateError(null);
+                  }}
+                  disabled={isActivating}
+                  className="px-4 py-2 text-sm bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleStartCycle}
+                  disabled={isActivating}
+                  className="px-4 py-2 text-sm bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition flex items-center gap-2 disabled:opacity-50"
+                >
+                  {isActivating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Starting...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-4 w-4" />
+                      Start Cycle
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );
