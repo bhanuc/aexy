@@ -84,3 +84,16 @@ We believe in transparency:
 
 - [Website](https://aexy.io)
 - [GitHub](https://github.com/aexy-io/aexy)
+
+## License
+
+Aexy is dual-licensed:
+
+- **AGPL v3** for open-source and internal use
+- **Commercial License** for SaaS, closed-source, or competitive use
+
+If you want to offer Aexy as a hosted service without AGPL obligations,
+you must obtain a commercial license.
+
+Contact: licensing@aexy.io
+
