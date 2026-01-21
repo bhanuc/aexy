@@ -896,7 +896,7 @@ export default function OrganizationSettingsPage() {
             </div>
 
             {/* Members Section */}
-            <div className="bg-slate-800 rounded-xl overflow-hidden mb-6">
+            <div className="bg-slate-800 rounded-xl mb-6">
               <div className="p-4 border-b border-slate-700 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <Users className="h-5 w-5 text-slate-400" />
