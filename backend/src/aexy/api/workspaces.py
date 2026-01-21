@@ -320,31 +320,49 @@ async def invite_member(
     developer = await dev_service.get_by_email(data.email)
 
     if developer:
-        # User exists - add as pending member
+        # User exists - check if already a member
+        existing_member = await service.get_member(workspace_id, str(developer.id))
+        if existing_member:
+            if existing_member.status == "active":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"{data.email} is already a member of this workspace",
+                )
+            elif existing_member.status == "pending":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"{data.email} already has a pending invitation",
+                )
+
+        # Create pending invite with token (same as non-existing users)
+        # This ensures they get a proper acceptance link
         try:
-            member = await service.add_member(
+            pending_invite = await service.create_pending_invite(
                 workspace_id=workspace_id,
-                developer_id=str(developer.id),
+                email=data.email,
                 role=data.role,
                 invited_by_id=str(current_user.id),
-                status="pending",
             )
             await db.commit()
-            await db.refresh(member)
+            await db.refresh(pending_invite)
 
-            # Send email notification to existing user
+            # Send invite email with proper invite link
             try:
                 email_service = EmailService()
                 if email_service.is_configured:
-                    workspace_url = f"{settings.frontend_url}/dashboard"
+                    invite_url = f"{settings.frontend_url}/invite/{pending_invite.token}"
                     subject = f"You've been invited to join {workspace_name} on Aexy"
                     body_text = f"""
 Hi,
 
 {current_user.name or current_user.email} has invited you to join {workspace_name} on Aexy.
 
-You can access the workspace from your dashboard:
-{workspace_url}
+Click the link below to accept the invitation:
+{invite_url}
+
+This invitation will expire on {pending_invite.expires_at.strftime('%B %d, %Y')}.
+
+If you didn't expect this invitation, you can safely ignore this email.
 
 Best,
 The Aexy Team
@@ -355,10 +373,11 @@ The Aexy Team
     <h2 style="color: #1f2937;">You've been invited to join {workspace_name}</h2>
     <p style="color: #4b5563;">{current_user.name or current_user.email} has invited you to join {workspace_name} on Aexy.</p>
     <p style="margin: 24px 0;">
-        <a href="{workspace_url}" style="background-color: #7c3aed; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block;">
-            Go to Dashboard
+        <a href="{invite_url}" style="background-color: #7c3aed; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block;">
+            Accept Invitation
         </a>
     </p>
+    <p style="color: #6b7280; font-size: 14px;">This invitation will expire on {pending_invite.expires_at.strftime('%B %d, %Y')}.</p>
     <p style="color: #9ca3af; font-size: 12px; margin-top: 32px;">If you didn't expect this invitation, you can safely ignore this email.</p>
 </div>
                     """.strip()
@@ -378,9 +397,9 @@ The Aexy Team
                 # Don't fail the request if email fails
 
             return WorkspaceInviteResult(
-                type="member",
-                member=member_to_response(member),
-                message=f"Invitation sent to {data.email}",
+                type="pending_invite",
+                pending_invite=pending_invite_to_response(pending_invite),
+                message=f"Invitation sent to {data.email}. They will be added when they accept.",
             )
         except ValueError as e:
             raise HTTPException(

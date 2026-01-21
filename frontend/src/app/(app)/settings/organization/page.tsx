@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -78,9 +78,22 @@ interface MemberRowProps {
 function MemberRow({ member, currentUserId, isCurrentUserAdmin, onUpdateRole, onRemove, onResendInvite }: MemberRowProps) {
   const [showMenu, setShowMenu] = useState(false);
   const [isResending, setIsResending] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 });
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const isCurrentUser = member.developer_id === currentUserId;
   const canModify = isCurrentUserAdmin && member.role !== "owner" && !isCurrentUser;
   const isPending = member.status === "pending";
+
+  const handleOpenMenu = () => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setMenuPosition({
+        top: rect.bottom + 4,
+        right: window.innerWidth - rect.right,
+      });
+    }
+    setShowMenu(!showMenu);
+  };
 
   const handleResendInvite = async () => {
     setIsResending(true);
@@ -134,15 +147,19 @@ function MemberRow({ member, currentUserId, isCurrentUserAdmin, onUpdateRole, on
         {canModify && (
           <div className="relative">
             <button
-              onClick={() => setShowMenu(!showMenu)}
+              ref={buttonRef}
+              onClick={handleOpenMenu}
               className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition"
             >
               <MoreVertical className="h-4 w-4" />
             </button>
             {showMenu && (
               <>
-                <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
-                <div className="absolute right-0 top-full mt-1 w-48 bg-slate-700 rounded-lg shadow-xl z-20 py-1">
+                <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+                <div
+                  className="fixed w-48 bg-slate-700 rounded-lg shadow-xl z-50 py-1"
+                  style={{ top: menuPosition.top, right: menuPosition.right }}
+                >
                   <div className="px-3 py-2 text-xs text-slate-400 uppercase tracking-wider">
                     Change Role
                   </div>
