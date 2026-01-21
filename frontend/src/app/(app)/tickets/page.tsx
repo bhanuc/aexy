@@ -5,13 +5,11 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
   Ticket,
-  Plus,
   Filter,
   Search,
   AlertTriangle,
   Clock,
   CheckCircle2,
-  XCircle,
   User,
   ChevronRight,
   FileText,
@@ -22,7 +20,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useTickets, useTicketStats, useTicketForms } from "@/hooks/useTicketing";
-import { TicketStatus, TicketPriority, developerApi, MyAssignedTask } from "@/lib/api";
+import { TicketStatus, TicketPriority, developerApi } from "@/lib/api";
 
 const STATUS_COLORS: Record<TicketStatus, { bg: string; text: string; label: string }> = {
   new: { bg: "bg-blue-900/30", text: "text-blue-400", label: "New" },
@@ -52,13 +50,13 @@ type TabType = "tickets" | "my-tasks";
 
 export default function TicketsPage() {
   const router = useRouter();
-  const { user, logout } = useAuth();
+  useAuth(); // Ensure user is authenticated
   const { currentWorkspace } = useWorkspace();
   const workspaceId = currentWorkspace?.id || null;
 
   const [activeTab, setActiveTab] = useState<TabType>("my-tasks");
   const [statusFilter, setStatusFilter] = useState<TicketStatus[]>([]);
-  const [priorityFilter, setPriorityFilter] = useState<TicketPriority[]>([]);
+  const [priorityFilter] = useState<TicketPriority[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
 
   const { tickets, total, isLoading } = useTickets(workspaceId, {
