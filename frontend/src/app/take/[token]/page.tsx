@@ -36,6 +36,10 @@ interface AssessmentInfo {
   face_detection_enabled: boolean;
   tab_tracking_enabled: boolean;
   copy_paste_disabled: boolean;
+  screen_recording_enabled: boolean;
+  face_detection_enabled: boolean;
+  tab_tracking_enabled: boolean;
+  copy_paste_disabled: boolean;
   deadline: string | null;
   can_start: boolean;
   message: string | null;
@@ -332,6 +336,11 @@ export default function AssessmentTakePage() {
         }
       }
 
+      // Start face detection if enabled
+      if (assessmentInfo?.face_detection_enabled && webcamStream) {
+        startFaceDetection();
+      }
+
       // Face detection will be started by the useEffect below
     } catch (err: any) {
       setError(err.message);
@@ -588,6 +597,17 @@ export default function AssessmentTakePage() {
         attempt_id: data.attempt_id,
         completed_at: data.completed_at,
       });
+
+      // Clean up media streams
+      if (webcamStream) {
+        webcamStream.getTracks().forEach(track => track.stop());
+      }
+      if (screenStream) {
+        screenStream.getTracks().forEach(track => track.stop());
+      }
+      if (faceDetectionInterval) {
+        clearInterval(faceDetectionInterval);
+      }
 
       // Clean up media streams
       if (webcamStream) {
@@ -922,10 +942,34 @@ export default function AssessmentTakePage() {
                       Screen recording will be enabled
                     </li>
                   )}
+                  {assessmentInfo.screen_recording_enabled && (
+                    <li className="flex items-center gap-2">
+                      <Monitor className="h-4 w-4 text-yellow-600" />
+                      Screen recording will be enabled
+                    </li>
+                  )}
                   {assessmentInfo.fullscreen_required && (
                     <li className="flex items-center gap-2">
                       <Monitor className="h-4 w-4 text-yellow-600" />
                       Fullscreen mode required
+                    </li>
+                  )}
+                  {assessmentInfo.face_detection_enabled && (
+                    <li className="flex items-center gap-2">
+                      <Camera className="h-4 w-4 text-yellow-600" />
+                      Face detection will be active
+                    </li>
+                  )}
+                  {assessmentInfo.tab_tracking_enabled && (
+                    <li className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                      Tab switches will be recorded
+                    </li>
+                  )}
+                  {assessmentInfo.copy_paste_disabled && (
+                    <li className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                      Copy/paste is disabled
                     </li>
                   )}
                   {assessmentInfo.face_detection_enabled && (
