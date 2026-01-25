@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aexy.core.database import get_db
+from aexy.core.encryption import has_credentials as check_has_credentials
 from aexy.api.developers import get_current_developer
 from aexy.models.developer import Developer
 from aexy.services.provider_service import ProviderService
@@ -60,8 +61,8 @@ router = APIRouter(prefix="/workspaces/{workspace_id}/email-infrastructure")
 
 def provider_to_response(provider) -> dict:
     """Convert provider model to response dict with has_credentials computed."""
-    # Check if credentials are configured (not empty)
-    has_credentials = bool(provider.credentials and len(provider.credentials) > 0)
+    # Check if credentials are configured (handles both encrypted and legacy formats)
+    has_creds = check_has_credentials(provider.credentials)
 
     return {
         "id": str(provider.id),
@@ -82,13 +83,14 @@ def provider_to_response(provider) -> dict:
         "last_error": provider.last_error,
         "created_at": provider.created_at,
         "updated_at": provider.updated_at,
-        "has_credentials": has_credentials,
+        "has_credentials": has_creds,
     }
 
 
 def provider_to_list_response(provider) -> dict:
     """Convert provider model to list response dict with has_credentials computed."""
-    has_credentials = bool(provider.credentials and len(provider.credentials) > 0)
+    # Check if credentials are configured (handles both encrypted and legacy formats)
+    has_creds = check_has_credentials(provider.credentials)
 
     return {
         "id": str(provider.id),
@@ -102,7 +104,7 @@ def provider_to_list_response(provider) -> dict:
         "max_sends_per_day": provider.max_sends_per_day,
         "last_check_status": provider.last_check_status,
         "created_at": provider.created_at,
-        "has_credentials": has_credentials,
+        "has_credentials": has_creds,
     }
 
 
