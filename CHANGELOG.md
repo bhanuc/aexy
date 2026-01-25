@@ -5,6 +5,88 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-01-25
+
+### Added
+
+#### Assessment Proctoring System
+
+A comprehensive real-time proctoring system for assessment integrity with AI-powered face detection, violation tracking, and chunked video recording with cloud storage.
+
+**Face Detection & Monitoring:**
+- Real-time face detection using face-api.js with TinyFaceDetector
+- No face detected alerts with configurable cooldown (10 seconds)
+- Multiple faces detection with count reporting
+- Face landmark and recognition model support
+- Live webcam preview during assessment
+
+**Violation Tracking:**
+- Configurable maximum violation count before auto-submission
+- Violation types: no face, multiple faces, tab switch, window blur, fullscreen exit, copy/paste attempt
+- Real-time violation counter with visual warnings
+- Warning modal with violation details and remaining attempts
+- Automatic assessment submission on max violations exceeded
+
+**Screen & Webcam Recording:**
+- Chunked recording with configurable duration (10 second chunks)
+- Cloudflare R2 upload integration for video storage
+- Separate webcam and screen recording streams
+- Progress tracking for uploads
+- Graceful recording stop and finalization on submission
+
+**Proctoring Settings:**
+- Enable/disable proctoring per assessment
+- Webcam requirement toggle
+- Screen recording toggle
+- Fullscreen enforcement toggle
+- Face detection toggle
+- Tab/window tracking toggle
+- Copy/paste prevention toggle
+
+**Security Features:**
+- Fullscreen mode enforcement with exit detection
+- Tab switch detection via visibility API
+- Window blur detection
+- Copy/cut/paste prevention with event blocking
+- Right-click context menu prevention
+- Re-enable prompts for fullscreen and screen sharing after violations
+
+**Backend Proctoring Service:**
+- `ProctoringService` for event logging and analysis
+- Proctoring event types with severity levels (info, warning, critical)
+- Event summary generation for attempt review
+- Trust score calculation based on violations
+- Integration with assessment attempt model
+
+**R2 Upload Service:**
+- Chunked upload support for large video files
+- Multipart upload with progress tracking
+- Signed URL generation for secure uploads
+- Recording type tagging (webcam/screen)
+
+**Assessment Settings UI (Step 3):**
+- Proctoring settings section with toggles
+- `enable_webcam`, `enable_screen_recording`, `enable_fullscreen_enforcement`
+- `enable_face_detection`, `enable_tab_tracking`, `enable_copy_paste_detection`
+- Additional options: `allow_calculator`, `allow_ide`
+
+**Assessment Review UI (Step 5):**
+- Proctoring status display in review summary
+- Settings verification before publish
+
+**New Files:**
+- `frontend/src/hooks/useChunkedRecording.ts` - Chunked recording hook
+- `frontend/src/services/recordingUploadService.ts` - R2 upload service
+- `frontend/src/constants/index.ts` - MAX_VIOLATION_COUNT constant
+- `frontend/public/models/` - Face-api.js model files
+- `backend/src/aexy/services/proctoring_service.py` - Proctoring event service
+- `backend/src/aexy/services/r2_upload_service.py` - Cloudflare R2 integration
+
+**Dependencies Added:**
+- `face-api.js` - Browser-based face detection
+
+---
+
 ## [0.3.1] - 2026-01-24
 
 ### Fixed
