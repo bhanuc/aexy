@@ -31,6 +31,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Error toast shows "Connection failed" with detailed error message (e.g., invalid credentials)
 - Added Toaster component to root layout for app-wide notifications
 
+**Credential Encryption (Security):**
+- Added Fernet-based encryption for provider credentials at rest
+- Credentials are encrypted before storing in database using AES-128-CBC
+- Encryption key derived from application `secret_key` via SHA256
+- Backward compatible with existing unencrypted credentials (auto-detected)
+- New encryption utility module at `core/encryption.py`
+
 ### Changed
 
 - Updated `EmailProvider` TypeScript interface with `credentials`, `description`, `settings`, and status fields

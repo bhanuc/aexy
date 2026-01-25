@@ -16,6 +16,7 @@ from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
+from aexy.core.encryption import encrypt_credentials, decrypt_credentials
 from aexy.models.email_infrastructure import (
     EmailProvider,
     SendingDomain,
@@ -611,16 +612,19 @@ def get_provider_client(provider: EmailProvider) -> EmailProviderClient:
     """Factory function to create the appropriate provider client."""
     provider_type = provider.provider_type
 
+    # Decrypt credentials before passing to client
+    credentials = decrypt_credentials(provider.credentials)
+
     if provider_type == EmailProviderType.SES.value:
-        return SESClient(provider.credentials)
+        return SESClient(credentials)
     elif provider_type == EmailProviderType.SENDGRID.value:
-        return SendGridClient(provider.credentials)
+        return SendGridClient(credentials)
     elif provider_type == EmailProviderType.MAILGUN.value:
-        return MailgunClient(provider.credentials)
+        return MailgunClient(credentials)
     elif provider_type == EmailProviderType.POSTMARK.value:
-        return PostmarkClient(provider.credentials)
+        return PostmarkClient(credentials)
     elif provider_type == EmailProviderType.SMTP.value:
-        return SMTPClient(provider.credentials)
+        return SMTPClient(credentials)
     else:
         raise ValueError(f"Unsupported provider type: {provider_type}")
 
@@ -641,13 +645,16 @@ class ProviderService:
         data: EmailProviderCreate,
     ) -> EmailProvider:
         """Create a new email provider."""
+        # Encrypt credentials before storing
+        encrypted_creds = encrypt_credentials(data.credentials) if data.credentials else {}
+
         provider = EmailProvider(
             id=str(uuid4()),
             workspace_id=workspace_id,
             name=data.name,
             provider_type=data.provider_type,
             description=data.description,
-            credentials=data.credentials,
+            credentials=encrypted_creds,
             settings=data.settings,
             max_sends_per_second=data.max_sends_per_second,
             max_sends_per_day=data.max_sends_per_day,
@@ -692,6 +699,10 @@ class ProviderService:
         # Handle default flag
         if update_data.get("is_default"):
             await self._unset_default_providers(workspace_id, exclude_id=provider_id)
+
+        # Encrypt credentials if being updated
+        if "credentials" in update_data and update_data["credentials"]:
+            update_data["credentials"] = encrypt_credentials(update_data["credentials"])
 
         for key, value in update_data.items():
             setattr(provider, key, value)
