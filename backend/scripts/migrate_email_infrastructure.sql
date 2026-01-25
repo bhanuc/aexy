@@ -581,6 +581,8 @@ ALTER TABLE email_providers ADD COLUMN IF NOT EXISTS is_default BOOLEAN NOT NULL
 ALTER TABLE email_providers ADD COLUMN IF NOT EXISTS last_check_at TIMESTAMPTZ;
 ALTER TABLE email_providers ADD COLUMN IF NOT EXISTS last_check_status VARCHAR(50);
 ALTER TABLE email_providers ADD COLUMN IF NOT EXISTS last_error TEXT;
+ALTER TABLE email_providers ADD COLUMN IF NOT EXISTS max_sends_per_day INTEGER;
+ALTER TABLE email_providers ADD COLUMN IF NOT EXISTS max_sends_per_second INTEGER;
 
 -- sending_domains: Add missing columns
 ALTER TABLE sending_domains ADD COLUMN IF NOT EXISTS subdomain VARCHAR(100);
