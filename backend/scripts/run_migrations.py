@@ -271,7 +271,12 @@ async def run_migrations(
             elif force and specific_file:
                 pending.append(file_path)
 
-        if not pending and not (force and changed):
+        # If force is set and we have changed migrations, add them to pending
+        if force and changed:
+            pending.extend(changed)
+            changed = []
+
+        if not pending:
             print("\n✓ All migrations are up to date!")
             if changed:
                 print(f"\n⚠ Warning: {len(changed)} migration(s) have changed since last run:")
