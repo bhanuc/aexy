@@ -281,15 +281,26 @@ Incident ID: {incident.id}
                 color = "#28a745"  # Green
 
             # Send to Slack
-            if "slack" in channels and monitor.slack_channel_id:
-                await _send_slack_notification(
-                    db,
-                    monitor.workspace_id,
-                    monitor.slack_channel_id,
-                    title,
-                    message,
-                    color,
-                )
+            if "slack" in channels:
+                slack_channel_id = monitor.slack_channel_id
+                # If no channel set on monitor, look up from slack_channel_configs
+                if not slack_channel_id:
+                    slack_channel_id = await _get_workspace_notification_channel(
+                        db, str(monitor.workspace_id)
+                    )
+                if slack_channel_id:
+                    await _send_slack_notification(
+                        db,
+                        monitor.workspace_id,
+                        slack_channel_id,
+                        title,
+                        message,
+                        color,
+                    )
+                else:
+                    logger.warning(
+                        f"Slack notification enabled but no channel configured for workspace {monitor.workspace_id}"
+                    )
 
             # Send to webhook
             if "webhook" in channels and monitor.webhook_url:
@@ -325,6 +336,48 @@ Incident ID: {incident.id}
             raise
 
 
+async def _get_workspace_notification_channel(
+    db,
+    workspace_id: str,
+) -> str | None:
+    """Get the default Slack channel for workspace notifications from slack_channel_configs."""
+    try:
+        from sqlalchemy import select, or_
+        from aexy.models.integrations import SlackIntegration
+        from aexy.models.tracking import SlackChannelConfig
+
+        # First get the Slack integration - check both workspace_id and organization_id
+        integration_stmt = select(SlackIntegration).where(
+            or_(
+                SlackIntegration.workspace_id == workspace_id,
+                SlackIntegration.organization_id == workspace_id,
+            ),
+            SlackIntegration.is_active == True,
+        )
+        integration_result = await db.execute(integration_stmt)
+        integration = integration_result.scalar_one_or_none()
+
+        if not integration:
+            logger.warning(f"No Slack integration found for workspace/org {workspace_id}")
+            return None
+
+        # Look up active channel config by integration_id
+        stmt = select(SlackChannelConfig).where(
+            SlackChannelConfig.integration_id == integration.id,
+            SlackChannelConfig.is_active == True,
+        ).limit(1)
+        result = await db.execute(stmt)
+        config = result.scalar_one_or_none()
+
+        if config:
+            return config.channel_id
+
+        return None
+    except Exception as e:
+        logger.error(f"Failed to get notification channel for workspace {workspace_id}: {e}")
+        return None
+
+
 async def _send_slack_notification(
     db,
     workspace_id: str,
@@ -335,19 +388,22 @@ async def _send_slack_notification(
 ):
     """Send a Slack notification using the workspace's Slack integration."""
     try:
-        from sqlalchemy import select
+        from sqlalchemy import select, or_
         from aexy.models.integrations import SlackIntegration
-
-        # Get Slack integration for workspace
+        # Get Slack integration - check both workspace_id and organization_id
         stmt = select(SlackIntegration).where(
-            SlackIntegration.workspace_id == workspace_id
+            or_(
+                SlackIntegration.workspace_id == workspace_id,
+                SlackIntegration.organization_id == workspace_id,
+            ),
+            SlackIntegration.is_active == True,
         )
         result = await db.execute(stmt)
         integration = result.scalar_one_or_none()
 
         if not integration or not integration.bot_token:
             logger.warning(
-                f"No Slack integration found for workspace {workspace_id}"
+                f"No Slack integration found for workspace/org {workspace_id}"
             )
             return
 
