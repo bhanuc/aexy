@@ -1244,11 +1244,11 @@ async def accept_invite(
             detail=f"This invite was sent to {invite.email}. Please sign in with that email address.",
         )
 
-    # Check if already a member
+    # Check if already an active member (pending members can still accept invite)
     existing_member = await service.get_member(
         str(invite.workspace_id), str(current_user.id)
     )
-    if existing_member:
+    if existing_member and existing_member.status == "active":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="You are already a member of this workspace",
