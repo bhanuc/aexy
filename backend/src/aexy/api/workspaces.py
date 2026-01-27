@@ -598,20 +598,30 @@ async def resend_member_invite(
     workspace = await service.get_workspace(workspace_id)
     workspace_name = workspace.name if workspace else "the workspace"
 
+    # Look up pending invite by email to get the token
+    pending_invite = await service.get_pending_invite_by_email(workspace_id, developer.email)
+    if pending_invite and pending_invite.token:
+        invite_url = f"{settings.frontend_url}/invite/{pending_invite.token}"
+    else:
+        # Fallback to dashboard if no pending invite with token exists
+        invite_url = f"{settings.frontend_url}/dashboard"
+        logger.warning(f"No pending invite with token found for {developer.email}, using dashboard URL")
+
     # Send invite email
     try:
         email_service = EmailService()
         logger.info(f"Email provider: {email_service.provider}, configured: {email_service.is_configured}")
         if email_service.is_configured:
-            workspace_url = f"{settings.frontend_url}/dashboard"
             subject = f"Reminder: You've been invited to join {workspace_name} on Aexy"
             body_text = f"""
 Hi,
 
 This is a reminder that {current_user.name or current_user.email} has invited you to join {workspace_name} on Aexy.
 
-You can access the workspace from your dashboard:
-{workspace_url}
+Click the link below to accept the invitation:
+{invite_url}
+
+If you didn't expect this invitation, you can safely ignore this email.
 
 Best,
 The Aexy Team
@@ -622,8 +632,8 @@ The Aexy Team
     <h2 style="color: #1f2937;">Reminder: You've been invited to join {workspace_name}</h2>
     <p style="color: #4b5563;">{current_user.name or current_user.email} has invited you to join {workspace_name} on Aexy.</p>
     <p style="margin: 24px 0;">
-        <a href="{workspace_url}" style="background-color: #7c3aed; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block;">
-            Go to Dashboard
+        <a href="{invite_url}" style="background-color: #7c3aed; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block;">
+            Accept Invitation
         </a>
     </p>
     <p style="color: #9ca3af; font-size: 12px; margin-top: 32px;">If you didn't expect this invitation, you can safely ignore this email.</p>
