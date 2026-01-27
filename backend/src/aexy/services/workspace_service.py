@@ -187,10 +187,19 @@ class WorkspaceService:
         existing = await self.get_member(workspace_id, developer_id)
         if existing:
             if existing.status == "removed":
-                # Reactivate
+                # Reactivate removed member
                 existing.status = status
                 existing.role = role
                 existing.joined_at = datetime.now(timezone.utc) if status == "active" else None
+                await self.db.flush()
+                await self.db.refresh(existing)
+                return existing
+            elif existing.status == "pending" and status == "active":
+                # Activate pending member (e.g., when accepting invite)
+                existing.status = "active"
+                existing.role = role
+                existing.joined_at = datetime.now(timezone.utc)
+                existing.billing_start_date = datetime.now(timezone.utc)
                 await self.db.flush()
                 await self.db.refresh(existing)
                 return existing

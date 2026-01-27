@@ -598,14 +598,32 @@ async def resend_member_invite(
     workspace = await service.get_workspace(workspace_id)
     workspace_name = workspace.name if workspace else "the workspace"
 
-    # Look up pending invite by email to get the token
+    # Look up pending invite by email to get the token, or create one if it doesn't exist
     pending_invite = await service.get_pending_invite_by_email(workspace_id, developer.email)
-    if pending_invite and pending_invite.token:
-        invite_url = f"{settings.frontend_url}/invite/{pending_invite.token}"
-    else:
-        # Fallback to dashboard if no pending invite with token exists
-        invite_url = f"{settings.frontend_url}/dashboard"
-        logger.warning(f"No pending invite with token found for {developer.email}, using dashboard URL")
+
+    # Only use the invite if it's still pending and has a valid token
+    if not pending_invite or pending_invite.status != "pending" or not pending_invite.token:
+        # Create a pending invite for this existing user so they get a proper invite link
+        logger.info(f"Creating pending invite for existing member {developer.email}")
+        try:
+            pending_invite = await service.create_pending_invite(
+                workspace_id=workspace_id,
+                email=developer.email,
+                role=member.role,
+                invited_by_id=str(current_user.id),
+            )
+            await db.flush()
+        except ValueError as e:
+            # If creation fails (e.g., race condition), try to get the invite again
+            logger.warning(f"Failed to create pending invite: {e}, retrying lookup")
+            pending_invite = await service.get_pending_invite_by_email(workspace_id, developer.email)
+            if not pending_invite or not pending_invite.token:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to create invitation link",
+                )
+
+    invite_url = f"{settings.frontend_url}/invite/{pending_invite.token}"
 
     # Send invite email
     try:
