@@ -81,6 +81,14 @@ class UptimeService:
         now = datetime.now(timezone.utc)
         next_check_at = now + timedelta(seconds=30)  # First check in 30 seconds
 
+        # Auto-add slack to notification_channels if Slack is connected with a channel
+        notification_channels = list(data.notification_channels) if data.notification_channels else []
+        if "slack" not in notification_channels:
+            has_slack_channel = await self._check_slack_channel_configured(workspace_id)
+            if has_slack_channel:
+                notification_channels.append("slack")
+                logger.info(f"Auto-added 'slack' to notification_channels for new monitor in workspace {workspace_id}")
+
         monitor = UptimeMonitor(
             id=str(uuid4()),
             workspace_id=workspace_id,
@@ -101,7 +109,7 @@ class UptimeService:
             check_interval_seconds=data.check_interval_seconds,
             timeout_seconds=data.timeout_seconds,
             consecutive_failures_threshold=data.consecutive_failures_threshold,
-            notification_channels=data.notification_channels,
+            notification_channels=notification_channels,
             slack_channel_id=data.slack_channel_id,
             webhook_url=data.webhook_url,
             notify_on_recovery=data.notify_on_recovery,
@@ -1282,3 +1290,77 @@ This ticket was automatically closed by the uptime monitoring system.
         )
         result = await self.db.execute(stmt)
         return result.scalar() or 0
+
+    # ==========================================================================
+    # SLACK INTEGRATION HELPERS
+    # ==========================================================================
+
+    async def _check_slack_channel_configured(self, workspace_id: str) -> bool:
+        """Check if Slack is connected with a channel configured for this workspace.
+
+        Args:
+            workspace_id: Workspace ID.
+
+        Returns:
+            True if Slack channel is configured, False otherwise.
+        """
+        from aexy.models.integrations import SlackIntegration
+        from aexy.models.tracking import SlackChannelConfig
+
+        # Check for active Slack integration (by workspace_id or organization_id)
+        integration_stmt = select(SlackIntegration).where(
+            or_(
+                SlackIntegration.workspace_id == workspace_id,
+                SlackIntegration.organization_id == workspace_id,
+            ),
+            SlackIntegration.is_active == True,
+        )
+        integration_result = await self.db.execute(integration_stmt)
+        integration = integration_result.scalar_one_or_none()
+
+        if not integration:
+            return False
+
+        # Check for active channel config
+        channel_stmt = select(SlackChannelConfig).where(
+            SlackChannelConfig.integration_id == integration.id,
+            SlackChannelConfig.is_active == True,
+        ).limit(1)
+        channel_result = await self.db.execute(channel_stmt)
+        channel = channel_result.scalar_one_or_none()
+
+        return channel is not None
+
+    async def add_slack_to_monitors(self, workspace_id: str) -> int:
+        """Add 'slack' to notification_channels for all monitors in a workspace.
+
+        Called when a Slack channel is configured to enable notifications
+        for existing monitors.
+
+        Args:
+            workspace_id: Workspace ID.
+
+        Returns:
+            Number of monitors updated.
+        """
+        # Get all monitors that don't have slack in notification_channels
+        stmt = select(UptimeMonitor).where(
+            UptimeMonitor.workspace_id == workspace_id,
+            UptimeMonitor.is_active == True,
+        )
+        result = await self.db.execute(stmt)
+        monitors = result.scalars().all()
+
+        updated_count = 0
+        for monitor in monitors:
+            channels = list(monitor.notification_channels) if monitor.notification_channels else []
+            if "slack" not in channels:
+                channels.append("slack")
+                monitor.notification_channels = channels
+                updated_count += 1
+
+        if updated_count > 0:
+            await self.db.flush()
+            logger.info(f"Added 'slack' to notification_channels for {updated_count} monitors in workspace {workspace_id}")
+
+        return updated_count

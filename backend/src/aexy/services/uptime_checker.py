@@ -81,6 +81,9 @@ class UptimeChecker:
                 error_type=UptimeErrorType.INVALID_RESPONSE.value,
             )
 
+        # Strip whitespace from URL to handle any leading/trailing spaces
+        url = monitor.url.strip()
+
         start_time = time.monotonic()
 
         try:
@@ -91,7 +94,7 @@ class UptimeChecker:
             ) as client:
                 response = await client.request(
                     method=monitor.http_method,
-                    url=monitor.url,
+                    url=url,
                     headers=monitor.request_headers or {},
                     content=monitor.request_body,
                 )
@@ -101,8 +104,8 @@ class UptimeChecker:
                 # Check SSL certificate expiry
                 ssl_expiry_days = None
                 ssl_issuer = None
-                if monitor.url.startswith("https://"):
-                    ssl_info = await self._get_ssl_info(monitor.url, monitor.timeout_seconds)
+                if url.startswith("https://"):
+                    ssl_info = await self._get_ssl_info(url, monitor.timeout_seconds)
                     ssl_expiry_days = ssl_info.get("expiry_days")
                     ssl_issuer = ssl_info.get("issuer")
 
@@ -169,7 +172,7 @@ class UptimeChecker:
                 error_type=UptimeErrorType.SSL_ERROR.value,
             )
         except Exception as e:
-            logger.exception(f"HTTP check failed for {monitor.url}")
+            logger.exception(f"HTTP check failed for {url}")
             return CheckResult(
                 is_up=False,
                 response_time_ms=int((time.monotonic() - start_time) * 1000),
