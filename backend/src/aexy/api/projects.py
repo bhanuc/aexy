@@ -95,6 +95,7 @@ async def list_projects(
                 is_active=p.is_active,
                 member_count=p.member_count,
                 team_count=p.team_count,
+                is_public=p.is_public,
             )
             for p in projects
         ]
@@ -173,6 +174,37 @@ async def delete_project(
 
     await project_service.delete_project(project_id)
     await db.commit()
+
+
+@router.post("/{project_id}/toggle-visibility", response_model=ProjectResponse)
+async def toggle_project_visibility(
+    workspace_id: str,
+    project_id: str,
+    current_user: Developer = Depends(get_current_developer),
+    db: AsyncSession = Depends(get_db),
+):
+    """Toggle project visibility between public and private."""
+    permission_service = PermissionService(db)
+    if not await permission_service.check_permission(
+        workspace_id, str(current_user.id), "can_edit_projects", project_id
+    ):
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    project_service = ProjectService(db)
+    project = await project_service.get_project(project_id)
+
+    if not project or project.workspace_id != workspace_id:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Toggle visibility using model methods
+    if project.is_public:
+        project.make_private()
+    else:
+        project.make_public()
+
+    await db.commit()
+    await db.refresh(project)
+    return project
 
 
 # Member management endpoints

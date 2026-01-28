@@ -82,6 +82,14 @@ export function useProject(workspaceId: string | null, projectId: string | null)
     },
   });
 
+  const toggleVisibilityMutation = useMutation({
+    mutationFn: () => projectApi.toggleVisibility(workspaceId!, projectId!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["project", workspaceId, projectId] });
+      queryClient.invalidateQueries({ queryKey: ["projects", workspaceId] });
+    },
+  });
+
   return {
     project,
     isLoading,
@@ -89,6 +97,8 @@ export function useProject(workspaceId: string | null, projectId: string | null)
     refetch,
     updateProject: updateMutation.mutateAsync,
     isUpdating: updateMutation.isPending,
+    toggleVisibility: toggleVisibilityMutation.mutateAsync,
+    isTogglingVisibility: toggleVisibilityMutation.isPending,
   };
 }
 

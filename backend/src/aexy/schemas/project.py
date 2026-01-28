@@ -43,6 +43,8 @@ class ProjectResponse(BaseModel):
     settings: dict
     status: str
     is_active: bool
+    is_public: bool
+    public_slug: str | None
     member_count: int
     team_count: int
     created_at: datetime
@@ -66,6 +68,7 @@ class ProjectListResponse(BaseModel):
     is_active: bool
     member_count: int
     team_count: int
+    is_public: bool
 
     class Config:
         from_attributes = True
@@ -223,3 +226,22 @@ class AccessibleWidgetsResponse(BaseModel):
     widgets: list[str]
     workspace_id: str
     project_id: str | None
+
+
+class PublicProjectResponse(BaseModel):
+    """Response schema for a public project (limited data, no auth required)."""
+
+    id: str
+    name: str
+    slug: str
+    public_slug: str | None
+    description: str | None
+    color: str
+    icon: str
+    status: str
+    member_count: int
+    team_count: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

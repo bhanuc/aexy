@@ -11,6 +11,8 @@ import {
   RefreshCw,
   Shield,
   Users,
+  Globe,
+  Lock,
 } from "lucide-react";
 import { useWorkspace, useWorkspaceMembers } from "@/hooks/useWorkspace";
 import { useProject } from "@/hooks/useProjects";
@@ -44,7 +46,7 @@ export default function ProjectSettingsPage() {
   const { user } = useAuth();
   const { currentWorkspaceId, currentWorkspaceLoading } = useWorkspace();
   const { members: workspaceMembers } = useWorkspaceMembers(currentWorkspaceId);
-  const { project, isLoading, updateProject, isUpdating } = useProject(
+  const { project, isLoading, updateProject, isUpdating, toggleVisibility, isTogglingVisibility } = useProject(
     currentWorkspaceId,
     projectId
   );
@@ -199,10 +201,32 @@ export default function ProjectSettingsPage() {
 
         {/* Settings Form */}
         <div className="bg-slate-800 rounded-xl p-6 space-y-6">
-          <h2 className="text-lg font-medium text-white flex items-center gap-2">
-            <FolderKanban className="h-5 w-5 text-slate-400" />
-            General Settings
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-medium text-white flex items-center gap-2">
+              <FolderKanban className="h-5 w-5 text-slate-400" />
+              General Settings
+            </h2>
+            {isAdmin && (
+              <button
+                onClick={() => toggleVisibility()}
+                disabled={isTogglingVisibility}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${
+                  project.is_public
+                    ? "bg-green-600/20 text-green-400 hover:bg-green-600/30"
+                    : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                }`}
+              >
+                {isTogglingVisibility ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : project.is_public ? (
+                  <Globe className="h-4 w-4" />
+                ) : (
+                  <Lock className="h-4 w-4" />
+                )}
+                {project.is_public ? "Public" : "Private"}
+              </button>
+            )}
+          </div>
 
           <div className="space-y-4">
             <div>
@@ -311,6 +335,19 @@ export default function ProjectSettingsPage() {
             <div className="flex justify-between">
               <dt className="text-slate-400">Slug</dt>
               <dd className="text-white">{project.slug}</dd>
+            </div>
+            {project.public_slug && (
+              <div className="flex justify-between">
+                <dt className="text-slate-400">Public Slug</dt>
+                <dd className="text-white font-mono">{project.public_slug}</dd>
+              </div>
+            )}
+            <div className="flex justify-between">
+              <dt className="text-slate-400">Visibility</dt>
+              <dd className={`flex items-center gap-1.5 ${project.is_public ? "text-green-400" : "text-slate-300"}`}>
+                {project.is_public ? <Globe className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+                {project.is_public ? "Public" : "Private"}
+              </dd>
             </div>
             <div className="flex justify-between">
               <dt className="text-slate-400">Members</dt>
