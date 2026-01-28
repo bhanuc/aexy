@@ -490,6 +490,7 @@ async def configure_slack_channel(
 ):
     """Configure a Slack channel for monitoring."""
     from aexy.services.slack_history_sync import SlackHistorySyncService
+    from aexy.services.uptime_service import UptimeService
 
     integration = await service.get_integration(integration_id, db)
     if not integration or not integration.is_active:
@@ -509,6 +510,18 @@ async def configure_slack_channel(
         auto_parse_blockers=request.auto_parse_blockers,
     )
 
+    # Auto-add 'slack' to notification_channels for existing uptime monitors
+    # Use workspace_id or organization_id from the integration
+    workspace_id = integration.workspace_id or integration.organization_id
+    monitors_updated = 0
+    if workspace_id:
+        try:
+            uptime_service = UptimeService(db)
+            monitors_updated = await uptime_service.add_slack_to_monitors(str(workspace_id))
+        except Exception as e:
+            # Log but don't fail the channel configuration if monitor update fails
+            logger.warning(f"Failed to auto-add slack to uptime monitors: {e}")
+
     return {
         "id": config.id,
         "channel_id": config.channel_id,
@@ -518,6 +531,7 @@ async def configure_slack_channel(
         "auto_parse_standups": config.auto_parse_standups,
         "auto_parse_task_refs": config.auto_parse_task_refs,
         "auto_parse_blockers": config.auto_parse_blockers,
+        "monitors_updated": monitors_updated,
     }
 
 
