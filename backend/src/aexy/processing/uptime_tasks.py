@@ -10,8 +10,16 @@ These tasks handle:
 import logging
 from datetime import datetime, timezone
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from aexy.processing.celery_app import celery_app
 from aexy.core.database import async_session_maker
+from aexy.services.slack_helpers import (
+    NOTIFICATION_CHANNEL_SLACK,
+    NOTIFICATION_CHANNEL_WEBHOOK,
+    get_slack_integration_for_workspace,
+    get_workspace_notification_channel,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -281,18 +289,29 @@ Incident ID: {incident.id}
                 color = "#28a745"  # Green
 
             # Send to Slack
-            if "slack" in channels and monitor.slack_channel_id:
-                await _send_slack_notification(
-                    db,
-                    monitor.workspace_id,
-                    monitor.slack_channel_id,
-                    title,
-                    message,
-                    color,
-                )
+            if NOTIFICATION_CHANNEL_SLACK in channels:
+                slack_channel_id = monitor.slack_channel_id
+                # If no channel set on monitor, look up from slack_channel_configs
+                if not slack_channel_id:
+                    slack_channel_id = await get_workspace_notification_channel(
+                        db, str(monitor.workspace_id)
+                    )
+                if slack_channel_id:
+                    await _send_slack_notification(
+                        db,
+                        str(monitor.workspace_id),
+                        slack_channel_id,
+                        title,
+                        message,
+                        color,
+                    )
+                else:
+                    logger.warning(
+                        f"Slack notification enabled but no channel configured for workspace {monitor.workspace_id}"
+                    )
 
             # Send to webhook
-            if "webhook" in channels and monitor.webhook_url:
+            if NOTIFICATION_CHANNEL_WEBHOOK in channels and monitor.webhook_url:
                 await _send_webhook_notification(
                     monitor.webhook_url,
                     {
@@ -326,34 +345,36 @@ Incident ID: {incident.id}
 
 
 async def _send_slack_notification(
-    db,
+    db: AsyncSession,
     workspace_id: str,
     channel_id: str,
     title: str,
     message: str,
     color: str,
-):
-    """Send a Slack notification using the workspace's Slack integration."""
-    try:
-        from sqlalchemy import select
-        from aexy.models.integrations import SlackIntegration
+) -> None:
+    """Send a Slack notification using the workspace's Slack integration.
 
-        # Get Slack integration for workspace
-        stmt = select(SlackIntegration).where(
-            SlackIntegration.workspace_id == workspace_id
+    Args:
+        db: Database session.
+        workspace_id: Workspace or organization ID.
+        channel_id: Slack channel ID to send to.
+        title: Notification title.
+        message: Notification message body.
+        color: Color for the Slack attachment (hex code).
+    """
+    import httpx
+    from httpx import HTTPError
+
+    integration = await get_slack_integration_for_workspace(db, workspace_id)
+
+    if not integration or not integration.bot_token:
+        logger.warning(
+            f"No Slack integration found for workspace/org {workspace_id}"
         )
-        result = await db.execute(stmt)
-        integration = result.scalar_one_or_none()
+        return
 
-        if not integration or not integration.bot_token:
-            logger.warning(
-                f"No Slack integration found for workspace {workspace_id}"
-            )
-            return
-
-        import httpx
-
-        async with httpx.AsyncClient() as client:
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(
                 "https://slack.com/api/chat.postMessage",
                 headers={
@@ -380,6 +401,8 @@ async def _send_slack_notification(
                 if not data.get("ok"):
                     logger.error(f"Slack API error: {data.get('error')}")
 
+    except HTTPError as e:
+        logger.error(f"HTTP error sending Slack notification: {e}")
     except Exception as e:
         logger.error(f"Failed to send Slack notification: {e}")
 
