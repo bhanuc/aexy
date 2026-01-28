@@ -85,6 +85,76 @@ class TeamBurnoutResponse(BaseModel):
     team_health_score: float
 
 
+class CollaboratorResponse(BaseModel):
+    """Collaborator profile response."""
+    developer_id: str
+    total_collaborators: int
+    top_collaborators: list[dict]
+    collaboration_diversity: float
+    is_knowledge_silo: bool
+    silo_indicators: list[str]
+
+
+class TeamCohesionResponse(BaseModel):
+    """Team cohesion analysis response."""
+    team_size: int
+    total_edges: int
+    density: float
+    avg_collaborations_per_developer: float
+    cohesion_score: float
+    knowledge_silos: list[dict]
+    central_connectors: list[dict]
+    isolated_developers: list[dict]
+
+
+class ComplexityProfileResponse(BaseModel):
+    """Developer complexity profile response."""
+    developer_id: str
+    total_prs_analyzed: int
+    complexity_distribution: dict
+    primary_categories: list[str]
+    common_components: list[str]
+    common_layers: list[str]
+    avg_files_per_pr: float
+    avg_complexity_score: float
+    cross_cutting_ratio: float
+    infrastructure_ratio: float
+    handles_critical_changes: bool
+    avg_review_effort: str
+
+
+class TeamComplexityResponse(BaseModel):
+    """Team complexity summary response."""
+    total_developers: int
+    analyzed_developers: int
+    avg_complexity_score: float
+    avg_cross_cutting_ratio: float
+    avg_infrastructure_ratio: float
+    critical_change_handlers: int
+    team_complexity_distribution: dict
+
+
+class TechnologyProfileResponse(BaseModel):
+    """Developer technology profile response."""
+    developer_id: str
+    technologies: list[dict]
+    current_count: int
+    outdated_count: int
+    deprecated_count: int
+    adoption_score: float
+    upgrade_suggestions: list[dict]
+
+
+class TeamTechnologyResponse(BaseModel):
+    """Team technology overview response."""
+    total_developers: int
+    technologies_tracked: int
+    team_health_score: float
+    status_distribution: dict
+    technologies: list[dict]
+    critical_upgrades: list[dict]
+
+
 # =============================================================================
 # Developer Intelligence Endpoints
 # =============================================================================
@@ -453,3 +523,317 @@ async def compare_team_expertise(
         "skill": skill_name,
         "developers": comparisons,
     }
+
+
+# =============================================================================
+# Collaboration Network Endpoints
+# =============================================================================
+
+
+@router.get("/collaborators", response_model=CollaboratorResponse)
+async def get_my_collaborators(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    days: int = Query(default=180, ge=30, le=365),
+    limit: int = Query(default=10, ge=1, le=50),
+):
+    """Get collaboration profile for the current developer.
+
+    Returns:
+    - Top collaborators by interaction strength
+    - Collaboration diversity score
+    - Average collaboration strength
+    """
+    from aexy.services.collaboration_network import CollaborationNetworkAnalyzer
+
+    analyzer = CollaborationNetworkAnalyzer(db)
+    result = await analyzer.get_developer_collaborators(
+        developer_id=developer_id,
+        days=days,
+        limit=limit,
+    )
+
+    return CollaboratorResponse(
+        developer_id=result.developer_id,
+        total_collaborators=result.total_collaborators,
+        top_collaborators=result.top_collaborators,
+        collaboration_diversity=result.collaboration_diversity,
+        is_knowledge_silo=result.is_knowledge_silo,
+        silo_indicators=result.silo_indicators,
+    )
+
+
+@router.get("/team/{workspace_id}/collaboration", response_model=TeamCohesionResponse)
+async def get_team_collaboration(
+    workspace_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    days: int = Query(default=180, ge=30, le=365),
+):
+    """Get collaboration network analysis for a team/workspace.
+
+    Returns:
+    - Graph density and cohesion
+    - Isolated developers who need more collaboration
+    - Top connectors in the team
+    """
+    from aexy.services.collaboration_network import CollaborationNetworkAnalyzer
+    from sqlalchemy import select
+    from aexy.models.workspace import WorkspaceMember
+
+    # Get team members
+    member_stmt = (
+        select(WorkspaceMember.developer_id)
+        .where(WorkspaceMember.workspace_id == workspace_id)
+    )
+    result = await db.execute(member_stmt)
+    developer_ids = [row[0] for row in result.all()]
+
+    if not developer_ids:
+        raise HTTPException(status_code=404, detail="Workspace not found or empty")
+
+    analyzer = CollaborationNetworkAnalyzer(db)
+    cohesion = await analyzer.analyze_team_cohesion(developer_ids, days)
+
+    return TeamCohesionResponse(
+        team_size=cohesion.team_size,
+        total_edges=cohesion.total_edges,
+        density=cohesion.density,
+        avg_collaborations_per_developer=cohesion.avg_collaborations_per_developer,
+        cohesion_score=cohesion.cohesion_score,
+        knowledge_silos=cohesion.knowledge_silos,
+        central_connectors=cohesion.central_connectors,
+        isolated_developers=cohesion.isolated_developers,
+    )
+
+
+@router.get("/team/{workspace_id}/collaboration/graph")
+async def get_collaboration_graph(
+    workspace_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    days: int = Query(default=180, ge=30, le=365),
+):
+    """Get full collaboration graph for visualization.
+
+    Returns edges with:
+    - Source and target developer IDs
+    - Collaboration strength and frequency
+    - Last interaction timestamp
+    """
+    from aexy.services.collaboration_network import CollaborationNetworkAnalyzer
+    from sqlalchemy import select
+    from aexy.models.workspace import WorkspaceMember
+
+    # Get team members
+    member_stmt = (
+        select(WorkspaceMember.developer_id)
+        .where(WorkspaceMember.workspace_id == workspace_id)
+    )
+    result = await db.execute(member_stmt)
+    developer_ids = [row[0] for row in result.all()]
+
+    if not developer_ids:
+        raise HTTPException(status_code=404, detail="Workspace not found or empty")
+
+    analyzer = CollaborationNetworkAnalyzer(db)
+    edges = await analyzer.build_collaboration_graph(developer_ids, days)
+
+    return {
+        "workspace_id": workspace_id,
+        "developer_count": len(developer_ids),
+        "edge_count": len(edges),
+        "edges": [e.to_dict() for e in edges],
+    }
+
+
+# =============================================================================
+# Project Complexity Endpoints
+# =============================================================================
+
+
+@router.get("/complexity", response_model=ComplexityProfileResponse)
+async def get_my_complexity_profile(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    days: int = Query(default=180, ge=30, le=365),
+):
+    """Get PR complexity profile for the current developer.
+
+    Returns:
+    - Complexity distribution across PRs
+    - Primary change categories
+    - Common components and layers touched
+    - Cross-cutting and infrastructure ratios
+    """
+    from aexy.services.complexity_classifier import ComplexityClassifier
+
+    classifier = ComplexityClassifier(db)
+    profile = await classifier.get_developer_complexity_profile(
+        developer_id=developer_id,
+        days=days,
+    )
+
+    return ComplexityProfileResponse(**profile.to_dict())
+
+
+@router.post("/complexity/update", response_model=ComplexityProfileResponse)
+async def update_complexity_profile(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    days: int = Query(default=180, ge=30, le=365),
+):
+    """Update and store complexity profile for the current developer."""
+    from aexy.services.complexity_classifier import ComplexityClassifier
+
+    classifier = ComplexityClassifier(db)
+    profile = await classifier.update_developer_complexity_profile(
+        developer_id=developer_id,
+        days=days,
+    )
+
+    await db.commit()
+
+    return ComplexityProfileResponse(**profile.to_dict())
+
+
+@router.post("/complexity/analyze")
+async def analyze_prs_complexity(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    """Analyze recent PRs for complexity classification.
+
+    Returns aggregated complexity metrics and distribution.
+    """
+    from aexy.services.complexity_classifier import ComplexityClassifier
+
+    classifier = ComplexityClassifier(db)
+    result = await classifier.analyze_prs_batch(
+        developer_id=developer_id,
+        limit=limit,
+    )
+
+    await db.commit()
+
+    return result
+
+
+@router.get("/team/{workspace_id}/complexity", response_model=TeamComplexityResponse)
+async def get_team_complexity(
+    workspace_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    days: int = Query(default=90, ge=30, le=365),
+):
+    """Get complexity summary for a team/workspace.
+
+    Returns:
+    - Team-wide complexity distribution
+    - Average complexity scores
+    - Critical change handlers
+    """
+    from aexy.services.complexity_classifier import get_complexity_summary
+    from sqlalchemy import select
+    from aexy.models.workspace import WorkspaceMember
+
+    # Get team members
+    member_stmt = (
+        select(WorkspaceMember.developer_id)
+        .where(WorkspaceMember.workspace_id == workspace_id)
+    )
+    result = await db.execute(member_stmt)
+    developer_ids = [row[0] for row in result.all()]
+
+    if not developer_ids:
+        raise HTTPException(status_code=404, detail="Workspace not found or empty")
+
+    summary = await get_complexity_summary(db, developer_ids, days)
+
+    return TeamComplexityResponse(**summary)
+
+
+# =============================================================================
+# Technology Evolution Endpoints
+# =============================================================================
+
+
+@router.get("/technology", response_model=TechnologyProfileResponse)
+async def get_my_technology_profile(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    days: int = Query(default=365, ge=30, le=730),
+):
+    """Get technology profile for the current developer.
+
+    Returns:
+    - Technologies and versions detected
+    - Current vs outdated vs deprecated counts
+    - Adoption score (how up-to-date they stay)
+    - Upgrade suggestions for outdated technologies
+    """
+    from aexy.services.technology_tracker import TechnologyTracker
+
+    tracker = TechnologyTracker(db)
+    profile = await tracker.get_developer_technology_profile(
+        developer_id=developer_id,
+        days=days,
+    )
+
+    return TechnologyProfileResponse(**profile.to_dict())
+
+
+@router.post("/technology/update", response_model=TechnologyProfileResponse)
+async def update_technology_profile(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    days: int = Query(default=365, ge=30, le=730),
+):
+    """Update and store technology profile for the current developer."""
+    from aexy.services.technology_tracker import TechnologyTracker
+
+    tracker = TechnologyTracker(db)
+    profile = await tracker.update_developer_technology_profile(
+        developer_id=developer_id,
+        days=days,
+    )
+
+    await db.commit()
+
+    return TechnologyProfileResponse(**profile.to_dict())
+
+
+@router.get("/team/{workspace_id}/technology", response_model=TeamTechnologyResponse)
+async def get_team_technology(
+    workspace_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    days: int = Query(default=180, ge=30, le=365),
+):
+    """Get technology overview for a team/workspace.
+
+    Returns:
+    - All technologies in use across the team
+    - Version distribution per technology
+    - Team health score
+    - Critical upgrades needed
+    """
+    from aexy.services.technology_tracker import get_team_technology_overview
+    from sqlalchemy import select
+    from aexy.models.workspace import WorkspaceMember
+
+    # Get team members
+    member_stmt = (
+        select(WorkspaceMember.developer_id)
+        .where(WorkspaceMember.workspace_id == workspace_id)
+    )
+    result = await db.execute(member_stmt)
+    developer_ids = [row[0] for row in result.all()]
+
+    if not developer_ids:
+        raise HTTPException(status_code=404, detail="Workspace not found or empty")
+
+    overview = await get_team_technology_overview(db, developer_ids, days)
+
+    return TeamTechnologyResponse(**overview)
