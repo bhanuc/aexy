@@ -1,6 +1,6 @@
 """Pydantic schemas for Project management."""
 
-from datetime import datetime
+from datetime import date, datetime
 from pydantic import BaseModel, Field
 
 from aexy.schemas.role import RoleSummary
@@ -241,7 +241,131 @@ class PublicProjectResponse(BaseModel):
     status: str
     member_count: int
     team_count: int
+    public_tabs: list[str]
     created_at: datetime
 
     class Config:
         from_attributes = True
+
+
+class PublicTabsConfig(BaseModel):
+    """Configuration for public project page tabs."""
+
+    enabled_tabs: list[str] = Field(
+        default_factory=lambda: ["overview"],
+        description="List of enabled tab IDs: overview, backlog, board, bugs, goals, releases, roadmap, stories"
+    )
+
+
+class PublicTabsUpdate(BaseModel):
+    """Schema for updating public tabs configuration."""
+
+    enabled_tabs: list[str] = Field(
+        ...,
+        description="List of tab IDs to enable"
+    )
+
+
+# Public data response schemas (simplified for public access)
+class PublicTaskItem(BaseModel):
+    """Public task item (simplified)."""
+
+    id: str
+    title: str
+    description: str | None
+    priority: str
+    status: str
+    labels: list[str]
+    story_points: int | None
+    created_at: datetime
+
+
+class PublicStoryItem(BaseModel):
+    """Public story item (simplified)."""
+
+    id: str
+    key: str
+    title: str
+    as_a: str
+    i_want: str
+    so_that: str | None
+    priority: str
+    status: str
+    story_points: int | None
+    labels: list[str]
+    created_at: datetime
+
+
+class PublicBugItem(BaseModel):
+    """Public bug item (simplified)."""
+
+    id: str
+    key: str
+    title: str
+    severity: str
+    priority: str
+    bug_type: str
+    status: str
+    is_regression: bool
+    labels: list[str]
+    created_at: datetime
+
+
+class PublicGoalItem(BaseModel):
+    """Public goal item (simplified)."""
+
+    id: str
+    key: str
+    title: str
+    description: str | None
+    goal_type: str
+    status: str
+    progress_percentage: float
+    target_value: float | None
+    current_value: float | None
+    start_date: date | None
+    end_date: date | None
+
+
+class PublicReleaseItem(BaseModel):
+    """Public release item (simplified)."""
+
+    id: str
+    name: str
+    version: str | None
+    description: str | None
+    status: str
+    risk_level: str
+    target_date: datetime | None
+    actual_release_date: datetime | None
+    created_at: datetime
+
+
+class PublicRoadmapItem(BaseModel):
+    """Public roadmap item (sprint, simplified)."""
+
+    id: str
+    name: str
+    goal: str | None
+    status: str
+    start_date: datetime
+    end_date: datetime
+    tasks_count: int
+    completed_count: int
+    total_points: int
+    completed_points: int
+
+
+class PublicSprintItem(BaseModel):
+    """Public sprint item (simplified)."""
+
+    id: str
+    name: str
+    goal: str | None
+    status: str
+    start_date: datetime
+    end_date: datetime
+    tasks_count: int
+    completed_count: int
+    total_points: int
+    completed_points: int

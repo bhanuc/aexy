@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -13,11 +13,21 @@ import {
   Users,
   Globe,
   Lock,
+  Check,
+  Layers,
+  LayoutGrid,
+  Bug,
+  Target,
+  Rocket,
+  Map,
+  BookOpen,
+  ExternalLink,
+  Calendar,
 } from "lucide-react";
 import { useWorkspace, useWorkspaceMembers } from "@/hooks/useWorkspace";
 import { useProject } from "@/hooks/useProjects";
 import { useAuth } from "@/hooks/useAuth";
-import { ProjectStatus } from "@/lib/api";
+import { ProjectStatus, projectTabsApi } from "@/lib/api";
 
 const STATUS_OPTIONS = [
   { value: "active", label: "Active", color: "bg-green-500" },
@@ -36,6 +46,18 @@ const COLORS = [
   "#22c55e", // green
   "#06b6d4", // cyan
   "#3b82f6", // blue
+];
+
+const PUBLIC_TABS = [
+  { id: "overview", label: "Overview", icon: FolderKanban, description: "Basic project information", alwaysEnabled: true },
+  { id: "backlog", label: "Backlog", icon: Layers, description: "Tasks in the backlog" },
+  { id: "board", label: "Board", icon: LayoutGrid, description: "Kanban board view" },
+  { id: "stories", label: "Stories", icon: BookOpen, description: "User stories" },
+  { id: "bugs", label: "Bugs", icon: Bug, description: "Bug tracker" },
+  { id: "goals", label: "Goals", icon: Target, description: "OKRs and goals" },
+  { id: "releases", label: "Releases", icon: Rocket, description: "Release schedule" },
+  { id: "roadmap", label: "Roadmap", icon: Map, description: "Sprint timeline view" },
+  { id: "sprints", label: "Sprints", icon: Calendar, description: "Sprint list and progress" },
 ];
 
 export default function ProjectSettingsPage() {
@@ -58,6 +80,56 @@ export default function ProjectSettingsPage() {
   const [hasChanges, setHasChanges] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  // Public tabs state
+  const [enabledTabs, setEnabledTabs] = useState<string[]>(["overview"]);
+  const [isLoadingTabs, setIsLoadingTabs] = useState(false);
+  const [isSavingTabs, setIsSavingTabs] = useState(false);
+  const [tabsSuccess, setTabsSuccess] = useState(false);
+
+  // Load public tabs config when project is public
+  useEffect(() => {
+    const loadPublicTabs = async () => {
+      if (!currentWorkspaceId || !projectId || !project?.is_public) return;
+
+      setIsLoadingTabs(true);
+      try {
+        const config = await projectTabsApi.getPublicTabs(currentWorkspaceId, projectId);
+        setEnabledTabs(config.enabled_tabs);
+      } catch (err) {
+        console.error("Failed to load public tabs:", err);
+      } finally {
+        setIsLoadingTabs(false);
+      }
+    };
+
+    loadPublicTabs();
+  }, [currentWorkspaceId, projectId, project?.is_public]);
+
+  const handleTabToggle = (tabId: string) => {
+    if (tabId === "overview") return; // Overview is always enabled
+
+    setEnabledTabs((prev) =>
+      prev.includes(tabId)
+        ? prev.filter((t) => t !== tabId)
+        : [...prev, tabId]
+    );
+  };
+
+  const handleSaveTabs = async () => {
+    if (!currentWorkspaceId || !projectId) return;
+
+    setIsSavingTabs(true);
+    try {
+      await projectTabsApi.updatePublicTabs(currentWorkspaceId, projectId, enabledTabs);
+      setTabsSuccess(true);
+      setTimeout(() => setTabsSuccess(false), 3000);
+    } catch (err) {
+      console.error("Failed to save public tabs:", err);
+    } finally {
+      setIsSavingTabs(false);
+    }
+  };
 
   // Initialize form when project loads
   useState(() => {
@@ -323,6 +395,119 @@ export default function ProjectSettingsPage() {
             </div>
           )}
         </div>
+
+        {/* Public Page Configuration - Only shown when project is public */}
+        {project.is_public && isAdmin && (
+          <div className="bg-slate-800 rounded-xl p-6 mt-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-medium text-white flex items-center gap-2">
+                  <Globe className="h-5 w-5 text-green-400" />
+                  Public Page Configuration
+                </h2>
+                <p className="text-slate-400 text-sm mt-1">
+                  Choose which tabs to show on your public project page
+                </p>
+              </div>
+              {project.public_slug && (
+                <Link
+                  href={`/p/${project.public_slug}`}
+                  target="_blank"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-sm transition"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  View Public Page
+                </Link>
+              )}
+            </div>
+
+            {isLoadingTabs ? (
+              <div className="flex items-center justify-center py-8">
+                <RefreshCw className="h-6 w-6 animate-spin text-slate-400" />
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {PUBLIC_TABS.map((tab) => {
+                    const Icon = tab.icon;
+                    const isEnabled = enabledTabs.includes(tab.id);
+                    const isDisabled = tab.alwaysEnabled;
+
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => !isDisabled && handleTabToggle(tab.id)}
+                        disabled={isDisabled}
+                        className={`flex items-start gap-3 p-3 rounded-lg border text-left transition ${
+                          isEnabled
+                            ? "bg-primary-600/10 border-primary-500/50"
+                            : "bg-slate-700/50 border-slate-600 hover:border-slate-500"
+                        } ${isDisabled ? "cursor-not-allowed" : "cursor-pointer"}`}
+                      >
+                        <div
+                          className={`p-2 rounded-lg ${
+                            isEnabled ? "bg-primary-600/20" : "bg-slate-600"
+                          }`}
+                        >
+                          <Icon
+                            className={`h-4 w-4 ${
+                              isEnabled ? "text-primary-400" : "text-slate-400"
+                            }`}
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`font-medium ${
+                                isEnabled ? "text-white" : "text-slate-300"
+                              }`}
+                            >
+                              {tab.label}
+                            </span>
+                            {isEnabled && (
+                              <Check className="h-4 w-4 text-green-400" />
+                            )}
+                            {isDisabled && (
+                              <span className="text-xs text-slate-500">(Required)</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            {tab.description}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {tabsSuccess && (
+                  <p className="text-green-400 text-sm mt-4">Public tabs updated successfully!</p>
+                )}
+
+                <div className="flex justify-end pt-4 mt-4 border-t border-slate-700">
+                  <button
+                    onClick={handleSaveTabs}
+                    disabled={isSavingTabs}
+                    className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition disabled:opacity-50"
+                  >
+                    {isSavingTabs ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4" />
+                        Save Tab Settings
+                      </>
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         {/* Project Info */}
         <div className="bg-slate-800 rounded-xl p-6 mt-6">

@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from aexy.core.database import get_db
 from aexy.api.developers import get_current_developer
@@ -24,6 +25,8 @@ from aexy.schemas.project import (
     ProjectInviteResult,
     MyProjectPermissionsResponse,
     AccessibleWidgetsResponse,
+    PublicTabsConfig,
+    PublicTabsUpdate,
 )
 from aexy.schemas.role import RoleSummary
 from aexy.services.project_service import ProjectService
@@ -205,6 +208,79 @@ async def toggle_project_visibility(
     await db.commit()
     await db.refresh(project)
     return project
+
+
+# Valid public tabs
+VALID_PUBLIC_TABS = ["overview", "backlog", "board", "bugs", "goals", "releases", "roadmap", "stories", "sprints"]
+
+
+@router.get("/{project_id}/public-tabs", response_model=PublicTabsConfig)
+async def get_public_tabs_config(
+    workspace_id: str,
+    project_id: str,
+    current_user: Developer = Depends(get_current_developer),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get public tabs configuration for a project."""
+    permission_service = PermissionService(db)
+    if not await permission_service.check_permission(
+        workspace_id, str(current_user.id), "can_view_projects", project_id
+    ):
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    project_service = ProjectService(db)
+    project = await project_service.get_project(project_id)
+
+    if not project or project.workspace_id != workspace_id:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    settings = project.settings or {}
+    public_tabs = settings.get("public_tabs", {})
+    enabled_tabs = public_tabs.get("enabled_tabs", ["overview"])
+
+    return PublicTabsConfig(enabled_tabs=enabled_tabs)
+
+
+@router.put("/{project_id}/public-tabs", response_model=PublicTabsConfig)
+async def update_public_tabs_config(
+    workspace_id: str,
+    project_id: str,
+    data: PublicTabsUpdate,
+    current_user: Developer = Depends(get_current_developer),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update public tabs configuration for a project."""
+    permission_service = PermissionService(db)
+    if not await permission_service.check_permission(
+        workspace_id, str(current_user.id), "can_edit_projects", project_id
+    ):
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    project_service = ProjectService(db)
+    project = await project_service.get_project(project_id)
+
+    if not project or project.workspace_id != workspace_id:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Validate tabs - filter out invalid ones
+    enabled_tabs = [tab for tab in data.enabled_tabs if tab in VALID_PUBLIC_TABS]
+
+    # Ensure "overview" is always included
+    if "overview" not in enabled_tabs:
+        enabled_tabs.insert(0, "overview")
+
+    # Update project settings
+    settings = project.settings or {}
+    settings["public_tabs"] = {"enabled_tabs": enabled_tabs}
+    project.settings = settings
+
+    # Flag the JSONB field as modified to ensure SQLAlchemy detects the change
+    flag_modified(project, "settings")
+
+    await db.commit()
+    await db.refresh(project)
+
+    return PublicTabsConfig(enabled_tabs=enabled_tabs)
 
 
 # Member management endpoints
