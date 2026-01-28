@@ -43,6 +43,9 @@ class Commit(Base):
     languages: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     file_types: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
 
+    # Semantic analysis (LLM-derived)
+    semantic_analysis: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
     committed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -140,6 +143,9 @@ class CodeReview(Base):
 
     # Review quality metrics
     comments_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Quality analysis (depth, thoroughness, mentoring indicators)
+    quality_metrics: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
