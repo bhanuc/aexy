@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
 import re
-
+import secrets
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -24,6 +24,16 @@ def generate_slug(name: str) -> str:
     slug = re.sub(r"[^\w\s-]", "", slug)
     slug = re.sub(r"[-\s]+", "-", slug)
     return slug[:100]
+
+def generate_public_slug(name: str) -> str:
+    """
+    Generate a globally-unique public slug.
+    Example: aexy-roadmap-k3f9x2
+    """
+    base = generate_slug(name)
+    suffix = secrets.token_urlsafe(4).lower().replace("_", "").replace("-", "")
+    return f"{base}-{suffix}"
+
 
 
 class Project(Base):
@@ -53,6 +63,21 @@ class Project(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    is_public: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        index=True,
+    )
+
+    public_slug: Mapped[str | None] = mapped_column(
+        String(120),
+        unique=True,
+        nullable=True,
+        index=True,
+    )
+
 
     # Visual customization
     color: Mapped[str] = mapped_column(String(50), default="#3b82f6", nullable=False)
@@ -101,6 +126,16 @@ class Project(Base):
     __table_args__ = (
         UniqueConstraint("workspace_id", "slug", name="uq_workspace_project_slug"),
     )
+
+    def make_public(self):
+        """Mark project as public and assign public_slug if needed."""
+        if not self.public_slug:
+            self.public_slug = generate_public_slug(self.name)
+        self.is_public = True
+
+    def make_private(self):
+        """Mark project as private (keeps public_slug for reuse)."""
+        self.is_public = False
 
     @property
     def member_count(self) -> int:

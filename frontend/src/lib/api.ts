@@ -9689,6 +9689,8 @@ export interface Project {
   name: string;
   slug: string;
   description: string | null;
+  is_public: boolean;
+  public_slug: string | null;
   color: string;
   icon: string;
   settings: Record<string, unknown>;
@@ -9932,6 +9934,36 @@ export const projectApi = {
   // Accessible widgets in project context
   getAccessibleWidgets: async (workspaceId: string, projectId: string): Promise<{ widget_ids: string[] }> => {
     const response = await api.get(`/workspaces/${workspaceId}/projects/${projectId}/accessible-widgets`);
+    return response.data;
+  },
+
+  // Toggle project visibility (public/private)
+  toggleVisibility: async (workspaceId: string, projectId: string): Promise<Project> => {
+    const response = await api.post(`/workspaces/${workspaceId}/projects/${projectId}/toggle-visibility`);
+    return response.data;
+  },
+};
+
+// Public Project Types (no auth required)
+export interface PublicProject {
+  id: string;
+  name: string;
+  slug: string;
+  public_slug: string | null;
+  description: string | null;
+  color: string;
+  icon: string;
+  status: ProjectStatus;
+  member_count: number;
+  team_count: number;
+  created_at: string;
+}
+
+// Public Projects API (no auth required)
+export const publicProjectApi = {
+  // Get a public project by its public slug
+  getByPublicSlug: async (publicSlug: string): Promise<PublicProject> => {
+    const response = await api.get(`/public/projects/${publicSlug}`);
     return response.data;
   },
 };
