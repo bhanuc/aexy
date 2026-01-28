@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.3] - 2026-01-29
+## [0.4.4] - 2026-01-29
 
 ### Added
 
@@ -127,8 +127,59 @@ A comprehensive intelligence analysis system that extracts insights from GitHub 
 **New API Router:**
 - `backend/src/aexy/api/intelligence.py` with 22 endpoints
 
-**Documentation:**
-- Updated `docs/GITHUB_INTELLIGENCE_SYSTEM.md` with implementation status
+## [0.4.4] - 2026-01-29
+
+### Fixed
+
+#### Slack Notification Bug for Uptime Monitors
+
+Fixed an issue where Slack notifications were not being sent for uptime monitor incidents when the monitor didn't have a specific `slack_channel_id` configured.
+
+**Root Cause:**
+- Notifications required `monitor.slack_channel_id` to be set, but most monitors relied on the workspace's default Slack channel configuration
+- The code didn't fall back to looking up the workspace's configured Slack channel from `slack_channel_configs`
+
+**Changes:**
+- Added fallback logic to look up workspace notification channel when monitor-specific channel is not set
+- Auto-add `slack` to `notification_channels` when creating new monitors if Slack is configured for the workspace
+- Auto-add `slack` to existing monitors when a Slack channel is first configured for a workspace
+
+### Improved
+
+#### Code Quality & Maintainability
+
+**Centralized Slack Integration Helpers:**
+- Created new `backend/src/aexy/services/slack_helpers.py` module with shared functions:
+  - `get_slack_integration_for_workspace()` - finds integration by workspace/org ID
+  - `get_slack_channel_config()` - gets channel config for an integration
+  - `get_workspace_notification_channel()` - combines both to get channel ID
+  - `check_slack_channel_configured()` - boolean check for Slack setup
+- Removed duplicated Slack lookup logic from `uptime_service.py` and `uptime_tasks.py`
+
+**Added Constants for Notification Channels:**
+- `NOTIFICATION_CHANNEL_SLACK = "slack"`
+- `NOTIFICATION_CHANNEL_WEBHOOK = "webhook"`
+- `NOTIFICATION_CHANNEL_TICKET = "ticket"`
+- Replaced magic strings throughout the codebase
+
+**Improved Type Safety:**
+- Added proper type hints (`db: AsyncSession`) to notification helper functions
+- Added return type annotations to `_send_slack_notification()`
+
+**Better Exception Handling:**
+- Changed broad `Exception` catches to specific `SQLAlchemyError` for database operations
+- Added specific `HTTPError` handling for Slack API calls
+- Added explicit timeout (30s) to HTTP client for Slack notifications
+
+**Graceful Error Handling:**
+- Wrapped `add_slack_to_monitors()` call in try/except to prevent channel configuration failures if monitor update fails
+- Logs warning but doesn't fail the primary operation
+
+**Files Changed:**
+- `backend/src/aexy/services/slack_helpers.py` (new)
+- `backend/src/aexy/services/uptime_service.py`
+- `backend/src/aexy/processing/uptime_tasks.py`
+- `backend/src/aexy/api/slack.py`
 
 ---
 
