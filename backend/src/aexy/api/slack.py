@@ -513,11 +513,14 @@ async def configure_slack_channel(
     # Auto-add 'slack' to notification_channels for existing uptime monitors
     # Use workspace_id or organization_id from the integration
     workspace_id = integration.workspace_id or integration.organization_id
+    monitors_updated = 0
     if workspace_id:
-        uptime_service = UptimeService(db)
-        monitors_updated = await uptime_service.add_slack_to_monitors(str(workspace_id))
-    else:
-        monitors_updated = 0
+        try:
+            uptime_service = UptimeService(db)
+            monitors_updated = await uptime_service.add_slack_to_monitors(str(workspace_id))
+        except Exception as e:
+            # Log but don't fail the channel configuration if monitor update fails
+            logger.warning(f"Failed to auto-add slack to uptime monitors: {e}")
 
     return {
         "id": config.id,
