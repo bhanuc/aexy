@@ -32,13 +32,13 @@ export function DocumentBreadcrumb({
 
   return (
     <nav className="flex items-center gap-1 text-sm">
-      {/* <Link
+      <Link
         href="/docs"
         className="p-1 hover:bg-slate-800/50 rounded transition-colors text-slate-400 hover:text-white"
         title="Home"
       >
         <Home className="h-4 w-4" />
-      </Link> */}
+      </Link>
 
       {ancestors.map((ancestor) => (
         <div key={ancestor.id} className="flex items-center gap-1">
