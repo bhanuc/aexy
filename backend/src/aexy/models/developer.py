@@ -82,6 +82,14 @@ class Developer(Base):
         nullable=True,
     )
 
+    # GitHub Intelligence fields
+    expertise_confidence: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    burnout_indicators: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    last_intelligence_analysis_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
