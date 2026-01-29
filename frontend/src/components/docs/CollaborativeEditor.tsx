@@ -38,6 +38,7 @@ interface CollaborativeEditorProps {
   readOnly?: boolean;
   autoSave?: boolean;
   autoSaveDelay?: number;
+  breadcrumb?: React.ReactNode;
   // Collaboration props
   userId: string;
   userName: string;
@@ -56,6 +57,7 @@ export function CollaborativeEditor({
   readOnly = false,
   autoSave = true,
   autoSaveDelay = 2000,
+  breadcrumb,
   userId,
   userName,
   userEmail,
@@ -318,33 +320,44 @@ export function CollaborativeEditor({
   return (
     <div className="flex flex-col h-full bg-slate-950">
       {/* Document Header */}
-      <div className="border-b border-slate-800 px-6 py-4">
+      <div className="border-b border-slate-800/50 bg-gradient-to-b from-slate-900 to-slate-900/95 backdrop-blur-xl px-4 py-2">
         <div className="flex items-center gap-3">
-          {icon && <span className="text-3xl">{icon}</span>}
-          <input
-            type="text"
-            value={localTitle}
-            onChange={handleTitleChange}
-            onBlur={handleTitleBlur}
-            placeholder="Untitled"
-            disabled={readOnly}
-            className="flex-1 text-3xl font-bold bg-transparent border-none outline-none text-white placeholder-slate-500"
-          />
+          {icon && <span className="text-2xl">{icon}</span>}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-3">
+              <input
+                type="text"
+                value={localTitle}
+                onChange={handleTitleChange}
+                onBlur={handleTitleBlur}
+                placeholder="Untitled"
+                disabled={readOnly}
+                className="flex-1 min-w-0 text-xl font-semibold bg-transparent border-none outline-none text-white placeholder-slate-500"
+              />
 
-          {/* Collaboration Status */}
-          {collaborationEnabled && (
-            <CollaborationAwareness
-              users={users}
-              currentUserId={userId}
-              connectionStatus={connectionStatus}
-              onReconnect={reconnect}
-            />
-          )}
+              {/* Saving Indicator */}
+              {isSaving && (
+                <span className="text-xs text-slate-500 animate-pulse flex-shrink-0">Saving...</span>
+              )}
 
-          {/* Saving Indicator */}
-          {isSaving && (
-            <span className="text-xs text-slate-500 animate-pulse">Saving...</span>
-          )}
+              {/* Collaboration Status */}
+              {collaborationEnabled && (
+                <CollaborationAwareness
+                  users={users}
+                  currentUserId={userId}
+                  connectionStatus={connectionStatus}
+                  onReconnect={reconnect}
+                />
+              )}
+            </div>
+
+            {/* Breadcrumb */}
+            {breadcrumb && (
+              <div className="mt-1">
+                {breadcrumb}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

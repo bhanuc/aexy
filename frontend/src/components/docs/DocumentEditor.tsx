@@ -36,6 +36,7 @@ interface DocumentEditorProps {
   readOnly?: boolean;
   autoSave?: boolean;
   autoSaveDelay?: number;
+  breadcrumb?: React.ReactNode;
 }
 
 export function DocumentEditor({
@@ -48,6 +49,7 @@ export function DocumentEditor({
   readOnly = false,
   autoSave = true,
   autoSaveDelay = 1000,
+  breadcrumb,
 }: DocumentEditorProps) {
   const [localTitle, setLocalTitle] = useState(title);
   const [localIcon, setLocalIcon] = useState(icon || "📄");
@@ -230,14 +232,14 @@ export function DocumentEditor({
       <div className="sticky top-0 z-10">
         {/* Document Header */}
         <div className="border-b border-slate-800/50 bg-gradient-to-b from-slate-900 to-slate-900/95 backdrop-blur-xl">
-          <div className="px-8 py-5">
-            <div className="flex items-start gap-5">
+          <div className="px-4 py-2">
+            <div className="flex items-center gap-3">
               {/* Icon Picker */}
               <div className="relative">
                 <button
                   onClick={() => !readOnly && setShowEmojiPicker(!showEmojiPicker)}
                   disabled={readOnly}
-                  className="text-4xl hover:bg-slate-800/60 rounded-xl p-3 transition-all duration-200 disabled:cursor-default hover:scale-105 active:scale-95"
+                  className="text-2xl hover:bg-slate-800/60 rounded-lg p-1.5 transition-all duration-200 disabled:cursor-default hover:scale-105 active:scale-95"
                   title="Change icon"
                 >
                   {localIcon}
@@ -270,40 +272,48 @@ export function DocumentEditor({
                 )}
               </div>
 
-              {/* Title & Status */}
-              <div className="flex-1 min-w-0 pt-1">
-                <input
-                  type="text"
-                  value={localTitle}
-                  onChange={handleTitleChange}
-                  onBlur={handleTitleBlur}
-                  placeholder="Untitled document"
-                  disabled={readOnly}
-                  className="w-full text-4xl font-bold bg-transparent border-none outline-none text-white placeholder-slate-600 focus:placeholder-slate-500 transition-colors tracking-tight"
-                />
+              {/* Title & Breadcrumb */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-3">
+                  {/* Breadcrumb */}
+                {breadcrumb && (
+                  <div className="mt-1">
+                    {breadcrumb}
+                  </div>
+                )}
+                  <input
+                    type="text"
+                    value={localTitle}
+                    onChange={handleTitleChange}
+                    onBlur={handleTitleBlur}
+                    placeholder="Untitled document"
+                    disabled={readOnly}
+                    className="flex-1 min-w-0 text-xl font-semibold bg-transparent border-none outline-none text-white placeholder-slate-600 focus:placeholder-slate-500 transition-colors"
+                  />
 
-                {/* Save Status */}
-                <div className="flex items-center gap-2 mt-3 h-5">
-                  {isSaving && (
-                    <div className="flex items-center gap-2 text-slate-500 text-sm">
-                      <div className="relative">
-                        <Cloud className="h-4 w-4" />
-                        <div className="absolute inset-0 animate-ping">
-                          <Cloud className="h-4 w-4 text-slate-500/50" />
+                  {/* Save Status */}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {isSaving && (
+                      <div className="flex items-center gap-1.5 text-slate-500 text-xs">
+                        <div className="relative">
+                          <Cloud className="h-3.5 w-3.5" />
+                          <div className="absolute inset-0 animate-ping">
+                            <Cloud className="h-3.5 w-3.5 text-slate-500/50" />
+                          </div>
                         </div>
+                        <span>Saving...</span>
                       </div>
-                      <span>Saving...</span>
-                    </div>
-                  )}
-                  {showSaved && !isSaving && (
-                    <div className="flex items-center gap-2 text-emerald-400 text-sm animate-fade-in">
-                      <div className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center">
-                        <Check className="h-3 w-3" />
+                    )}
+                    {showSaved && !isSaving && (
+                      <div className="flex items-center gap-1.5 text-emerald-400 text-xs animate-fade-in">
+                        <Check className="h-3.5 w-3.5" />
+                        <span>Saved</span>
                       </div>
-                      <span>All changes saved</span>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
+
+                
               </div>
             </div>
           </div>
