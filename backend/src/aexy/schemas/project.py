@@ -1,8 +1,8 @@
 """Pydantic schemas for Project management."""
 
 from datetime import date, datetime
-from pydantic import BaseModel, Field
-
+from pydantic import BaseModel, Field, field_validator
+from enum import Enum
 from aexy.schemas.role import RoleSummary
 
 
@@ -404,15 +404,53 @@ class RoadmapRequestResponse(BaseModel):
     admin_response: str | None
     responded_at: datetime | None
     created_at: datetime
+    updated_at: datetime
     has_voted: bool = False  # Whether current user has voted
+
+
+class RoadmapCategory(str, Enum):
+    feature = "feature"
+    bug_fix = "bug_fix"
+    improvement = "improvement"
+    integration = "integration"
+    other = "other"
 
 
 class RoadmapRequestCreate(BaseModel):
     """Schema for creating a roadmap request."""
 
-    title: str
-    description: str | None = None
-    category: str = "feature"
+    title: str = Field(
+        ...,
+        min_length=1,
+        max_length=150,
+        description="Title of the roadmap request",
+    )
+
+    category: RoadmapCategory = Field(
+        ...,
+        description="Category of the roadmap request",
+    )
+
+    description: str | None = Field(
+        default=None,
+        max_length=1000,
+        description="Optional description",
+    )
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("title must not be empty")
+        return value
+
+    @field_validator("description")
+    @classmethod
+    def validate_description(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        return value.strip()
 
 
 class RoadmapRequestUpdate(BaseModel):
@@ -434,3 +472,13 @@ class RoadmapVoteResponse(BaseModel):
     success: bool
     vote_count: int
     has_voted: bool
+
+
+class PaginatedRoadmapRequestsResponse(BaseModel):
+    """Paginated response for roadmap requests."""
+
+    items: list[RoadmapRequestResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int

@@ -4,10 +4,12 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy import select, func
+from sqlalchemy import select, func, case, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from uuid import UUID
 
 from aexy.core.database import get_db
+from aexy.core.sanitize import sanitize_title, sanitize_description, sanitize_comment
 from aexy.api.developers import get_current_developer, get_optional_current_developer
 from aexy.models.developer import Developer
 from aexy.models.project import Project
@@ -18,6 +20,7 @@ from aexy.models.goal import Goal as OKRGoal
 from aexy.models.release import Release
 from aexy.models.epic import Epic
 from aexy.models.roadmap_voting import RoadmapRequest, RoadmapVote, RoadmapComment
+from aexy.models.workspace import WorkspaceMember
 from aexy.schemas.project import (
     PublicProjectResponse,
     PublicTaskItem,
@@ -34,6 +37,7 @@ from aexy.schemas.project import (
     RoadmapCommentCreate,
     RoadmapVoteResponse,
     RoadmapRequestAuthor,
+    PaginatedRoadmapRequestsResponse,
 )
 
 
@@ -86,6 +90,67 @@ async def get_public_project_or_404(
             )
 
     return project
+
+
+async def get_sprint_task_stats(
+    db: AsyncSession,
+    sprint_ids: list[UUID],
+) -> dict[str, dict]:
+    """
+    Fetch task statistics for multiple sprints in a single query.
+
+    Returns a dict mapping sprint_id to stats:
+    {
+        "sprint_id": {
+            "tasks_count": int,
+            "completed_count": int,
+            "total_points": int,
+            "completed_points": int,
+        }
+    }
+    """
+    if not sprint_ids:
+        return {}
+
+    # Use SQL aggregation to compute stats in a single query
+    result = await db.execute(
+        select(
+            SprintTask.sprint_id,
+            func.count(SprintTask.id).label("tasks_count"),
+            func.sum(case((SprintTask.status == "done", 1), else_=0)).label("completed_count"),
+            func.coalesce(func.sum(SprintTask.story_points), 0).label("total_points"),
+            func.coalesce(
+                func.sum(case((SprintTask.status == "done", SprintTask.story_points), else_=0)),
+                0
+            ).label("completed_points"),
+        )
+        .where(SprintTask.sprint_id.in_(sprint_ids))
+        .group_by(SprintTask.sprint_id)
+    )
+    rows = result.all()
+
+    # Build stats dict
+    stats = {}
+    for row in rows:
+        stats[str(row.sprint_id)] = {
+            "tasks_count": row.tasks_count or 0,
+            "completed_count": row.completed_count or 0,
+            "total_points": row.total_points or 0,
+            "completed_points": row.completed_points or 0,
+        }
+
+    # Ensure all sprint_ids have an entry (even if no tasks)
+    default_stats = {
+        "tasks_count": 0,
+        "completed_count": 0,
+        "total_points": 0,
+        "completed_points": 0,
+    }
+    for sprint_id in sprint_ids:
+        if str(sprint_id) not in stats:
+            stats[str(sprint_id)] = default_stats.copy()
+
+    return stats
 
 
 @router.get("/{public_slug}", response_model=PublicProjectResponse)
@@ -362,6 +427,61 @@ async def get_public_releases(
     ]
 
 
+async def _fetch_sprints_with_stats(
+    db: AsyncSession,
+    workspace_id: UUID,
+    limit: int,
+    offset: int,
+    order_ascending: bool = False,
+) -> list[dict]:
+    """
+    Fetch sprints with task statistics for a workspace.
+
+    This is a shared helper used by roadmap, sprints, and timeline endpoints
+    to avoid code duplication.
+
+    Args:
+        db: Database session.
+        workspace_id: Workspace ID to filter sprints.
+        limit: Maximum number of sprints to return.
+        offset: Number of sprints to skip.
+        order_ascending: If True, order by start_date ascending; otherwise descending.
+
+    Returns:
+        List of sprint data dicts with task statistics.
+    """
+    order = Sprint.start_date.asc() if order_ascending else Sprint.start_date.desc()
+
+    result = await db.execute(
+        select(Sprint)
+        .where(Sprint.workspace_id == workspace_id)
+        .order_by(order)
+        .limit(limit)
+        .offset(offset)
+    )
+    sprints = result.scalars().all()
+
+    # Get task stats for all sprints in a single query (avoids N+1)
+    sprint_ids = [sprint.id for sprint in sprints]
+    stats = await get_sprint_task_stats(db, sprint_ids)
+
+    return [
+        {
+            "id": str(sprint.id),
+            "name": sprint.name,
+            "goal": sprint.goal,
+            "status": sprint.status,
+            "start_date": sprint.start_date,
+            "end_date": sprint.end_date,
+            "tasks_count": stats[str(sprint.id)]["tasks_count"],
+            "completed_count": stats[str(sprint.id)]["completed_count"],
+            "total_points": stats[str(sprint.id)]["total_points"],
+            "completed_points": stats[str(sprint.id)]["completed_points"],
+        }
+        for sprint in sprints
+    ]
+
+
 @router.get("/{public_slug}/roadmap", response_model=list[PublicRoadmapItem])
 async def get_public_roadmap(
     public_slug: str,
@@ -371,48 +491,10 @@ async def get_public_roadmap(
 ):
     """Get public roadmap (sprints) for a project."""
     project = await get_public_project_or_404(public_slug, db, required_tab="roadmap")
-
-    result = await db.execute(
-        select(Sprint)
-        .where(
-            Sprint.workspace_id == project.workspace_id,
-        )
-        .order_by(Sprint.start_date.desc())
-        .limit(limit)
-        .offset(offset)
+    sprint_data = await _fetch_sprints_with_stats(
+        db, project.workspace_id, limit, offset, order_ascending=False
     )
-    sprints = result.scalars().all()
-
-    # Get task counts for each sprint
-    roadmap_items = []
-    for sprint in sprints:
-        # Count tasks for this sprint
-        tasks_result = await db.execute(
-            select(SprintTask)
-            .where(SprintTask.sprint_id == sprint.id)
-        )
-        tasks = tasks_result.scalars().all()
-        tasks_count = len(tasks)
-        completed_count = len([t for t in tasks if t.status == "done"])
-        total_points = sum(t.story_points or 0 for t in tasks)
-        completed_points = sum(t.story_points or 0 for t in tasks if t.status == "done")
-
-        roadmap_items.append(
-            PublicRoadmapItem(
-                id=str(sprint.id),
-                name=sprint.name,
-                goal=sprint.goal,
-                status=sprint.status,
-                start_date=sprint.start_date,
-                end_date=sprint.end_date,
-                tasks_count=tasks_count,
-                completed_count=completed_count,
-                total_points=total_points,
-                completed_points=completed_points,
-            )
-        )
-
-    return roadmap_items
+    return [PublicRoadmapItem(**data) for data in sprint_data]
 
 
 @router.get("/{public_slug}/sprints", response_model=list[PublicSprintItem])
@@ -424,48 +506,10 @@ async def get_public_sprints(
 ):
     """Get public sprints for a project."""
     project = await get_public_project_or_404(public_slug, db, required_tab="sprints")
-
-    result = await db.execute(
-        select(Sprint)
-        .where(
-            Sprint.workspace_id == project.workspace_id,
-        )
-        .order_by(Sprint.start_date.desc())
-        .limit(limit)
-        .offset(offset)
+    sprint_data = await _fetch_sprints_with_stats(
+        db, project.workspace_id, limit, offset, order_ascending=False
     )
-    sprints = result.scalars().all()
-
-    # Get task counts for each sprint
-    sprint_items = []
-    for sprint in sprints:
-        # Count tasks for this sprint
-        tasks_result = await db.execute(
-            select(SprintTask)
-            .where(SprintTask.sprint_id == sprint.id)
-        )
-        tasks = tasks_result.scalars().all()
-        tasks_count = len(tasks)
-        completed_count = len([t for t in tasks if t.status == "done"])
-        total_points = sum(t.story_points or 0 for t in tasks)
-        completed_points = sum(t.story_points or 0 for t in tasks if t.status == "done")
-
-        sprint_items.append(
-            PublicSprintItem(
-                id=str(sprint.id),
-                name=sprint.name,
-                goal=sprint.goal,
-                status=sprint.status,
-                start_date=sprint.start_date,
-                end_date=sprint.end_date,
-                tasks_count=tasks_count,
-                completed_count=completed_count,
-                total_points=total_points,
-                completed_points=completed_points,
-            )
-        )
-
-    return sprint_items
+    return [PublicSprintItem(**data) for data in sprint_data]
 
 
 @router.get("/{public_slug}/timeline", response_model=list[PublicSprintItem])
@@ -477,48 +521,10 @@ async def get_public_timeline(
 ):
     """Get public timeline (sprints for timeline view) for a project."""
     project = await get_public_project_or_404(public_slug, db, required_tab="timeline")
-
-    result = await db.execute(
-        select(Sprint)
-        .where(
-            Sprint.workspace_id == project.workspace_id,
-        )
-        .order_by(Sprint.start_date.asc())
-        .limit(limit)
-        .offset(offset)
+    sprint_data = await _fetch_sprints_with_stats(
+        db, project.workspace_id, limit, offset, order_ascending=True
     )
-    sprints = result.scalars().all()
-
-    # Get task counts for each sprint
-    timeline_items = []
-    for sprint in sprints:
-        # Count tasks for this sprint
-        tasks_result = await db.execute(
-            select(SprintTask)
-            .where(SprintTask.sprint_id == sprint.id)
-        )
-        tasks = tasks_result.scalars().all()
-        tasks_count = len(tasks)
-        completed_count = len([t for t in tasks if t.status == "done"])
-        total_points = sum(t.story_points or 0 for t in tasks)
-        completed_points = sum(t.story_points or 0 for t in tasks if t.status == "done")
-
-        timeline_items.append(
-            PublicSprintItem(
-                id=str(sprint.id),
-                name=sprint.name,
-                goal=sprint.goal,
-                status=sprint.status,
-                start_date=sprint.start_date,
-                end_date=sprint.end_date,
-                tasks_count=tasks_count,
-                completed_count=completed_count,
-                total_points=total_points,
-                completed_points=completed_points,
-            )
-        )
-
-    return timeline_items
+    return [PublicSprintItem(**data) for data in sprint_data]
 
 
 # ============================================================================
@@ -551,31 +557,41 @@ def _build_request_response(
         admin_response=request.admin_response,
         responded_at=request.responded_at,
         created_at=request.created_at,
+        updated_at=request.updated_at,
         has_voted=has_voted,
     )
 
 
-@router.get("/{public_slug}/roadmap-requests", response_model=list[RoadmapRequestResponse])
+@router.get("/{public_slug}/roadmap-requests", response_model=PaginatedRoadmapRequestsResponse)
 async def get_roadmap_requests(
     public_slug: str,
     status_filter: str | None = Query(default=None, alias="status"),
     category: str | None = Query(default=None),
     sort_by: str = Query(default="votes"),  # "votes" | "newest" | "oldest"
-    limit: int = Query(default=50, le=100),
-    offset: int = Query(default=0, ge=0),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: Developer | None = Depends(get_optional_current_developer),
 ):
     """Get roadmap requests for a project (public, but shows vote status if logged in)."""
     project = await get_public_project_or_404(public_slug, db, required_tab="roadmap")
 
-    # Build query
-    query = select(RoadmapRequest).where(RoadmapRequest.project_id == project.id)
+    # Build base filter condition
+    base_filter = RoadmapRequest.project_id == project.id
+    filters = [base_filter]
 
     if status_filter:
-        query = query.where(RoadmapRequest.status == status_filter)
+        filters.append(RoadmapRequest.status == status_filter)
     if category:
-        query = query.where(RoadmapRequest.category == category)
+        filters.append(RoadmapRequest.category == category)
+
+    # Get total count
+    count_query = select(func.count(RoadmapRequest.id)).where(*filters)
+    total_result = await db.execute(count_query)
+    total = total_result.scalar_one()
+
+    # Build query for items
+    query = select(RoadmapRequest).where(*filters)
 
     # Sort
     if sort_by == "newest":
@@ -585,14 +601,16 @@ async def get_roadmap_requests(
     else:  # votes (default)
         query = query.order_by(RoadmapRequest.vote_count.desc(), RoadmapRequest.created_at.desc())
 
-    query = query.limit(limit).offset(offset)
+    # Pagination
+    offset = (page - 1) * page_size
+    query = query.limit(page_size).offset(offset)
 
     result = await db.execute(query)
     requests = result.scalars().all()
 
     # Get user's votes if logged in
     user_voted_ids: set[str] = set()
-    if current_user:
+    if current_user and requests:
         votes_result = await db.execute(
             select(RoadmapVote.request_id)
             .where(
@@ -602,10 +620,20 @@ async def get_roadmap_requests(
         )
         user_voted_ids = {str(v) for v in votes_result.scalars().all()}
 
-    return [
+    items = [
         _build_request_response(r, str(current_user.id) if current_user else None, user_voted_ids)
         for r in requests
     ]
+
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+
+    return PaginatedRoadmapRequestsResponse(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+    )
 
 
 @router.get("/{public_slug}/roadmap-requests/{request_id}", response_model=RoadmapRequestResponse)
@@ -661,12 +689,19 @@ async def create_roadmap_request(
     if data.category not in valid_categories:
         raise HTTPException(status_code=400, detail=f"Invalid category. Must be one of: {valid_categories}")
 
+    # Sanitize user input
+    sanitized_title = sanitize_title(data.title)
+    sanitized_description = sanitize_description(data.description)
+
+    if not sanitized_title:
+        raise HTTPException(status_code=400, detail="Title is required")
+
     # Create request
     request = RoadmapRequest(
         workspace_id=project.workspace_id,
         project_id=project.id,
-        title=data.title,
-        description=data.description,
+        title=sanitized_title,
+        description=sanitized_description,
         category=data.category,
         submitted_by_id=str(current_user.id),
     )
@@ -714,23 +749,42 @@ async def vote_roadmap_request(
     if existing_vote:
         # Remove vote (toggle off)
         await db.delete(existing_vote)
-        request.vote_count = max(0, request.vote_count - 1)
+
+        await db.execute(
+            update(RoadmapRequest)
+            .where(RoadmapRequest.id == request_id)
+            .values(vote_count=RoadmapRequest.vote_count - 1)
+        )
+
         has_voted = False
+
     else:
         # Add vote
-        vote = RoadmapVote(
-            request_id=request_id,
-            voter_id=str(current_user.id),
+        db.add(
+            RoadmapVote(
+                request_id=request_id,
+                voter_id=str(current_user.id),
+            )
         )
-        db.add(vote)
-        request.vote_count += 1
+
+        await db.execute(
+            update(RoadmapRequest)
+            .where(RoadmapRequest.id == request_id)
+            .values(vote_count=RoadmapRequest.vote_count + 1)
+        )
+
         has_voted = True
 
     await db.commit()
+    count_result = await db.execute(
+        select(RoadmapRequest.vote_count)
+        .where(RoadmapRequest.id == request_id)
+    )
+    vote_count = count_result.scalar_one()
 
     return RoadmapVoteResponse(
         success=True,
-        vote_count=request.vote_count,
+        vote_count=vote_count,
         has_voted=has_voted,
     )
 
@@ -806,12 +860,28 @@ async def create_roadmap_comment(
     if not request:
         raise HTTPException(status_code=404, detail="Request not found")
 
+    # Sanitize user input
+    sanitized_content = sanitize_comment(data.content)
+    if not sanitized_content:
+        raise HTTPException(status_code=400, detail="Comment content is required")
+
+    # Check if user is workspace admin/owner
+    member_result = await db.execute(
+        select(WorkspaceMember)
+        .where(
+            WorkspaceMember.workspace_id == project.workspace_id,
+            WorkspaceMember.developer_id == str(current_user.id),
+        )
+    )
+    member = member_result.scalar_one_or_none()
+    is_admin = member is not None and member.role in ("owner", "admin")
+
     # Create comment
     comment = RoadmapComment(
         request_id=request_id,
-        content=data.content,
+        content=sanitized_content,
         author_id=str(current_user.id),
-        is_admin_response=False,  # TODO: Check if user is project admin
+        is_admin_response=is_admin,
     )
 
     db.add(comment)
