@@ -8,6 +8,7 @@ import {
   Rocket,
   Map,
   Calendar,
+  Vote,
   LucideIcon,
 } from "lucide-react";
 import { ProjectStatus } from "@/lib/api";
@@ -40,8 +41,9 @@ export const TAB_CONFIG: TabConfig[] = [
   { id: "bugs", label: "Bugs", icon: Bug },
   { id: "goals", label: "Goals", icon: Target },
   { id: "releases", label: "Releases", icon: Rocket },
-  { id: "roadmap", label: "Roadmap", icon: Map },
-  { id: "sprints", label: "Sprints", icon: Calendar },
+  { id: "timeline", label: "Timeline", icon: Calendar },
+  { id: "roadmap", label: "Roadmap", icon: Vote },
+  { id: "sprints", label: "Sprints", icon: Map },
 ];
 
 export const PRIORITY_COLORS: Record<string, string> = {

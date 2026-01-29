@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { Suspense, useState, useEffect } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { FolderKanban, Loader2, AlertCircle, Globe, ArrowLeft } from "lucide-react";
 import { publicProjectApi, PublicProject } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { AppShell } from "@/components/layout/AppShell";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   STATUS_COLORS,
   STATUS_LABELS,
@@ -18,19 +19,37 @@ import {
   BugsTab,
   GoalsTab,
   ReleasesTab,
+  TimelineTab,
   RoadmapTab,
   SprintsTab,
 } from "../../../components/public-project-page";
 
-export default function PublicProjectPage() {
+function PublicProjectContent() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const publicSlug = params.publicSlug as string;
+  const queryClient = useQueryClient();
   const { user, logout, isAuthenticated, isLoading: authLoading } = useAuth();
 
   const [project, setProject] = useState<PublicProject | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
+
+  // Handle token from OAuth redirect
+  useEffect(() => {
+    const token = searchParams.get("token");
+    if (token) {
+      // Save token to localStorage
+      localStorage.setItem("token", token);
+      // Invalidate the user query to refresh auth state
+      queryClient.invalidateQueries({ queryKey: ["currentUser"] });
+      // Remove token from URL for cleanliness and security
+      const url = new URL(window.location.href);
+      url.searchParams.delete("token");
+      window.history.replaceState({}, "", url.pathname);
+    }
+  }, [searchParams, queryClient]);
 
   useEffect(() => {
     const loadProject = async () => {
@@ -124,8 +143,10 @@ export default function PublicProjectPage() {
         return <GoalsTab publicSlug={publicSlug} />;
       case "releases":
         return <ReleasesTab publicSlug={publicSlug} />;
+      case "timeline":
+        return <TimelineTab publicSlug={publicSlug} />;
       case "roadmap":
-        return <RoadmapTab publicSlug={publicSlug} />;
+        return <RoadmapTab publicSlug={publicSlug} isAuthenticated={isAuthenticated} />;
       case "sprints":
         return <SprintsTab publicSlug={publicSlug} />;
       default:
@@ -224,4 +245,21 @@ export default function PublicProjectPage() {
   }
 
   return pageContent;
+}
+
+export default function PublicProjectPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="h-12 w-12 animate-spin text-primary-500 mx-auto mb-4" />
+            <p className="text-slate-400">Loading project...</p>
+          </div>
+        </div>
+      }
+    >
+      <PublicProjectContent />
+    </Suspense>
+  );
 }

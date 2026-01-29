@@ -23,6 +23,7 @@ import {
   BookOpen,
   ExternalLink,
   Calendar,
+  Vote,
 } from "lucide-react";
 import { useWorkspace, useWorkspaceMembers } from "@/hooks/useWorkspace";
 import { useProject } from "@/hooks/useProjects";
@@ -56,8 +57,9 @@ const PUBLIC_TABS = [
   { id: "bugs", label: "Bugs", icon: Bug, description: "Bug tracker" },
   { id: "goals", label: "Goals", icon: Target, description: "OKRs and goals" },
   { id: "releases", label: "Releases", icon: Rocket, description: "Release schedule" },
-  { id: "roadmap", label: "Roadmap", icon: Map, description: "Sprint timeline view" },
-  { id: "sprints", label: "Sprints", icon: Calendar, description: "Sprint list and progress" },
+  { id: "timeline", label: "Timeline", icon: Calendar, description: "Sprint timeline view" },
+  { id: "roadmap", label: "Roadmap", icon: Vote, description: "Feature requests and voting" },
+  { id: "sprints", label: "Sprints", icon: Map, description: "Sprint list and progress" },
 ];
 
 export default function ProjectSettingsPage() {

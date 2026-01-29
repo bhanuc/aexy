@@ -1,12 +1,15 @@
 """Project management API endpoints."""
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
 from aexy.core.database import get_db
 from aexy.api.developers import get_current_developer
 from aexy.models.developer import Developer
+from aexy.models.roadmap_voting import RoadmapRequest
+from aexy.models.project import Project
 from aexy.schemas.project import (
     ProjectCreate,
     ProjectUpdate,
@@ -27,6 +30,9 @@ from aexy.schemas.project import (
     AccessibleWidgetsResponse,
     PublicTabsConfig,
     PublicTabsUpdate,
+    RoadmapRequestResponse,
+    RoadmapRequestUpdate,
+    RoadmapRequestAuthor,
 )
 from aexy.schemas.role import RoleSummary
 from aexy.services.project_service import ProjectService
@@ -211,7 +217,7 @@ async def toggle_project_visibility(
 
 
 # Valid public tabs
-VALID_PUBLIC_TABS = ["overview", "backlog", "board", "bugs", "goals", "releases", "roadmap", "stories", "sprints"]
+VALID_PUBLIC_TABS = ["overview", "backlog", "board", "bugs", "goals", "releases", "roadmap", "stories", "sprints", "timeline"]
 
 
 @router.get("/{project_id}/public-tabs", response_model=PublicTabsConfig)
@@ -696,4 +702,76 @@ async def get_accessible_widgets(
         widgets=widgets,
         workspace_id=workspace_id,
         project_id=project_id,
+    )
+
+
+# Roadmap Request Admin Endpoints
+@router.patch("/{project_id}/roadmap-requests/{request_id}", response_model=RoadmapRequestResponse)
+async def update_roadmap_request(
+    workspace_id: str,
+    project_id: str,
+    request_id: str,
+    data: RoadmapRequestUpdate,
+    current_user: Developer = Depends(get_current_developer),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a roadmap request (admin only - status, admin response)."""
+    permission_service = PermissionService(db)
+    if not await permission_service.check_permission(
+        workspace_id, str(current_user.id), "can_edit_projects", project_id
+    ):
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    # Verify project belongs to workspace
+    result = await db.execute(
+        select(Project).where(
+            Project.id == project_id,
+            Project.workspace_id == workspace_id,
+        )
+    )
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Get the roadmap request
+    result = await db.execute(
+        select(RoadmapRequest).where(
+            RoadmapRequest.id == request_id,
+            RoadmapRequest.project_id == project_id,
+        )
+    )
+    request_obj = result.scalar_one_or_none()
+    if not request_obj:
+        raise HTTPException(status_code=404, detail="Roadmap request not found")
+
+    # Update fields
+    if data.status is not None:
+        request_obj.status = data.status
+    if data.admin_response is not None:
+        request_obj.admin_response = data.admin_response
+        request_obj.responded_by_id = str(current_user.id)
+        from datetime import datetime, timezone
+        request_obj.responded_at = datetime.now(timezone.utc)
+
+    await db.commit()
+    await db.refresh(request_obj)
+
+    return RoadmapRequestResponse(
+        id=request_obj.id,
+        title=request_obj.title,
+        description=request_obj.description,
+        category=request_obj.category,
+        status=request_obj.status,
+        vote_count=request_obj.vote_count,
+        comment_count=request_obj.comment_count,
+        submitted_by=RoadmapRequestAuthor(
+            id=request_obj.submitted_by.id,
+            name=request_obj.submitted_by.name or "Anonymous",
+            avatar_url=request_obj.submitted_by.avatar_url,
+        ),
+        admin_response=request_obj.admin_response,
+        responded_at=request_obj.responded_at,
+        created_at=request_obj.created_at,
+        updated_at=request_obj.updated_at,
+        has_voted=False,
     )

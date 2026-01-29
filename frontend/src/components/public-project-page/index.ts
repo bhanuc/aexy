@@ -12,5 +12,6 @@ export { StoriesTab } from "./StoriesTab";
 export { BugsTab } from "./BugsTab";
 export { GoalsTab } from "./GoalsTab";
 export { ReleasesTab } from "./ReleasesTab";
+export { TimelineTab } from "./TimelineTab";
 export { RoadmapTab } from "./RoadmapTab";
 export { SprintsTab } from "./SprintsTab";
