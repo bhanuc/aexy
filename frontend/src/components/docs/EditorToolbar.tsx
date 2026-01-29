@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import type { Editor } from "@tiptap/react";
 import {
   Bold,
@@ -22,9 +22,6 @@ import {
   Undo,
   Redo,
   Save,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
   Code2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -67,168 +64,183 @@ export function EditorToolbar({ editor, onSave }: EditorToolbarProps) {
   }, [editor]);
 
   return (
-    <div className="flex items-center gap-1 px-4 py-2 border-b border-slate-800 bg-slate-900/50 flex-wrap">
+    <div className="flex items-center gap-1 px-4 py-2">
       {/* Undo/Redo - only show if history extension is available */}
       {editor.can().undo && (
         <>
-          <div className="flex items-center gap-0.5 mr-2">
+          <ToolbarGroup>
             <ToolbarButton
               onClick={() => editor.chain().focus().undo().run()}
               disabled={!editor.can().undo()}
-              title="Undo"
+              tooltip="Undo"
+              shortcut="⌘Z"
             >
               <Undo className="h-4 w-4" />
             </ToolbarButton>
             <ToolbarButton
               onClick={() => editor.chain().focus().redo().run()}
               disabled={!editor.can().redo()}
-              title="Redo"
+              tooltip="Redo"
+              shortcut="⌘⇧Z"
             >
               <Redo className="h-4 w-4" />
             </ToolbarButton>
-          </div>
+          </ToolbarGroup>
 
           <ToolbarDivider />
         </>
       )}
 
       {/* Text Formatting */}
-      <div className="flex items-center gap-0.5">
+      <ToolbarGroup>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleBold().run()}
           isActive={editor.isActive("bold")}
-          title="Bold"
+          tooltip="Bold"
+          shortcut="⌘B"
         >
           <Bold className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleItalic().run()}
           isActive={editor.isActive("italic")}
-          title="Italic"
+          tooltip="Italic"
+          shortcut="⌘I"
         >
           <Italic className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleUnderline().run()}
           isActive={editor.isActive("underline")}
-          title="Underline"
+          tooltip="Underline"
+          shortcut="⌘U"
         >
           <UnderlineIcon className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleStrike().run()}
           isActive={editor.isActive("strike")}
-          title="Strikethrough"
+          tooltip="Strikethrough"
+          shortcut="⌘⇧S"
         >
           <Strikethrough className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleCode().run()}
           isActive={editor.isActive("code")}
-          title="Inline Code"
+          tooltip="Inline Code"
+          shortcut="⌘E"
         >
           <Code className="h-4 w-4" />
         </ToolbarButton>
-      </div>
+      </ToolbarGroup>
 
       <ToolbarDivider />
 
       {/* Headings */}
-      <div className="flex items-center gap-0.5">
+      <ToolbarGroup>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
           isActive={editor.isActive("heading", { level: 1 })}
-          title="Heading 1"
+          tooltip="Heading 1"
+          shortcut="⌘⌥1"
         >
           <Heading1 className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
           isActive={editor.isActive("heading", { level: 2 })}
-          title="Heading 2"
+          tooltip="Heading 2"
+          shortcut="⌘⌥2"
         >
           <Heading2 className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
           isActive={editor.isActive("heading", { level: 3 })}
-          title="Heading 3"
+          tooltip="Heading 3"
+          shortcut="⌘⌥3"
         >
           <Heading3 className="h-4 w-4" />
         </ToolbarButton>
-      </div>
+      </ToolbarGroup>
 
       <ToolbarDivider />
 
       {/* Lists */}
-      <div className="flex items-center gap-0.5">
+      <ToolbarGroup>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleBulletList().run()}
           isActive={editor.isActive("bulletList")}
-          title="Bullet List"
+          tooltip="Bullet List"
+          shortcut="⌘⇧8"
         >
           <List className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
           isActive={editor.isActive("orderedList")}
-          title="Numbered List"
+          tooltip="Numbered List"
+          shortcut="⌘⇧7"
         >
           <ListOrdered className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleTaskList().run()}
           isActive={editor.isActive("taskList")}
-          title="Task List"
+          tooltip="Task List"
+          shortcut="⌘⇧9"
         >
           <CheckSquare className="h-4 w-4" />
         </ToolbarButton>
-      </div>
+      </ToolbarGroup>
 
       <ToolbarDivider />
 
       {/* Blocks */}
-      <div className="flex items-center gap-0.5">
+      <ToolbarGroup>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleBlockquote().run()}
           isActive={editor.isActive("blockquote")}
-          title="Quote"
+          tooltip="Quote"
+          shortcut="⌘⇧B"
         >
           <Quote className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleCodeBlock().run()}
           isActive={editor.isActive("codeBlock")}
-          title="Code Block"
+          tooltip="Code Block"
         >
           <Code2 className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().setHorizontalRule().run()}
-          title="Horizontal Rule"
+          tooltip="Horizontal Rule"
         >
           <Minus className="h-4 w-4" />
         </ToolbarButton>
-      </div>
+      </ToolbarGroup>
 
       <ToolbarDivider />
 
       {/* Insert */}
-      <div className="flex items-center gap-0.5">
+      <ToolbarGroup>
         <ToolbarButton
           onClick={setLink}
           isActive={editor.isActive("link")}
-          title="Add Link"
+          tooltip="Add Link"
+          shortcut="⌘K"
         >
           <LinkIcon className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton onClick={addImage} title="Add Image">
+        <ToolbarButton onClick={addImage} tooltip="Add Image">
           <ImageIcon className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton onClick={addTable} title="Insert Table">
+        <ToolbarButton onClick={addTable} tooltip="Insert Table">
           <TableIcon className="h-4 w-4" />
         </ToolbarButton>
-      </div>
+      </ToolbarGroup>
 
       {/* Spacer */}
       <div className="flex-1" />
@@ -237,7 +249,7 @@ export function EditorToolbar({ editor, onSave }: EditorToolbarProps) {
       {onSave && (
         <button
           onClick={onSave}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-primary-600 hover:bg-primary-500 rounded-lg transition"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-primary-600 hover:bg-primary-500 rounded-lg transition-all duration-200 shadow-md shadow-primary-500/20 hover:shadow-primary-500/30"
         >
           <Save className="h-4 w-4" />
           Save
@@ -247,12 +259,22 @@ export function EditorToolbar({ editor, onSave }: EditorToolbarProps) {
   );
 }
 
+// Toolbar Group Component
+function ToolbarGroup({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-0.5 bg-slate-800/40 rounded-md p-0.5">
+      {children}
+    </div>
+  );
+}
+
 // Toolbar Button Component
 interface ToolbarButtonProps {
   onClick: () => void;
   isActive?: boolean;
   disabled?: boolean;
-  title?: string;
+  tooltip?: string;
+  shortcut?: string;
   children: React.ReactNode;
 }
 
@@ -260,28 +282,47 @@ function ToolbarButton({
   onClick,
   isActive = false,
   disabled = false,
-  title,
+  tooltip,
+  shortcut,
   children,
 }: ToolbarButtonProps) {
+  const [showTooltip, setShowTooltip] = useState(false);
+
   return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      className={cn(
-        "p-1.5 rounded transition-colors",
-        isActive
-          ? "bg-slate-700 text-primary-400"
-          : "text-slate-400 hover:text-white hover:bg-slate-800",
-        disabled && "opacity-50 cursor-not-allowed"
+    <div className="relative">
+      <button
+        onClick={onClick}
+        disabled={disabled}
+        onMouseEnter={() => setShowTooltip(true)}
+        onMouseLeave={() => setShowTooltip(false)}
+        className={cn(
+          "p-1.5 rounded transition-all duration-150",
+          isActive
+            ? "bg-primary-500/20 text-primary-400"
+            : "text-slate-400 hover:text-white hover:bg-slate-700/80",
+          disabled && "opacity-40 cursor-not-allowed hover:bg-transparent hover:text-slate-400"
+        )}
+      >
+        {children}
+      </button>
+
+      {/* Tooltip */}
+      {showTooltip && tooltip && !disabled && (
+        <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 pointer-events-none">
+          <div className="bg-slate-900 border border-slate-700 text-white text-xs px-2.5 py-1.5 rounded-lg shadow-xl whitespace-nowrap flex items-center gap-2">
+            <span>{tooltip}</span>
+            {shortcut && (
+              <span className="text-slate-500 font-mono text-[10px]">{shortcut}</span>
+            )}
+          </div>
+          <div className="absolute left-1/2 -translate-x-1/2 -top-1 w-2 h-2 bg-slate-900 border-l border-t border-slate-700 rotate-45" />
+        </div>
       )}
-    >
-      {children}
-    </button>
+    </div>
   );
 }
 
 // Divider Component
 function ToolbarDivider() {
-  return <div className="w-px h-5 bg-slate-700 mx-1" />;
+  return <div className="w-px h-5 bg-slate-700/50 mx-1" />;
 }

@@ -76,7 +76,7 @@ export default function DocumentPage() {
   if (collaborationEnabled && user) {
     return (
       <div className="flex flex-col h-full">
-        <header className="flex items-center px-3 py-3 border-b border-slate-800/50 bg-slate-950/80 backdrop-blur-sm">
+        <header className="flex items-center px-8 py-3 border-b border-slate-800/50 bg-slate-950/90 backdrop-blur-xl">
           <DocumentBreadcrumb workspaceId={currentWorkspaceId} documentId={documentId} />
         </header>
         <div className="flex-1 overflow-hidden">
@@ -102,7 +102,7 @@ export default function DocumentPage() {
   // Fallback to regular editor
   return (
     <div className="flex flex-col h-full">
-      <header className="flex items-center px-6 py-3 border-b border-slate-800/50 bg-slate-950/80 backdrop-blur-sm">
+      <header className="flex items-center px-8 py-3 border-b border-slate-800/50 bg-slate-950/90 backdrop-blur-xl">
         <DocumentBreadcrumb workspaceId={currentWorkspaceId} documentId={documentId} />
       </header>
       <div className="flex-1 overflow-hidden">
