@@ -23,15 +23,19 @@ import {
   Redo,
   Save,
   Code2,
+  FileText,
+  FileCode,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface EditorToolbarProps {
   editor: Editor;
   onSave?: () => void;
+  editorMode?: "rich" | "markdown";
+  onModeToggle?: () => void;
 }
 
-export function EditorToolbar({ editor, onSave }: EditorToolbarProps) {
+export function EditorToolbar({ editor, onSave, editorMode = "rich", onModeToggle }: EditorToolbarProps) {
   // Add link
   const setLink = useCallback(() => {
     const previousUrl = editor.getAttributes("link").href;
@@ -244,6 +248,32 @@ export function EditorToolbar({ editor, onSave }: EditorToolbarProps) {
 
       {/* Spacer */}
       <div className="flex-1" />
+
+      {/* Mode Toggle */}
+      {onModeToggle && (
+        <button
+          onClick={onModeToggle}
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition mr-2",
+            editorMode === "markdown"
+              ? "bg-amber-600 hover:bg-amber-500 text-white"
+              : "bg-slate-700 hover:bg-slate-600 text-slate-300"
+          )}
+          title={editorMode === "markdown" ? "Switch to Rich Editor" : "Switch to Markdown Mode"}
+        >
+          {editorMode === "markdown" ? (
+            <>
+              <FileText className="h-4 w-4" />
+              Rich
+            </>
+          ) : (
+            <>
+              <FileCode className="h-4 w-4" />
+              Markdown
+            </>
+          )}
+        </button>
+      )}
 
       {/* Save Button */}
       {onSave && (
