@@ -193,7 +193,11 @@ class StoryListResponse(BaseModel):
     progress_percentage: float = 0.0
     acceptance_criteria_count: int = 0
     acceptance_criteria_completed: int = 0
+    acceptance_criteria: list[AcceptanceCriterion] = Field(default_factory=list)
 
+class StoryListResult(BaseModel):
+    items: list[StoryListResponse]
+    total: int
 
 class StoryDetailResponse(StoryResponse):
     """Schema for story detail with tasks breakdown."""

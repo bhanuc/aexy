@@ -27,6 +27,7 @@ from aexy.schemas.story import (
     AcceptanceCriterion,
     AcceptanceCriterionCreate,
     TaskBriefResponse,
+    StoryListResult,
 )
 from aexy.services.workspace_service import WorkspaceService
 
@@ -135,12 +136,16 @@ def story_to_list_response(story: UserStory) -> StoryListResponse:
         progress_percentage=story.progress_percentage,
         acceptance_criteria_count=len(criteria),
         acceptance_criteria_completed=completed_criteria,
+        acceptance_criteria=[
+            AcceptanceCriterion(**ac) for ac in criteria
+        ],
+
     )
 
 
 # ==================== Story CRUD ====================
 
-@router.get("", response_model=list[StoryListResponse])
+@router.get("", response_model=StoryListResult)
 async def list_stories(
     workspace_id: str,
     status: str | None = None,
@@ -158,33 +163,45 @@ async def list_stories(
     """List user stories for a workspace."""
     await check_workspace_permission(workspace_id, current_user, db, "viewer")
 
-    query = select(UserStory).where(UserStory.workspace_id == workspace_id)
+    base_query = select(UserStory).where(UserStory.workspace_id == workspace_id)
 
     if status:
-        query = query.where(UserStory.status == status)
+        base_query = base_query.where(UserStory.status == status)
     if priority:
-        query = query.where(UserStory.priority == priority)
+        base_query = base_query.where(UserStory.priority == priority)
     if epic_id:
-        query = query.where(UserStory.epic_id == epic_id)
+        base_query = base_query.where(UserStory.epic_id == epic_id)
     if release_id:
-        query = query.where(UserStory.release_id == release_id)
+        base_query = base_query.where(UserStory.release_id == release_id)
     if owner_id:
-        query = query.where(UserStory.owner_id == owner_id)
+        base_query = base_query.where(UserStory.owner_id == owner_id)
     if not include_archived:
-        query = query.where(UserStory.is_archived == False)
+        base_query = base_query.where(UserStory.is_archived == False)
     if search:
-        query = query.where(
+        base_query = base_query.where(
             UserStory.title.ilike(f"%{search}%") |
             UserStory.key.ilike(f"%{search}%")
         )
 
-    query = query.order_by(UserStory.position, UserStory.created_at.desc())
-    query = query.limit(limit).offset(offset)
+    total_result = await db.execute(
+        select(func.count()).select_from(base_query.subquery())
+    )
+    total = total_result.scalar() or 0
 
-    result = await db.execute(query)
+    paginated_query = (
+        base_query
+        .order_by(UserStory.position, UserStory.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+
+    result = await db.execute(paginated_query)
     stories = result.scalars().all()
 
-    return [story_to_list_response(story) for story in stories]
+    return {
+        "items": [story_to_list_response(story) for story in stories],
+        "total": total,
+    }
 
 
 @router.post("", response_model=StoryResponse, status_code=status.HTTP_201_CREATED)
@@ -241,7 +258,7 @@ async def create_story(
     )
 
     db.add(story)
-
+    await db.flush()
     # Create activity log
     activity = StoryActivity(
         story_id=story.id,

@@ -30,6 +30,7 @@ from aexy.schemas.release import (
     ReleaseBurndownResponse,
     ReleaseBurndownDataPoint,
     ReadinessChecklistItem,
+    ReleaseListResult,
 )
 from aexy.services.workspace_service import WorkspaceService
 
@@ -114,12 +115,15 @@ def release_to_list_response(release: Release) -> ReleaseListResponse:
         progress_percentage=release.progress_percentage,
         open_bugs=release.open_bugs,
         critical_bugs=release.critical_bugs,
+        readiness_checklist=[
+            ReadinessChecklistItem(**item) for item in (release.readiness_checklist or [])
+        ],
     )
 
 
 # ==================== Release CRUD ====================
 
-@router.get("", response_model=list[ReleaseListResponse])
+@router.get("", response_model=ReleaseListResult)
 async def list_releases(
     workspace_id: str,
     status: str | None = None,
@@ -133,22 +137,34 @@ async def list_releases(
     """List releases for a workspace."""
     await check_workspace_permission(workspace_id, current_user, db, "viewer")
 
-    query = select(Release).where(Release.workspace_id == workspace_id)
+    base_query = select(Release).where(Release.workspace_id == workspace_id)
 
     if status:
-        query = query.where(Release.status == status)
+        base_query = base_query.where(Release.status == status)
     if project_id:
-        query = query.where(Release.project_id == project_id)
+        base_query = base_query.where(Release.project_id == project_id)
     if not include_archived:
-        query = query.where(Release.is_archived == False)
+        base_query = base_query.where(Release.is_archived == False)
 
-    query = query.order_by(Release.target_date.desc())
-    query = query.limit(limit).offset(offset)
+    total_result = await db.execute(
+        select(func.count()).select_from(base_query.subquery())
+    )
+    total = total_result.scalar() or 0
 
-    result = await db.execute(query)
+    paginated_query = (
+        base_query
+        .order_by(Release.target_date.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+
+    result = await db.execute(paginated_query)
     releases = result.scalars().all()
 
-    return [release_to_list_response(release) for release in releases]
+    return {
+        "items": [release_to_list_response(r) for r in releases],
+        "total": total,
+    }
 
 
 @router.post("", response_model=ReleaseResponse, status_code=status.HTTP_201_CREATED)

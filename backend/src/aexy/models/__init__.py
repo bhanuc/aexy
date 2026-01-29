@@ -377,6 +377,11 @@ from aexy.models.uptime import (
     UptimeIncidentStatus,
     UptimeErrorType,
 )
+from aexy.models.roadmap_voting import (
+    RoadmapRequest,
+    RoadmapVote,
+    RoadmapComment,
+)
 
 __all__ = [
     # Plan
@@ -748,4 +753,8 @@ __all__ = [
     "UptimeMonitorStatus",
     "UptimeIncidentStatus",
     "UptimeErrorType",
+    # Roadmap Voting
+    "RoadmapRequest",
+    "RoadmapVote",
+    "RoadmapComment",
 ]

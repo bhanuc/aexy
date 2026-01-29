@@ -235,6 +235,7 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/aexy"
+    database_sync_url:str='postgresql+psycopg2://postgres:postgres@localhost:5432/aexy'
     database_echo: bool = False
 
     # GitHub App (for OAuth and installations)

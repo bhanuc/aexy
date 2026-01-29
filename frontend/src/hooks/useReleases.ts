@@ -137,7 +137,7 @@ export function useReleaseReadiness(workspaceId: string | null, releaseId: strin
     required_items: number;
     required_completed: number;
     is_ready: boolean;
-    readiness_percentage: number;
+    story_readiness_percentage: number;
   }>({
     queryKey: ["releaseReadiness", workspaceId, releaseId],
     queryFn: () => releasesApi.getReadiness(workspaceId!, releaseId!),

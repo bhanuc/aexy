@@ -1,6 +1,8 @@
 """Developer profile endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from jose import JWTError, jwt
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,7 +12,7 @@ from sqlalchemy import select
 
 from aexy.core.config import get_settings
 from aexy.core.database import get_db
-from aexy.models.developer import GoogleConnection
+from aexy.models.developer import Developer, GoogleConnection
 from aexy.schemas.developer import DeveloperResponse, DeveloperUpdate
 from aexy.schemas.sprint import SprintTaskResponse
 from aexy.services.developer_service import DeveloperNotFoundError, DeveloperService
@@ -51,8 +53,55 @@ async def get_current_developer_id(
         ) from e
 
 
-@router.get("/me", response_model=DeveloperResponse)
 async def get_current_developer(
+    developer_id: str = Depends(get_current_developer_id),
+    db: AsyncSession = Depends(get_db),
+) -> Developer:
+    """Get the current authenticated developer (dependency)."""
+    service = DeveloperService(db)
+    try:
+        developer = await service.get_by_id(developer_id)
+        return developer
+    except DeveloperNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Developer not found",
+        ) from e
+
+
+# Optional security - returns None if no token provided
+optional_security = HTTPBearer(auto_error=False)
+
+
+async def get_optional_current_developer(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security),
+    db: AsyncSession = Depends(get_db),
+) -> Developer | None:
+    """Get the current developer if authenticated, otherwise None."""
+    if not credentials:
+        return None
+
+    try:
+        payload = jwt.decode(
+            credentials.credentials,
+            settings.secret_key,
+            algorithms=[settings.algorithm],
+        )
+        developer_id = payload.get("sub")
+        if developer_id is None:
+            return None
+
+        service = DeveloperService(db)
+        try:
+            return await service.get_by_id(developer_id)
+        except DeveloperNotFoundError:
+            return None
+    except JWTError:
+        return None
+
+
+@router.get("/me", response_model=DeveloperResponse)
+async def get_current_developer_profile(
     developer_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
 ) -> DeveloperResponse:

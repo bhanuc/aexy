@@ -13,6 +13,7 @@ import {
   Package,
   Bug,
   MoreHorizontal,
+  Vote,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -87,16 +88,23 @@ export default function ProjectLayoutClient({
       group: "delivery",
     },
     {
+      label: "Timeline",
+      href: `/sprints/${projectId}/timeline`,
+      icon: <Calendar className="h-4 w-4" />,
+      pattern: /\/timeline$/,
+      group: "delivery",
+    },
+    {
       label: "Roadmap",
       href: `/sprints/${projectId}/roadmap`,
-      icon: <Calendar className="h-4 w-4" />,
+      icon: <Vote className="h-4 w-4" />,
       pattern: /\/roadmap$/,
       group: "delivery",
     },
   ];
 
   // Pages that should show the sub-nav
-  const subNavPages = ['/board', '/backlog', '/roadmap', '/stories', '/bugs', '/goals', '/releases'];
+  const subNavPages = ['/board', '/backlog', '/timeline', '/roadmap', '/stories', '/bugs', '/goals', '/releases'];
   const showSubNav = subNavPages.some(page => pathname.endsWith(page)) ||
     /\/sprints\/[^\/]+$/.test(pathname);
 
