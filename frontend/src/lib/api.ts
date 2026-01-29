@@ -10054,6 +10054,45 @@ export interface PublicSprintItem {
   completed_points: number;
 }
 
+// Roadmap Voting Types
+export interface RoadmapRequestAuthor {
+  id: string;
+  name: string | null;
+  avatar_url: string | null;
+}
+
+export interface RoadmapRequest {
+  id: string;
+  title: string;
+  description: string | null;
+  category: string;
+  status: string;
+  vote_count: number;
+  comment_count: number;
+  submitted_by: RoadmapRequestAuthor;
+  admin_response: string | null;
+  responded_at: string | null;
+  created_at: string;
+  has_voted: boolean;
+}
+
+export interface RoadmapComment {
+  id: string;
+  content: string;
+  author: RoadmapRequestAuthor;
+  is_admin_response: boolean;
+  created_at: string;
+}
+
+export interface RoadmapVoteResponse {
+  success: boolean;
+  vote_count: number;
+  has_voted: boolean;
+}
+
+export type RoadmapCategory = "feature" | "improvement" | "integration" | "bug_fix" | "other";
+export type RoadmapStatus = "under_review" | "planned" | "in_progress" | "completed" | "declined";
+
 export interface PublicBoardData {
   todo: PublicTaskItem[];
   in_progress: PublicTaskItem[];
@@ -10115,9 +10154,17 @@ export const publicProjectApi = {
     return response.data;
   },
 
-  // Get roadmap (sprints)
+  // Get roadmap (sprints) - legacy endpoint
   getRoadmap: async (publicSlug: string, limit = 50, offset = 0): Promise<PublicRoadmapItem[]> => {
     const response = await api.get(`/public/projects/${publicSlug}/roadmap`, {
+      params: { limit, offset },
+    });
+    return response.data;
+  },
+
+  // Get timeline (sprint timeline view)
+  getTimeline: async (publicSlug: string, limit = 50, offset = 0): Promise<PublicSprintItem[]> => {
+    const response = await api.get(`/public/projects/${publicSlug}/timeline`, {
       params: { limit, offset },
     });
     return response.data;
@@ -10127,6 +10174,70 @@ export const publicProjectApi = {
   getSprints: async (publicSlug: string, limit = 50, offset = 0): Promise<PublicSprintItem[]> => {
     const response = await api.get(`/public/projects/${publicSlug}/sprints`, {
       params: { limit, offset },
+    });
+    return response.data;
+  },
+
+  // Roadmap Voting API
+  getRoadmapRequests: async (
+    publicSlug: string,
+    options?: {
+      status?: RoadmapStatus;
+      category?: RoadmapCategory;
+      sortBy?: "votes" | "newest" | "oldest";
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<RoadmapRequest[]> => {
+    const response = await api.get(`/public/projects/${publicSlug}/roadmap-requests`, {
+      params: {
+        status: options?.status,
+        category: options?.category,
+        sort_by: options?.sortBy || "votes",
+        limit: options?.limit || 50,
+        offset: options?.offset || 0,
+      },
+    });
+    return response.data;
+  },
+
+  getRoadmapRequest: async (publicSlug: string, requestId: string): Promise<RoadmapRequest> => {
+    const response = await api.get(`/public/projects/${publicSlug}/roadmap-requests/${requestId}`);
+    return response.data;
+  },
+
+  createRoadmapRequest: async (
+    publicSlug: string,
+    data: { title: string; description?: string; category?: RoadmapCategory }
+  ): Promise<RoadmapRequest> => {
+    const response = await api.post(`/public/projects/${publicSlug}/roadmap-requests`, data);
+    return response.data;
+  },
+
+  voteRoadmapRequest: async (publicSlug: string, requestId: string): Promise<RoadmapVoteResponse> => {
+    const response = await api.post(`/public/projects/${publicSlug}/roadmap-requests/${requestId}/vote`);
+    return response.data;
+  },
+
+  getRoadmapComments: async (
+    publicSlug: string,
+    requestId: string,
+    limit = 50,
+    offset = 0
+  ): Promise<RoadmapComment[]> => {
+    const response = await api.get(`/public/projects/${publicSlug}/roadmap-requests/${requestId}/comments`, {
+      params: { limit, offset },
+    });
+    return response.data;
+  },
+
+  createRoadmapComment: async (
+    publicSlug: string,
+    requestId: string,
+    content: string
+  ): Promise<RoadmapComment> => {
+    const response = await api.post(`/public/projects/${publicSlug}/roadmap-requests/${requestId}/comments`, {
+      content,
     });
     return response.data;
   },

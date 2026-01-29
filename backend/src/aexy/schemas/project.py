@@ -369,3 +369,68 @@ class PublicSprintItem(BaseModel):
     completed_count: int
     total_points: int
     completed_points: int
+
+
+# Roadmap Voting Schemas
+class RoadmapRequestAuthor(BaseModel):
+    """Author info for roadmap requests."""
+
+    id: str
+    name: str | None
+    avatar_url: str | None
+
+
+class RoadmapCommentResponse(BaseModel):
+    """Response schema for roadmap comments."""
+
+    id: str
+    content: str
+    author: RoadmapRequestAuthor
+    is_admin_response: bool
+    created_at: datetime
+
+
+class RoadmapRequestResponse(BaseModel):
+    """Response schema for roadmap requests."""
+
+    id: str
+    title: str
+    description: str | None
+    category: str
+    status: str
+    vote_count: int
+    comment_count: int
+    submitted_by: RoadmapRequestAuthor
+    admin_response: str | None
+    responded_at: datetime | None
+    created_at: datetime
+    has_voted: bool = False  # Whether current user has voted
+
+
+class RoadmapRequestCreate(BaseModel):
+    """Schema for creating a roadmap request."""
+
+    title: str
+    description: str | None = None
+    category: str = "feature"
+
+
+class RoadmapRequestUpdate(BaseModel):
+    """Schema for updating a roadmap request (admin only)."""
+
+    status: str | None = None
+    admin_response: str | None = None
+
+
+class RoadmapCommentCreate(BaseModel):
+    """Schema for creating a comment on a roadmap request."""
+
+    content: str
+
+
+class RoadmapVoteResponse(BaseModel):
+    """Response schema for vote action."""
+
+    success: bool
+    vote_count: int
+    has_voted: bool

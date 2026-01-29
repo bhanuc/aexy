@@ -1,187 +1,467 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
 import {
   ArrowLeft,
-  ChevronLeft,
-  ChevronRight,
-  Calendar,
-  Target,
-  Plus,
-  ZoomIn,
-  ZoomOut,
-  Layers,
+  ChevronUp,
+  MessageSquare,
+  Lightbulb,
+  Zap,
+  Link2,
+  Bug,
+  MoreHorizontal,
+  CheckCircle2,
   Clock,
+  XCircle,
+  Loader2,
+  Vote,
+  ChevronDown,
+  X,
+  Send,
+  User,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { useWorkspace } from "@/hooks/useWorkspace";
-import { useSprints } from "@/hooks/useSprints";
-import { useEpics } from "@/hooks/useEpics";
-import { SprintListItem, EpicListItem } from "@/lib/api";
+import { useWorkspace, useWorkspaceMembers } from "@/hooks/useWorkspace";
 import { CommandPalette } from "@/components/CommandPalette";
 import { redirect } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/premium-card";
+import { useProject } from "@/hooks/useProjects";
 
-type ZoomLevel = "week" | "month" | "quarter";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
-// Sprint status colors
-const SPRINT_STATUS_COLORS: Record<string, string> = {
-  planning: "bg-blue-500",
-  active: "bg-green-500",
-  review: "bg-amber-500",
-  retrospective: "bg-purple-500",
-  completed: "bg-slate-500",
+type RoadmapCategory = "feature" | "improvement" | "integration" | "bug_fix" | "other";
+type RoadmapStatus = "under_review" | "planned" | "in_progress" | "completed" | "declined";
+
+interface RoadmapRequestAuthor {
+  id: string;
+  name: string;
+  avatar_url: string | null;
+}
+
+interface RoadmapRequest {
+  id: string;
+  title: string;
+  description: string | null;
+  category: RoadmapCategory;
+  status: RoadmapStatus;
+  vote_count: number;
+  comment_count: number;
+  submitted_by: RoadmapRequestAuthor;
+  admin_response: string | null;
+  created_at: string;
+  has_voted?: boolean;
+}
+
+interface RoadmapComment {
+  id: string;
+  content: string;
+  author: RoadmapRequestAuthor;
+  is_admin_response: boolean;
+  created_at: string;
+}
+
+const CATEGORY_CONFIG: Record<RoadmapCategory, { label: string; icon: typeof Lightbulb; color: string }> = {
+  feature: { label: "Feature", icon: Lightbulb, color: "text-blue-400 bg-blue-900/30" },
+  improvement: { label: "Improvement", icon: Zap, color: "text-yellow-400 bg-yellow-900/30" },
+  integration: { label: "Integration", icon: Link2, color: "text-purple-400 bg-purple-900/30" },
+  bug_fix: { label: "Bug Fix", icon: Bug, color: "text-red-400 bg-red-900/30" },
+  other: { label: "Other", icon: MoreHorizontal, color: "text-slate-400 bg-slate-700" },
 };
 
-// Generate date range for timeline
-function generateDateRange(startDate: Date, endDate: Date, zoomLevel: ZoomLevel): Date[] {
-  const dates: Date[] = [];
-  const current = new Date(startDate);
+const STATUS_CONFIG: Record<RoadmapStatus, { label: string; icon: typeof Clock; color: string; bgColor: string }> = {
+  under_review: { label: "Under Review", icon: Clock, color: "text-slate-400", bgColor: "bg-slate-700" },
+  planned: { label: "Planned", icon: CheckCircle2, color: "text-blue-400", bgColor: "bg-blue-900/50" },
+  in_progress: { label: "In Progress", icon: Loader2, color: "text-yellow-400", bgColor: "bg-yellow-900/50" },
+  completed: { label: "Completed", icon: CheckCircle2, color: "text-green-400", bgColor: "bg-green-900/50" },
+  declined: { label: "Declined", icon: XCircle, color: "text-red-400", bgColor: "bg-red-900/50" },
+};
 
-  while (current <= endDate) {
-    dates.push(new Date(current));
-    if (zoomLevel === "week") {
-      current.setDate(current.getDate() + 7);
-    } else if (zoomLevel === "month") {
-      current.setMonth(current.getMonth() + 1);
-    } else {
-      current.setMonth(current.getMonth() + 3);
-    }
+function StatusDropdown({
+  currentStatus,
+  onStatusChange,
+  isUpdating,
+  disabled = false,
+}: {
+  currentStatus: RoadmapStatus;
+  onStatusChange: (status: RoadmapStatus) => void;
+  isUpdating: boolean;
+  disabled?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const config = STATUS_CONFIG[currentStatus];
+  const StatusIcon = config.icon;
+
+  if (disabled) {
+    return (
+      <div
+        className={cn(
+          "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium",
+          config.bgColor,
+          config.color
+        )}
+      >
+        <StatusIcon className={cn("h-4 w-4", currentStatus === "in_progress" && "animate-spin")} />
+        {config.label}
+      </div>
+    );
   }
-
-  return dates;
-}
-
-// Format date for header
-function formatDateHeader(date: Date, zoomLevel: ZoomLevel): string {
-  if (zoomLevel === "week") {
-    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  } else if (zoomLevel === "month") {
-    return date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-  } else {
-    const quarter = Math.floor(date.getMonth() / 3) + 1;
-    return `Q${quarter} ${date.getFullYear()}`;
-  }
-}
-
-// Calculate position and width for a sprint bar
-function calculateSprintPosition(
-  sprint: SprintListItem,
-  timelineStart: Date,
-  timelineEnd: Date,
-  totalWidth: number
-): { left: number; width: number } {
-  const start = new Date(sprint.start_date);
-  const end = new Date(sprint.end_date);
-
-  const totalDays = (timelineEnd.getTime() - timelineStart.getTime()) / (1000 * 60 * 60 * 24);
-  const startOffset = Math.max(0, (start.getTime() - timelineStart.getTime()) / (1000 * 60 * 60 * 24));
-  const endOffset = Math.min(totalDays, (end.getTime() - timelineStart.getTime()) / (1000 * 60 * 60 * 24));
-
-  const left = (startOffset / totalDays) * totalWidth;
-  const width = ((endOffset - startOffset) / totalDays) * totalWidth;
-
-  return { left: Math.max(0, left), width: Math.max(40, width) };
-}
-
-interface SprintBarProps {
-  sprint: SprintListItem;
-  style: { left: number; width: number };
-  onClick: () => void;
-}
-
-function SprintBar({ sprint, style, onClick }: SprintBarProps) {
-  const completionRate = sprint.tasks_count > 0
-    ? Math.round((sprint.completed_count / sprint.tasks_count) * 100)
-    : 0;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, scaleX: 0 }}
-      animate={{ opacity: 1, scaleX: 1 }}
-      transition={{ duration: 0.3 }}
-      onClick={onClick}
-      style={{
-        left: `${style.left}px`,
-        width: `${style.width}px`,
-      }}
-      className={cn(
-        "absolute h-10 rounded-lg cursor-pointer transition-all duration-200",
-        "hover:ring-2 hover:ring-primary-500/50 hover:z-10",
-        SPRINT_STATUS_COLORS[sprint.status],
-        sprint.status === "completed" && "opacity-60"
-      )}
-    >
-      {/* Progress bar inside */}
-      <div
-        className="absolute inset-y-0 left-0 bg-white/20 rounded-l-lg transition-all"
-        style={{ width: `${completionRate}%` }}
-      />
-
-      {/* Content */}
-      <div className="relative h-full flex items-center px-3 overflow-hidden">
-        <span className="text-xs font-medium text-white truncate">{sprint.name}</span>
-        {style.width > 100 && (
-          <span className="ml-2 text-[10px] text-white/70">{completionRate}%</span>
+    <div className="relative">
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsOpen(!isOpen);
+        }}
+        disabled={isUpdating}
+        className={cn(
+          "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition",
+          config.bgColor,
+          config.color,
+          isUpdating && "opacity-50 cursor-not-allowed"
         )}
-      </div>
-    </motion.div>
+      >
+        {isUpdating ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <StatusIcon className={cn("h-4 w-4", currentStatus === "in_progress" && "animate-spin")} />
+        )}
+        {config.label}
+        <ChevronDown className="h-3 w-3" />
+      </button>
+
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+          <div className="absolute right-0 mt-1 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 py-1">
+            {(Object.entries(STATUS_CONFIG) as [RoadmapStatus, typeof STATUS_CONFIG.under_review][]).map(
+              ([status, statusConfig]) => {
+                const Icon = statusConfig.icon;
+                return (
+                  <button
+                    key={status}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onStatusChange(status);
+                      setIsOpen(false);
+                    }}
+                    className={cn(
+                      "w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition",
+                      currentStatus === status
+                        ? "bg-slate-700 text-white"
+                        : "text-slate-400 hover:bg-slate-700/50 hover:text-white"
+                    )}
+                  >
+                    <Icon className={cn("h-4 w-4", statusConfig.color)} />
+                    {statusConfig.label}
+                  </button>
+                );
+              }
+            )}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
-interface EpicSwimlaneProps {
-  epic: EpicListItem;
-  sprints: SprintListItem[];
-  timelineStart: Date;
-  timelineEnd: Date;
-  totalWidth: number;
-  onSprintClick: (sprintId: string) => void;
-}
+function RequestDetailModal({
+  request,
+  publicSlug,
+  isAdmin,
+  onClose,
+  onStatusChange,
+  isUpdatingStatus,
+}: {
+  request: RoadmapRequest;
+  publicSlug: string;
+  isAdmin: boolean;
+  onClose: () => void;
+  onStatusChange: (status: RoadmapStatus) => void;
+  isUpdatingStatus: boolean;
+}) {
+  const [comments, setComments] = useState<RoadmapComment[]>([]);
+  const [isLoadingComments, setIsLoadingComments] = useState(true);
+  const [newComment, setNewComment] = useState("");
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
 
-function EpicSwimlane({
-  epic,
-  sprints,
-  timelineStart,
-  timelineEnd,
-  totalWidth,
-  onSprintClick,
-}: EpicSwimlaneProps) {
-  // For now, show all sprints in each epic swimlane
-  // In real app, filter by epic_id
-  const epicSprints = sprints;
+  const category = CATEGORY_CONFIG[request.category] || CATEGORY_CONFIG.other;
+  const CategoryIcon = category.icon;
+
+  // Load comments
+  useEffect(() => {
+    const loadComments = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const response = await fetch(
+          `${API_BASE_URL}/public/projects/${publicSlug}/roadmap-requests/${request.id}/comments`,
+          {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          }
+        );
+        if (response.ok) {
+          const data = await response.json();
+          setComments(data);
+        }
+      } catch (error) {
+        console.error("Failed to load comments:", error);
+      } finally {
+        setIsLoadingComments(false);
+      }
+    };
+
+    loadComments();
+  }, [publicSlug, request.id]);
+
+  const handleSubmitComment = async () => {
+    if (!newComment.trim()) return;
+
+    setIsSubmittingComment(true);
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(
+        `${API_BASE_URL}/public/projects/${publicSlug}/roadmap-requests/${request.id}/comments`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ content: newComment }),
+        }
+      );
+
+      if (response.ok) {
+        const comment = await response.json();
+        setComments((prev) => [...prev, comment]);
+        setNewComment("");
+      }
+    } catch (error) {
+      console.error("Failed to submit comment:", error);
+    } finally {
+      setIsSubmittingComment(false);
+    }
+  };
 
   return (
-    <div className="flex border-b border-slate-700/50 last:border-b-0">
-      {/* Epic label */}
-      <div className="w-48 flex-shrink-0 px-4 py-3 bg-slate-800/50 border-r border-slate-700/50">
-        <div className="flex items-center gap-2">
-          <div
-            className="w-3 h-3 rounded-full flex-shrink-0"
-            style={{ backgroundColor: epic.color }}
-          />
-          <div className="min-w-0">
-            <h3 className="text-sm font-medium text-white truncate">{epic.title}</h3>
-            <p className="text-[10px] text-slate-500">{epic.key}</p>
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div
+        className="bg-slate-800 rounded-xl max-w-3xl w-full max-h-[90vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="p-4 border-b border-slate-700 flex items-start justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-3 mb-2">
+              <span className={cn("flex items-center gap-1 px-2 py-0.5 rounded-full text-xs", category.color)}>
+                <CategoryIcon className="h-3 w-3" />
+                {category.label}
+              </span>
+              <StatusDropdown
+                currentStatus={request.status}
+                onStatusChange={onStatusChange}
+                isUpdating={isUpdatingStatus}
+                disabled={!isAdmin}
+              />
+            </div>
+            <h2 className="text-xl font-semibold text-white">{request.title}</h2>
+            <p className="text-sm text-slate-400 mt-1">
+              Submitted by {request.submitted_by.name} · {new Date(request.created_at).toLocaleDateString()}
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex flex-col items-center px-3 py-2 bg-slate-700/50 rounded-lg">
+              <ChevronUp className="h-4 w-4 text-slate-400" />
+              <span className="text-lg font-bold text-white">{request.vote_count}</span>
+              <span className="text-xs text-slate-500">votes</span>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+          {/* Description */}
+          {request.description && (
+            <div>
+              <h3 className="text-sm font-medium text-slate-400 mb-2">Description</h3>
+              <p className="text-white whitespace-pre-wrap">{request.description}</p>
+            </div>
+          )}
+
+          {/* Admin Response */}
+          {request.admin_response && (
+            <div className="p-4 bg-primary-900/20 border border-primary-500/30 rounded-lg">
+              <h3 className="text-sm font-medium text-primary-400 mb-2">Official Response</h3>
+              <p className="text-slate-300">{request.admin_response}</p>
+            </div>
+          )}
+
+          {/* Comments */}
+          <div>
+            <h3 className="text-sm font-medium text-slate-400 mb-3 flex items-center gap-2">
+              <MessageSquare className="h-4 w-4" />
+              Comments ({comments.length})
+            </h3>
+
+            {isLoadingComments ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+              </div>
+            ) : comments.length === 0 ? (
+              <p className="text-slate-500 text-sm py-4 text-center">No comments yet. Be the first to comment!</p>
+            ) : (
+              <div className="space-y-3">
+                {comments.map((comment) => (
+                  <div
+                    key={comment.id}
+                    className={cn(
+                      "p-3 rounded-lg",
+                      comment.is_admin_response
+                        ? "bg-primary-900/20 border border-primary-500/30"
+                        : "bg-slate-700/50"
+                    )}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      {comment.author.avatar_url ? (
+                        <img
+                          src={comment.author.avatar_url}
+                          alt={comment.author.name}
+                          className="w-6 h-6 rounded-full"
+                        />
+                      ) : (
+                        <div className="w-6 h-6 rounded-full bg-slate-600 flex items-center justify-center">
+                          <User className="h-3 w-3 text-slate-400" />
+                        </div>
+                      )}
+                      <span className="text-sm font-medium text-white">{comment.author.name}</span>
+                      {comment.is_admin_response && (
+                        <span className="text-xs px-1.5 py-0.5 bg-primary-500/20 text-primary-400 rounded">
+                          Team
+                        </span>
+                      )}
+                      <span className="text-xs text-slate-500">
+                        {new Date(comment.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <p className="text-sm text-slate-300">{comment.content}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Comment Input */}
+        <div className="p-4 border-t border-slate-700">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              placeholder="Add a comment..."
+              className="flex-1 px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-primary-500"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmitComment();
+                }
+              }}
+            />
+            <button
+              onClick={handleSubmitComment}
+              disabled={!newComment.trim() || isSubmittingComment}
+              className="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition"
+            >
+              {isSubmittingComment ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Send className="h-5 w-5" />
+              )}
+            </button>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* Timeline area */}
-      <div className="flex-1 relative h-16" style={{ width: `${totalWidth}px` }}>
-        {epicSprints.map((sprint) => {
-          const position = calculateSprintPosition(sprint, timelineStart, timelineEnd, totalWidth);
-          return (
-            <SprintBar
-              key={sprint.id}
-              sprint={sprint}
-              style={position}
-              onClick={() => onSprintClick(sprint.id)}
+function RequestCard({
+  request,
+  isAdmin,
+  onStatusChange,
+  isUpdating,
+  onClick,
+}: {
+  request: RoadmapRequest;
+  isAdmin: boolean;
+  onStatusChange: (requestId: string, status: RoadmapStatus) => void;
+  isUpdating: boolean;
+  onClick: () => void;
+}) {
+  const category = CATEGORY_CONFIG[request.category] || CATEGORY_CONFIG.other;
+  const CategoryIcon = category.icon;
+
+  return (
+    <div
+      className="bg-slate-800 rounded-lg p-4 border border-slate-700 cursor-pointer hover:border-slate-600 transition"
+      onClick={onClick}
+    >
+      <div className="flex gap-4">
+        {/* Vote count */}
+        <div className="flex flex-col items-center justify-center min-w-[60px] p-2 rounded-lg bg-slate-700/50 border border-slate-600">
+          <ChevronUp className="h-5 w-5 text-slate-400" />
+          <span className="text-sm font-semibold text-white">{request.vote_count}</span>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <h3 className="text-white font-medium">{request.title}</h3>
+              {request.description && (
+                <p className="text-slate-400 text-sm mt-1 line-clamp-2">{request.description}</p>
+              )}
+            </div>
+
+            {/* Status dropdown for admin */}
+            <StatusDropdown
+              currentStatus={request.status}
+              onStatusChange={(status) => onStatusChange(request.id, status)}
+              isUpdating={isUpdating}
+              disabled={!isAdmin}
             />
-          );
-        })}
+          </div>
+
+          {/* Meta info */}
+          <div className="flex items-center gap-3 mt-3 text-xs text-slate-500">
+            <span className={cn("flex items-center gap-1 px-2 py-0.5 rounded-full", category.color)}>
+              <CategoryIcon className="h-3 w-3" />
+              {category.label}
+            </span>
+            <span className="flex items-center gap-1">
+              <MessageSquare className="h-3 w-3" />
+              {request.comment_count} comments
+            </span>
+            <span>
+              by {request.submitted_by.name} · {new Date(request.created_at).toLocaleDateString()}
+            </span>
+          </div>
+
+          {/* Admin response if any */}
+          {request.admin_response && (
+            <div className="mt-3 p-3 bg-slate-700/50 rounded-lg border-l-2 border-primary-500">
+              <p className="text-xs text-primary-400 font-medium mb-1">Official Response</p>
+              <p className="text-sm text-slate-300 line-clamp-2">{request.admin_response}</p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -193,80 +473,90 @@ export default function RoadmapPage({
   params: { projectId: string };
 }) {
   const { projectId } = params;
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const { currentWorkspaceId, currentWorkspaceLoading } = useWorkspace();
+  const { members: workspaceMembers } = useWorkspaceMembers(currentWorkspaceId);
+  const { project } = useProject(currentWorkspaceId, projectId);
 
-  const { sprints, isLoading: sprintsLoading } = useSprints(currentWorkspaceId, projectId);
-  const { epics } = useEpics(currentWorkspaceId);
+  const [requests, setRequests] = useState<RoadmapRequest[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [updatingRequestId, setUpdatingRequestId] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<"votes" | "newest" | "oldest">("votes");
+  const [statusFilter, setStatusFilter] = useState<RoadmapStatus | "">("");
+  const [categoryFilter, setCategoryFilter] = useState<RoadmapCategory | "">("");
+  const [selectedRequest, setSelectedRequest] = useState<RoadmapRequest | null>(null);
 
-  const [zoomLevel, setZoomLevel] = useState<ZoomLevel>("month");
-  const [selectedSprintId, setSelectedSprintId] = useState<string | null>(null);
+  // Check if user is admin/owner
+  const currentMember = workspaceMembers.find((m) => m.developer_id === user?.id);
+  const isAdmin = currentMember?.role === "owner" || currentMember?.role === "admin";
 
-  // Calculate timeline range
-  const { timelineStart, timelineEnd, dateHeaders, totalWidth } = useMemo(() => {
-    const now = new Date();
-    let start = new Date(now);
-    start.setMonth(start.getMonth() - 1);
-    let end = new Date(now);
-    end.setMonth(end.getMonth() + 6);
+  const loadRequests = async () => {
+    if (!project?.public_slug) return;
 
-    // Adjust based on sprint dates
-    if (sprints && sprints.length > 0) {
-      const sprintStarts = sprints.map((s) => new Date(s.start_date).getTime());
-      const sprintEnds = sprints.map((s) => new Date(s.end_date).getTime());
-      const minStart = Math.min(...sprintStarts);
-      const maxEnd = Math.max(...sprintEnds);
+    setIsLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (sortBy) params.append("sort_by", sortBy);
+      if (statusFilter) params.append("status", statusFilter);
+      if (categoryFilter) params.append("category", categoryFilter);
 
-      if (minStart < start.getTime()) {
-        start = new Date(minStart);
-        start.setDate(start.getDate() - 14);
+      const token = localStorage.getItem("token");
+      const response = await fetch(
+        `${API_BASE_URL}/public/projects/${project.public_slug}/roadmap-requests?${params}`,
+        {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setRequests(data);
       }
-      if (maxEnd > end.getTime()) {
-        end = new Date(maxEnd);
-        end.setDate(end.getDate() + 14);
-      }
+    } catch (error) {
+      console.error("Failed to load requests:", error);
+    } finally {
+      setIsLoading(false);
     }
-
-    const headers = generateDateRange(start, end, zoomLevel);
-    const columnWidth = zoomLevel === "week" ? 80 : zoomLevel === "month" ? 120 : 160;
-    const width = headers.length * columnWidth;
-
-    return {
-      timelineStart: start,
-      timelineEnd: end,
-      dateHeaders: headers,
-      totalWidth: width,
-    };
-  }, [sprints, zoomLevel]);
-
-  // Column width based on zoom
-  const columnWidth = zoomLevel === "week" ? 80 : zoomLevel === "month" ? 120 : 160;
-
-  // Today marker position
-  const todayPosition = useMemo(() => {
-    const now = new Date();
-    const totalDays = (timelineEnd.getTime() - timelineStart.getTime()) / (1000 * 60 * 60 * 24);
-    const todayOffset = (now.getTime() - timelineStart.getTime()) / (1000 * 60 * 60 * 24);
-    return (todayOffset / totalDays) * totalWidth;
-  }, [timelineStart, timelineEnd, totalWidth]);
-
-  // Scroll to today on mount
-  useEffect(() => {
-    if (scrollContainerRef.current && todayPosition > 0) {
-      scrollContainerRef.current.scrollLeft = todayPosition - 200;
-    }
-  }, [todayPosition]);
-
-  const handleZoomIn = () => {
-    if (zoomLevel === "quarter") setZoomLevel("month");
-    else if (zoomLevel === "month") setZoomLevel("week");
   };
 
-  const handleZoomOut = () => {
-    if (zoomLevel === "week") setZoomLevel("month");
-    else if (zoomLevel === "month") setZoomLevel("quarter");
+  useEffect(() => {
+    if (project?.public_slug) {
+      loadRequests();
+    }
+  }, [project?.public_slug, sortBy, statusFilter, categoryFilter]);
+
+  const handleStatusChange = async (requestId: string, newStatus: RoadmapStatus) => {
+    if (!currentWorkspaceId || !project?.public_slug || !isAdmin) return;
+
+    setUpdatingRequestId(requestId);
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(
+        `${API_BASE_URL}/workspaces/${currentWorkspaceId}/projects/${projectId}/roadmap-requests/${requestId}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ status: newStatus }),
+        }
+      );
+
+      if (response.ok) {
+        setRequests((prev) =>
+          prev.map((r) => (r.id === requestId ? { ...r, status: newStatus } : r))
+        );
+        // Also update selected request if open
+        if (selectedRequest?.id === requestId) {
+          setSelectedRequest((prev) => prev ? { ...prev, status: newStatus } : null);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to update status:", error);
+    } finally {
+      setUpdatingRequestId(null);
+    }
   };
 
   if (authLoading || currentWorkspaceLoading) {
@@ -281,20 +571,22 @@ export default function RoadmapPage({
     redirect("/");
   }
 
-  // Default epics if none exist
-  const displayEpics = epics && epics.length > 0
-    ? epics
-    : [
-        { id: "default", key: "DEFAULT", title: "All Sprints", color: "#6366f1", status: "active", progress_percentage: 0 } as unknown as EpicListItem,
-      ];
+  // Group requests by status
+  const groupedRequests = {
+    under_review: requests.filter((r) => r.status === "under_review"),
+    planned: requests.filter((r) => r.status === "planned"),
+    in_progress: requests.filter((r) => r.status === "in_progress"),
+    completed: requests.filter((r) => r.status === "completed"),
+    declined: requests.filter((r) => r.status === "declined"),
+  };
 
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col">
+    <div className="min-h-screen bg-slate-900">
       <CommandPalette workspaceId={currentWorkspaceId} projectId={projectId} />
 
       {/* Header */}
-      <header className="flex-shrink-0 border-b border-slate-700 bg-slate-800/50 backdrop-blur-sm sticky top-0 z-30">
-        <div className="max-w-[1800px] mx-auto px-4 py-3">
+      <header className="border-b border-slate-700 bg-slate-800/50 backdrop-blur-sm sticky top-0 z-30">
+        <div className="max-w-[1400px] mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Link
@@ -304,237 +596,151 @@ export default function RoadmapPage({
                 <ArrowLeft className="h-5 w-5" />
               </Link>
               <div>
-                <h1 className="text-lg font-semibold text-white">Roadmap</h1>
+                <h1 className="text-lg font-semibold text-white flex items-center gap-2">
+                  <Vote className="h-5 w-5 text-primary-500" />
+                  Feature Requests
+                </h1>
                 <p className="text-xs text-slate-500">
-                  {sprints?.length || 0} sprints • {displayEpics.length} epics
+                  {requests.length} requests · {isAdmin ? "Manage" : "View"} user feedback and feature requests
                 </p>
               </div>
             </div>
 
+            {/* Filters */}
             <div className="flex items-center gap-3">
-              {/* Zoom controls */}
-              <div className="flex items-center gap-1 bg-slate-800 border border-slate-700 rounded-lg">
-                <button
-                  onClick={handleZoomOut}
-                  disabled={zoomLevel === "quarter"}
-                  className="p-2 text-slate-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition"
-                >
-                  <ZoomOut className="h-4 w-4" />
-                </button>
-                <span className="px-2 text-xs text-slate-400 capitalize min-w-[60px] text-center">
-                  {zoomLevel}
-                </span>
-                <button
-                  onClick={handleZoomIn}
-                  disabled={zoomLevel === "week"}
-                  className="p-2 text-slate-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition"
-                >
-                  <ZoomIn className="h-4 w-4" />
-                </button>
-              </div>
-
-              {/* Today button */}
-              <button
-                onClick={() => {
-                  if (scrollContainerRef.current) {
-                    scrollContainerRef.current.scrollLeft = todayPosition - 200;
-                  }
-                }}
-                className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm transition"
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                className="px-3 py-1.5 bg-slate-700 border border-slate-600 rounded-lg text-sm text-white"
               >
-                <Calendar className="h-4 w-4" />
-                Today
-              </button>
+                <option value="votes">Most Voted</option>
+                <option value="newest">Newest</option>
+                <option value="oldest">Oldest</option>
+              </select>
+
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as RoadmapStatus | "")}
+                className="px-3 py-1.5 bg-slate-700 border border-slate-600 rounded-lg text-sm text-white"
+              >
+                <option value="">All Statuses</option>
+                {(Object.entries(STATUS_CONFIG) as [RoadmapStatus, typeof STATUS_CONFIG.under_review][]).map(
+                  ([key, config]) => (
+                    <option key={key} value={key}>
+                      {config.label}
+                    </option>
+                  )
+                )}
+              </select>
+
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value as RoadmapCategory | "")}
+                className="px-3 py-1.5 bg-slate-700 border border-slate-600 rounded-lg text-sm text-white"
+              >
+                <option value="">All Categories</option>
+                {(Object.entries(CATEGORY_CONFIG) as [RoadmapCategory, typeof CATEGORY_CONFIG.feature][]).map(
+                  ([key, config]) => (
+                    <option key={key} value={key}>
+                      {config.label}
+                    </option>
+                  )
+                )}
+              </select>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Roadmap content */}
-      <main className="flex-1 overflow-hidden flex flex-col">
-        {sprintsLoading ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500"></div>
+      {/* Content */}
+      <main className="max-w-[1400px] mx-auto px-4 py-6">
+        {isLoading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="h-8 w-8 animate-spin text-primary-500" />
+          </div>
+        ) : requests.length === 0 ? (
+          <div className="text-center py-16">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-slate-800 flex items-center justify-center">
+              <Vote className="h-8 w-8 text-slate-600" />
+            </div>
+            <h3 className="text-lg font-medium text-white mb-2">No feature requests yet</h3>
+            <p className="text-slate-500">
+              Feature requests submitted through your public project page will appear here.
+            </p>
+            {project?.is_public && project?.public_slug && (
+              <Link
+                href={`/p/${project.public_slug}`}
+                target="_blank"
+                className="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm transition"
+              >
+                View Public Page
+              </Link>
+            )}
+          </div>
+        ) : statusFilter || categoryFilter ? (
+          // Filtered view - show as flat list
+          <div className="space-y-3">
+            {requests.map((request) => (
+              <RequestCard
+                key={request.id}
+                request={request}
+                isAdmin={isAdmin}
+                onStatusChange={handleStatusChange}
+                isUpdating={updatingRequestId === request.id}
+                onClick={() => setSelectedRequest(request)}
+              />
+            ))}
           </div>
         ) : (
-          <div className="flex-1 overflow-hidden flex flex-col">
-            {/* Timeline header */}
-            <div className="flex-shrink-0 border-b border-slate-700 bg-slate-800/30">
-              <div className="flex">
-                {/* Spacer for epic column */}
-                <div className="w-48 flex-shrink-0 px-4 py-2 border-r border-slate-700/50">
-                  <span className="text-xs text-slate-500 uppercase tracking-wider">Epics</span>
-                </div>
+          // Grouped by status view
+          <div className="space-y-8">
+            {(["under_review", "planned", "in_progress", "completed", "declined"] as RoadmapStatus[]).map(
+              (status) => {
+                const statusRequests = groupedRequests[status];
+                if (statusRequests.length === 0) return null;
 
-                {/* Date headers */}
-                <div
-                  ref={scrollContainerRef}
-                  className="flex-1 overflow-x-auto"
-                  style={{ scrollBehavior: "smooth" }}
-                >
-                  <div className="flex relative" style={{ width: `${totalWidth}px` }}>
-                    {dateHeaders.map((date, index) => (
-                      <div
-                        key={index}
-                        className="flex-shrink-0 px-2 py-2 text-center border-r border-slate-700/30"
-                        style={{ width: `${columnWidth}px` }}
-                      >
-                        <span className="text-xs text-slate-400">
-                          {formatDateHeader(date, zoomLevel)}
-                        </span>
-                      </div>
-                    ))}
+                const config = STATUS_CONFIG[status];
+                const Icon = config.icon;
 
-                    {/* Today marker in header */}
-                    <div
-                      className="absolute top-0 bottom-0 w-0.5 bg-primary-500 z-10"
-                      style={{ left: `${todayPosition}px` }}
-                    >
-                      <div className="absolute -top-1 left-1/2 -translate-x-1/2 px-1.5 py-0.5 bg-primary-500 rounded text-[10px] text-white whitespace-nowrap">
-                        Today
-                      </div>
+                return (
+                  <div key={status}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Icon className={cn("h-5 w-5", config.color)} />
+                      <h2 className={cn("font-medium", config.color)}>{config.label}</h2>
+                      <span className="text-xs text-slate-500 bg-slate-800 px-2 py-0.5 rounded-full">
+                        {statusRequests.length}
+                      </span>
+                    </div>
+                    <div className="space-y-3">
+                      {statusRequests.map((request) => (
+                        <RequestCard
+                          key={request.id}
+                          request={request}
+                          isAdmin={isAdmin}
+                          onStatusChange={handleStatusChange}
+                          isUpdating={updatingRequestId === request.id}
+                          onClick={() => setSelectedRequest(request)}
+                        />
+                      ))}
                     </div>
                   </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Swimlanes */}
-            <div className="flex-1 overflow-y-auto">
-              <div className="flex flex-col">
-                {displayEpics.map((epic) => (
-                  <EpicSwimlane
-                    key={epic.id}
-                    epic={epic}
-                    sprints={sprints || []}
-                    timelineStart={timelineStart}
-                    timelineEnd={timelineEnd}
-                    totalWidth={totalWidth}
-                    onSprintClick={setSelectedSprintId}
-                  />
-                ))}
-              </div>
-
-              {/* Empty state */}
-              {(!sprints || sprints.length === 0) && (
-                <div className="text-center py-16">
-                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-slate-800 flex items-center justify-center">
-                    <Layers className="h-8 w-8 text-slate-600" />
-                  </div>
-                  <h3 className="text-lg font-medium text-white mb-2">No sprints yet</h3>
-                  <p className="text-slate-500 mb-4">Create sprints to see them on the roadmap</p>
-                  <Link
-                    href={`/sprints/${projectId}`}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Create Sprint
-                  </Link>
-                </div>
-              )}
-            </div>
+                );
+              }
+            )}
           </div>
         )}
       </main>
 
-      {/* Legend */}
-      <footer className="flex-shrink-0 border-t border-slate-700 bg-slate-800/30 px-4 py-2">
-        <div className="max-w-[1800px] mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <span className="text-xs text-slate-500">Status:</span>
-            {Object.entries(SPRINT_STATUS_COLORS).map(([status, color]) => (
-              <div key={status} className="flex items-center gap-1.5">
-                <div className={cn("w-3 h-3 rounded", color)} />
-                <span className="text-xs text-slate-400 capitalize">{status}</span>
-              </div>
-            ))}
-          </div>
-          <div className="text-xs text-slate-500">
-            Drag sprints to reschedule • Click to view details
-          </div>
-        </div>
-      </footer>
-
-      {/* Sprint detail panel (could be a modal) */}
-      {selectedSprintId && (
-        <motion.div
-          initial={{ opacity: 0, x: 100 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: 100 }}
-          className="fixed right-0 top-0 bottom-0 w-96 bg-slate-800 border-l border-slate-700 shadow-2xl z-40 overflow-y-auto"
-        >
-          <div className="p-4 border-b border-slate-700 flex items-center justify-between">
-            <h3 className="font-medium text-white">Sprint Details</h3>
-            <button
-              onClick={() => setSelectedSprintId(null)}
-              className="p-1 text-slate-400 hover:text-white hover:bg-slate-700 rounded transition"
-            >
-              ✕
-            </button>
-          </div>
-          <div className="p-4">
-            {(() => {
-              const sprint = sprints?.find((s) => s.id === selectedSprintId);
-              if (!sprint) return null;
-
-              const completionRate = sprint.tasks_count > 0
-                ? Math.round((sprint.completed_count / sprint.tasks_count) * 100)
-                : 0;
-
-              return (
-                <div className="space-y-4">
-                  <div>
-                    <h2 className="text-lg font-semibold text-white">{sprint.name}</h2>
-                    <Badge
-                      variant={sprint.status === "active" ? "success" : sprint.status === "planning" ? "info" : "default"}
-                      className="mt-2"
-                    >
-                      {sprint.status}
-                    </Badge>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="p-3 bg-slate-700/50 rounded-lg">
-                      <div className="text-2xl font-bold text-white">{sprint.tasks_count}</div>
-                      <div className="text-xs text-slate-400">Tasks</div>
-                    </div>
-                    <div className="p-3 bg-slate-700/50 rounded-lg">
-                      <div className="text-2xl font-bold text-white">{sprint.total_points}</div>
-                      <div className="text-xs text-slate-400">Points</div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between text-xs text-slate-400 mb-1">
-                      <span>Progress</span>
-                      <span>{completionRate}%</span>
-                    </div>
-                    <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-primary-500 rounded-full"
-                        style={{ width: `${completionRate}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="text-xs text-slate-400">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Calendar className="h-3 w-3" />
-                      {new Date(sprint.start_date).toLocaleDateString()} - {new Date(sprint.end_date).toLocaleDateString()}
-                    </div>
-                  </div>
-
-                  <Link
-                    href={`/sprints/${projectId}/${sprint.id}`}
-                    className="block w-full text-center px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm transition"
-                  >
-                    Open Sprint Board
-                  </Link>
-                </div>
-              );
-            })()}
-          </div>
-        </motion.div>
+      {/* Request Detail Modal */}
+      {selectedRequest && project?.public_slug && (
+        <RequestDetailModal
+          request={selectedRequest}
+          publicSlug={project.public_slug}
+          isAdmin={isAdmin}
+          onClose={() => setSelectedRequest(null)}
+          onStatusChange={(status) => handleStatusChange(selectedRequest.id, status)}
+          isUpdatingStatus={updatingRequestId === selectedRequest.id}
+        />
       )}
     </div>
   );
