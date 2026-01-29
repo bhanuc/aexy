@@ -4,10 +4,14 @@ import logging
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import select, func, and_, or_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from aexy.services.slack_helpers import (
+    NOTIFICATION_CHANNEL_SLACK,
+    check_slack_channel_configured,
+)
 from aexy.models.uptime import (
     UptimeMonitor,
     UptimeCheck,
@@ -81,6 +85,14 @@ class UptimeService:
         now = datetime.now(timezone.utc)
         next_check_at = now + timedelta(seconds=30)  # First check in 30 seconds
 
+        # Auto-add slack to notification_channels if Slack is connected with a channel
+        notification_channels = list(data.notification_channels) if data.notification_channels else []
+        if NOTIFICATION_CHANNEL_SLACK not in notification_channels:
+            has_slack_channel = await check_slack_channel_configured(self.db, workspace_id)
+            if has_slack_channel:
+                notification_channels.append(NOTIFICATION_CHANNEL_SLACK)
+                logger.info(f"Auto-added '{NOTIFICATION_CHANNEL_SLACK}' to notification_channels for new monitor in workspace {workspace_id}")
+
         monitor = UptimeMonitor(
             id=str(uuid4()),
             workspace_id=workspace_id,
@@ -101,7 +113,7 @@ class UptimeService:
             check_interval_seconds=data.check_interval_seconds,
             timeout_seconds=data.timeout_seconds,
             consecutive_failures_threshold=data.consecutive_failures_threshold,
-            notification_channels=data.notification_channels,
+            notification_channels=notification_channels,
             slack_channel_id=data.slack_channel_id,
             webhook_url=data.webhook_url,
             notify_on_recovery=data.notify_on_recovery,
@@ -1282,3 +1294,45 @@ This ticket was automatically closed by the uptime monitoring system.
         )
         result = await self.db.execute(stmt)
         return result.scalar() or 0
+
+    # ==========================================================================
+    # SLACK INTEGRATION HELPERS
+    # ==========================================================================
+
+    async def add_slack_to_monitors(self, workspace_id: str) -> int:
+        """Add 'slack' to notification_channels for all monitors in a workspace.
+
+        Called when a Slack channel is configured to enable notifications
+        for existing monitors. Uses a loop approach since notification_channels
+        is a JSON array that needs element-wise update logic.
+
+        Args:
+            workspace_id: Workspace ID.
+
+        Returns:
+            Number of monitors updated.
+        """
+        # Get all active monitors for this workspace
+        stmt = select(UptimeMonitor).where(
+            UptimeMonitor.workspace_id == workspace_id,
+            UptimeMonitor.is_active == True,
+        )
+        result = await self.db.execute(stmt)
+        monitors = result.scalars().all()
+
+        updated_count = 0
+        for monitor in monitors:
+            channels = list(monitor.notification_channels) if monitor.notification_channels else []
+            if NOTIFICATION_CHANNEL_SLACK not in channels:
+                channels.append(NOTIFICATION_CHANNEL_SLACK)
+                monitor.notification_channels = channels
+                updated_count += 1
+
+        if updated_count > 0:
+            await self.db.flush()
+            logger.info(
+                f"Added '{NOTIFICATION_CHANNEL_SLACK}' to notification_channels "
+                f"for {updated_count} monitors in workspace {workspace_id}"
+            )
+
+        return updated_count

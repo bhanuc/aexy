@@ -5,6 +5,184 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.4] - 2026-01-29
+
+### Added
+
+#### GitHub Intelligence System
+
+A comprehensive intelligence analysis system that extracts insights from GitHub activity to provide developer profiling, burnout detection, expertise tracking, and team collaboration analysis.
+
+**Semantic Commit Analysis:**
+- Conventional commit parsing (feat, fix, refactor, chore, docs, test, style, perf, build, ci)
+- Scope and component extraction from commit messages
+- Breaking change detection from `!` suffix and `BREAKING CHANGE:` footer
+- Commit message quality scoring (0-100)
+- Semantic tag extraction for categorization
+- Optional LLM-enhanced analysis for complex messages
+
+**New Service:** `backend/src/aexy/services/commit_analyzer.py`
+- API: `POST /api/v1/intelligence/commits/analyze`
+- API: `GET /api/v1/intelligence/commits/distribution`
+
+**PR Review Quality Analysis:**
+- Review depth scoring (1-5 scale based on comment length and complexity)
+- Thoroughness classification: cursory, standard, detailed, exhaustive
+- Mentoring behavior detection (explains_why, provides_examples, suggests_alternatives, asks_questions, shares_resources)
+- Review response time calculation
+- Mentoring score aggregation
+
+**New Service:** `backend/src/aexy/services/review_quality_analyzer.py`
+- API: `GET /api/v1/intelligence/reviews/quality`
+- API: `POST /api/v1/intelligence/reviews/analyze`
+- API: `GET /api/v1/intelligence/reviews/response-time`
+
+**Expertise Confidence Intervals:**
+- Logarithmic proficiency scoring based on commit count and lines of code
+- Confidence intervals (0-1) based on data quantity and repo diversity
+- Recency factor with exponential decay (180-day half-life)
+- Depth levels: novice, intermediate, advanced, expert
+- Context classification: production, personal, learning, unknown
+- Repository diversity scoring
+
+**New Service:** `backend/src/aexy/services/expertise_confidence.py`
+- API: `GET /api/v1/intelligence/expertise`
+- API: `POST /api/v1/intelligence/expertise/update`
+- API: `GET /api/v1/intelligence/team/{workspace_id}/expertise/{skill_name}`
+
+**Burnout Risk Indicators:**
+- After-hours commit percentage tracking (before 9am / after 6pm)
+- Weekend work frequency analysis
+- Consecutive high-activity days detection
+- Days since last break calculation
+- Review quality trend analysis
+- Risk levels: low, moderate, high, critical
+- Risk score (0-1) with weighted indicators
+- Trend detection (improving, stable, worsening)
+- Configurable thresholds
+
+**New Service:** `backend/src/aexy/services/burnout_detector.py`
+- API: `GET /api/v1/intelligence/burnout`
+- API: `POST /api/v1/intelligence/burnout/update`
+- API: `GET /api/v1/intelligence/team/{workspace_id}/burnout`
+
+**Collaboration Network Analysis:**
+- Graph-based collaboration mapping from PR reviews
+- Collaboration strength scoring (frequency + recency weighted)
+- Knowledge silo detection for isolated developers
+- Team cohesion scoring with graph density metrics
+- Central connector identification
+- Collaboration diversity scoring
+
+**New Service:** `backend/src/aexy/services/collaboration_network.py`
+- API: `GET /api/v1/intelligence/collaborators`
+- API: `GET /api/v1/intelligence/team/{workspace_id}/collaboration`
+- API: `GET /api/v1/intelligence/team/{workspace_id}/collaboration/graph`
+
+**Project Complexity Classification:**
+- PR complexity levels: trivial, simple, moderate, complex, critical
+- Complexity scoring (0-100) based on files, layers, and components
+- Change categories: feature, bugfix, refactor, documentation, infrastructure, configuration, dependency, test, security, performance
+- Architectural layer detection (api, service, model, repository, ui, infrastructure, config, test)
+- Component extraction from file paths
+- Cross-cutting change detection
+- Infrastructure and migration flagging
+- Security-sensitive file identification
+- Review effort estimation (low, medium, high, very_high)
+- Risk indicator generation
+
+**New Service:** `backend/src/aexy/services/complexity_classifier.py`
+- API: `GET /api/v1/intelligence/complexity`
+- API: `POST /api/v1/intelligence/complexity/analyze`
+- API: `POST /api/v1/intelligence/complexity/update`
+- API: `GET /api/v1/intelligence/team/{workspace_id}/complexity`
+
+**Technology Evolution Tracking:**
+- Framework/library version detection from dependency files
+- Version status classification: current, recent, outdated, deprecated
+- Technology adoption score (0-1)
+- Automated upgrade suggestions with priority
+- Support for 30+ popular technologies (React, Vue, Angular, FastAPI, Django, etc.)
+- Team-wide technology health scoring
+- Critical upgrade identification
+
+**New Service:** `backend/src/aexy/services/technology_tracker.py`
+- API: `GET /api/v1/intelligence/technology`
+- API: `POST /api/v1/intelligence/technology/update`
+- API: `GET /api/v1/intelligence/team/{workspace_id}/technology`
+
+**Full Analysis Endpoint:**
+- API: `POST /api/v1/intelligence/analyze-all` - Runs all analysis types in one call
+
+**Database Migration:**
+- New migration: `backend/scripts/migrate_github_intelligence.sql`
+- Added `semantic_analysis` JSONB column to commits table
+- Added `quality_metrics` JSONB column to code_reviews table
+- Added `expertise_confidence` JSONB column to developers table
+- Added `burnout_indicators` JSONB column to developers table
+- Added `last_intelligence_analysis_at` timestamp to developers table
+- Added `complexity_analysis` JSONB column to pull_requests table
+- Created `developer_collaborations` table for collaboration graph storage
+
+**New API Router:**
+- `backend/src/aexy/api/intelligence.py` with 22 endpoints
+
+## [0.4.4] - 2026-01-29
+
+### Fixed
+
+#### Slack Notification Bug for Uptime Monitors
+
+Fixed an issue where Slack notifications were not being sent for uptime monitor incidents when the monitor didn't have a specific `slack_channel_id` configured.
+
+**Root Cause:**
+- Notifications required `monitor.slack_channel_id` to be set, but most monitors relied on the workspace's default Slack channel configuration
+- The code didn't fall back to looking up the workspace's configured Slack channel from `slack_channel_configs`
+
+**Changes:**
+- Added fallback logic to look up workspace notification channel when monitor-specific channel is not set
+- Auto-add `slack` to `notification_channels` when creating new monitors if Slack is configured for the workspace
+- Auto-add `slack` to existing monitors when a Slack channel is first configured for a workspace
+
+### Improved
+
+#### Code Quality & Maintainability
+
+**Centralized Slack Integration Helpers:**
+- Created new `backend/src/aexy/services/slack_helpers.py` module with shared functions:
+  - `get_slack_integration_for_workspace()` - finds integration by workspace/org ID
+  - `get_slack_channel_config()` - gets channel config for an integration
+  - `get_workspace_notification_channel()` - combines both to get channel ID
+  - `check_slack_channel_configured()` - boolean check for Slack setup
+- Removed duplicated Slack lookup logic from `uptime_service.py` and `uptime_tasks.py`
+
+**Added Constants for Notification Channels:**
+- `NOTIFICATION_CHANNEL_SLACK = "slack"`
+- `NOTIFICATION_CHANNEL_WEBHOOK = "webhook"`
+- `NOTIFICATION_CHANNEL_TICKET = "ticket"`
+- Replaced magic strings throughout the codebase
+
+**Improved Type Safety:**
+- Added proper type hints (`db: AsyncSession`) to notification helper functions
+- Added return type annotations to `_send_slack_notification()`
+
+**Better Exception Handling:**
+- Changed broad `Exception` catches to specific `SQLAlchemyError` for database operations
+- Added specific `HTTPError` handling for Slack API calls
+- Added explicit timeout (30s) to HTTP client for Slack notifications
+
+**Graceful Error Handling:**
+- Wrapped `add_slack_to_monitors()` call in try/except to prevent channel configuration failures if monitor update fails
+- Logs warning but doesn't fail the primary operation
+
+**Files Changed:**
+- `backend/src/aexy/services/slack_helpers.py` (new)
+- `backend/src/aexy/services/uptime_service.py`
+- `backend/src/aexy/processing/uptime_tasks.py`
+- `backend/src/aexy/api/slack.py`
+
+---
+
 ## [0.4.2] - 2026-01-25
 
 ### Added
