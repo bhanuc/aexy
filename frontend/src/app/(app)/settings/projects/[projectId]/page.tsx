@@ -133,23 +133,15 @@ export default function ProjectSettingsPage() {
     }
   };
 
-  // Initialize form when project loads
-  useState(() => {
-    if (project) {
+  // Initialize form when project loads or changes
+  useEffect(() => {
+    if (project && !hasChanges) {
       setName(project.name);
       setDescription(project.description || "");
       setColor(project.color);
       setStatus(project.status);
     }
-  });
-
-  // Update form when project changes
-  if (project && name === "" && !hasChanges) {
-    setName(project.name);
-    setDescription(project.description || "");
-    setColor(project.color);
-    setStatus(project.status);
-  }
+  }, [project, hasChanges]);
 
   const currentMember = workspaceMembers.find((m) => m.developer_id === user?.id);
   const isAdmin = currentMember?.role === "owner" || currentMember?.role === "admin";

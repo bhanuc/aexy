@@ -5,7 +5,6 @@ import {
   ChevronUp,
   MessageSquare,
   Plus,
-  Filter,
   Lightbulb,
   Zap,
   Link2,
@@ -18,9 +17,12 @@ import {
   Send,
   Github,
   ArrowRight,
+  AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 import {
   publicProjectApi,
+  authApi,
   RoadmapRequest,
   RoadmapComment,
   RoadmapCategory,
@@ -28,6 +30,7 @@ import {
 } from "@/lib/api";
 import { LoadingSpinner, EmptyState } from "./shared";
 import { GoogleIcon } from "@/app/page";
+import { Pagination } from "@/components/ui/pagination";
 
 interface RoadmapTabProps {
   publicSlug: string;
@@ -49,14 +52,12 @@ const STATUS_CONFIG: Record<RoadmapStatus, { label: string; icon: typeof Clock; 
   completed: { label: "Completed", icon: CheckCircle2, color: "text-green-400" },
   declined: { label: "Declined", icon: XCircle, color: "text-red-400" },
 };
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 function getLoginUrls() {
-  const redirectUrl = typeof window !== "undefined" ? window.location.href : "";
-  const encodedRedirect = encodeURIComponent(redirectUrl);
+  const redirectUrl = typeof window !== "undefined" ? window.location.href : undefined;
   return {
-    github: `${API_BASE_URL}/auth/github/login?redirect_url=${encodedRedirect}`,
-    google: `${API_BASE_URL}/auth/google/login?redirect_url=${encodedRedirect}`,
+    github: authApi.getGitHubLoginUrl(redirectUrl),
+    google: authApi.getGoogleLoginUrl(redirectUrl),
   };
 }
 function RequestCard({
@@ -163,27 +164,42 @@ function CommentsModal({
 }) {
   const [comments, setComments] = useState<RoadmapComment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [newComment, setNewComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const loginUrls = getLoginUrls();
 
+  const loadComments = async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const data = await publicProjectApi.getRoadmapComments(publicSlug, request.id);
+      setComments(data);
+    } catch (err) {
+      console.error("Failed to load comments:", err);
+      setLoadError("Failed to load comments.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    publicProjectApi
-      .getRoadmapComments(publicSlug, request.id)
-      .then(setComments)
-      .finally(() => setIsLoading(false));
+    loadComments();
   }, [publicSlug, request.id]);
 
   const handleSubmitComment = async () => {
     if (!newComment.trim() || !isAuthenticated) return;
 
     setIsSubmitting(true);
+    setSubmitError(null);
     try {
       const comment = await publicProjectApi.createRoadmapComment(publicSlug, request.id, newComment);
       setComments([...comments, comment]);
       setNewComment("");
-    } catch (error) {
-      console.error("Failed to submit comment:", error);
+    } catch (err) {
+      console.error("Failed to submit comment:", err);
+      setSubmitError("Failed to post comment. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -206,6 +222,20 @@ function CommentsModal({
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+            </div>
+          ) : loadError ? (
+            <div className="flex flex-col items-center justify-center py-8 space-y-3">
+              <div className="flex items-center gap-2 text-red-400">
+                <AlertCircle className="h-5 w-5" />
+                <span>{loadError}</span>
+              </div>
+              <button
+                onClick={loadComments}
+                className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm transition"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Retry
+              </button>
             </div>
           ) : comments.length === 0 ? (
             <p className="text-center text-slate-500 py-8">No comments yet. Be the first to comment!</p>
@@ -238,22 +268,30 @@ function CommentsModal({
         {/* Comment input */}
         <div className="p-4 border-t border-slate-700">
           {isAuthenticated ? (
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                placeholder="Add a comment..."
-                className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-primary-500"
-                onKeyDown={(e) => e.key === "Enter" && handleSubmitComment()}
-              />
-              <button
-                onClick={handleSubmitComment}
-                disabled={!newComment.trim() || isSubmitting}
-                className="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition"
-              >
-                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              </button>
+            <div className="space-y-2">
+              {submitError && (
+                <div className="flex items-center gap-2 text-red-400 text-sm">
+                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                  {submitError}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  placeholder="Add a comment..."
+                  className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-primary-500"
+                  onKeyDown={(e) => e.key === "Enter" && handleSubmitComment()}
+                />
+                <button
+                  onClick={handleSubmitComment}
+                  disabled={!newComment.trim() || isSubmitting}
+                  className="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition"
+                >
+                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
           ) : (
             <div className="flex flex-col sm:flex-row justify-center gap-4">
@@ -312,8 +350,8 @@ function CreateRequestModal({
       });
       onCreated(request);
       onClose();
-    } catch (err) {
-      setError("Failed to create request. Please try again.");
+    } catch (err:any) {
+      setError(err?.response.data.detail[0].msg || "Failed to create request. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -406,40 +444,56 @@ function CreateRequestModal({
   );
 }
 
+const PAGE_SIZE = 10;
+
 export function RoadmapTab({ publicSlug, isAuthenticated = false }: RoadmapTabProps) {
   const [requests, setRequests] = useState<RoadmapRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [voteError, setVoteError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<"votes" | "newest" | "oldest">("votes");
   const [statusFilter, setStatusFilter] = useState<RoadmapStatus | "">("");
   const [categoryFilter, setCategoryFilter] = useState<RoadmapCategory | "">("");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<RoadmapRequest | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
   const loginUrls = getLoginUrls();
-  
 
-  const loadRequests = async () => {
+  const loadRequests = async (page: number = currentPage) => {
     setIsLoading(true);
+    setError(null);
     try {
       const data = await publicProjectApi.getRoadmapRequests(publicSlug, {
         sortBy,
         status: statusFilter || undefined,
         category: categoryFilter || undefined,
+        page,
+        pageSize: PAGE_SIZE,
       });
-      setRequests(data);
-    } catch (error) {
-      console.error("Failed to load roadmap requests:", error);
+      setRequests(data.items);
+      setTotalPages(data.total_pages);
+      setTotalItems(data.total);
+      setCurrentPage(data.page);
+    } catch (err) {
+      console.error("Failed to load roadmap requests:", err);
+      setError("Failed to load requests. Please try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Reset to page 1 when filters change
   useEffect(() => {
-    loadRequests();
+    setCurrentPage(1);
+    loadRequests(1);
   }, [publicSlug, sortBy, statusFilter, categoryFilter]);
 
   const handleVote = async (request: RoadmapRequest) => {
     if (!isAuthenticated) return;
 
+    setVoteError(null);
     try {
       const result = await publicProjectApi.voteRoadmapRequest(publicSlug, request.id);
       setRequests((prev) =>
@@ -449,19 +503,56 @@ export function RoadmapTab({ publicSlug, isAuthenticated = false }: RoadmapTabPr
             : r
         )
       );
-    } catch (error) {
-      console.error("Failed to vote:", error);
+    } catch (err) {
+      console.error("Failed to vote:", err);
+      setVoteError("Failed to register vote. Please try again.");
+      // Auto-dismiss after 3 seconds
+      setTimeout(() => setVoteError(null), 3000);
     }
   };
 
   const handleCreated = (newRequest: RoadmapRequest) => {
-    setRequests((prev) => [newRequest, ...prev]);
+    // Go to page 1 to show the new request at the top
+    setCurrentPage(1);
+    loadRequests(1);
+  };
+
+  const goToPage = (page: number) => {
+    if (page >= 1 && page <= totalPages && page !== currentPage) {
+      loadRequests(page);
+    }
   };
 
   if (isLoading) return <LoadingSpinner />;
 
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 space-y-4">
+        <div className="flex items-center gap-2 text-red-400">
+          <AlertCircle className="h-6 w-6" />
+          <span className="text-lg font-medium">{error}</span>
+        </div>
+        <button
+          onClick={()=>loadRequests(1)}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition"
+        >
+          <RefreshCw className="h-4 w-4" />
+          Try Again
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
+      {/* Vote error toast */}
+      {voteError && (
+        <div className="fixed bottom-4 right-4 z-50 flex items-center gap-2 px-4 py-3 bg-red-900/90 border border-red-700 rounded-lg text-red-200 text-sm shadow-lg animate-in slide-in-from-bottom-2">
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          {voteError}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2 flex-wrap">
@@ -555,6 +646,15 @@ export function RoadmapTab({ publicSlug, isAuthenticated = false }: RoadmapTabPr
           ))}
         </div>
       )}
+
+      {/* Pagination */}
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={totalItems}
+        onPageChange={goToPage}
+        className="pt-4"
+      />
 
       {/* Status legend */}
       <div className="flex items-center justify-center gap-4 pt-4 flex-wrap">

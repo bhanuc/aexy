@@ -35,8 +35,14 @@ api.interceptors.response.use(
 
 // Auth API
 export const authApi = {
-  getGitHubLoginUrl: () => `${API_BASE_URL}/auth/github/login`,
-  getGoogleLoginUrl: () => `${API_BASE_URL}/auth/google/login`,
+  getGitHubLoginUrl: (redirectUrl?: string) => {
+    const base = `${API_BASE_URL}/auth/github/login`;
+    return redirectUrl ? `${base}?redirect_url=${encodeURIComponent(redirectUrl)}` : base;
+  },
+  getGoogleLoginUrl: (redirectUrl?: string) => {
+    const base = `${API_BASE_URL}/auth/google/login`;
+    return redirectUrl ? `${base}?redirect_url=${encodeURIComponent(redirectUrl)}` : base;
+  },
 };
 
 // Developer API
@@ -10073,7 +10079,16 @@ export interface RoadmapRequest {
   admin_response: string | null;
   responded_at: string | null;
   created_at: string;
+  updated_at: string;
   has_voted: boolean;
+}
+
+export interface PaginatedRoadmapRequests {
+  items: RoadmapRequest[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
 }
 
 export interface RoadmapComment {
@@ -10185,17 +10200,17 @@ export const publicProjectApi = {
       status?: RoadmapStatus;
       category?: RoadmapCategory;
       sortBy?: "votes" | "newest" | "oldest";
-      limit?: number;
-      offset?: number;
+      page?: number;
+      pageSize?: number;
     }
-  ): Promise<RoadmapRequest[]> => {
+  ): Promise<PaginatedRoadmapRequests> => {
     const response = await api.get(`/public/projects/${publicSlug}/roadmap-requests`, {
       params: {
         status: options?.status,
         category: options?.category,
         sort_by: options?.sortBy || "votes",
-        limit: options?.limit || 50,
-        offset: options?.offset || 0,
+        page: options?.page || 1,
+        page_size: options?.pageSize || 10,
       },
     });
     return response.data;
