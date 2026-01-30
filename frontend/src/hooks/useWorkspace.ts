@@ -9,6 +9,7 @@ const CURRENT_WORKSPACE_KEY = "current_workspace_id";
 export function useWorkspace() {
   const queryClient = useQueryClient();
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Load current workspace ID from localStorage on mount
   useEffect(() => {
@@ -17,6 +18,7 @@ export function useWorkspace() {
       if (stored) {
         setCurrentWorkspaceId(stored);
       }
+      setIsInitialized(true);
     }
   }, []);
 
@@ -34,16 +36,19 @@ export function useWorkspace() {
   });
 
   // Auto-select first workspace if none selected and workspaces are loaded
+  // Wait for isInitialized to ensure localStorage has been checked first
   useEffect(() => {
+    if (!isInitialized) return;
     if (workspaces && workspaces.length > 0 && !currentWorkspaceId) {
       const firstWorkspace = workspaces[0];
       setCurrentWorkspaceId(firstWorkspace.id);
       localStorage.setItem(CURRENT_WORKSPACE_KEY, firstWorkspace.id);
     }
-  }, [workspaces, currentWorkspaceId]);
+  }, [workspaces, currentWorkspaceId, isInitialized]);
 
   // Verify stored workspace ID is valid
   useEffect(() => {
+    if (!isInitialized) return;
     if (workspaces && currentWorkspaceId) {
       const exists = workspaces.some((w) => w.id === currentWorkspaceId);
       if (!exists && workspaces.length > 0) {
@@ -53,7 +58,7 @@ export function useWorkspace() {
         localStorage.setItem(CURRENT_WORKSPACE_KEY, firstWorkspace.id);
       }
     }
-  }, [workspaces, currentWorkspaceId]);
+  }, [workspaces, currentWorkspaceId, isInitialized]);
 
   // Fetch current workspace details
   const {

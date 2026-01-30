@@ -8914,6 +8914,7 @@ export interface GoogleIntegrationStatus {
   google_email: string | null;
   gmail_sync_enabled: boolean;
   calendar_sync_enabled: boolean;
+  auto_sync_interval_minutes: number; // 0 = disabled, >0 = interval in minutes
   gmail_last_sync_at: string | null;
   calendar_last_sync_at: string | null;
   messages_synced: number;
@@ -9025,6 +9026,7 @@ export const googleIntegrationApi = {
     settings: {
       gmail_sync_enabled?: boolean;
       calendar_sync_enabled?: boolean;
+      auto_sync_interval_minutes?: number;
       sync_settings?: Record<string, unknown>;
     }
   ): Promise<GoogleIntegrationStatus> => {

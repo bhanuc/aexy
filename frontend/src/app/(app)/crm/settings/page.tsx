@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -373,6 +373,8 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
   const [showDealSettings, setShowDealSettings] = useState(false);
   const [newKeyword, setNewKeyword] = useState("");
   const [newDomain, setNewDomain] = useState("");
+  const [customIntervalInput, setCustomIntervalInput] = useState<string>("");
+  const skipDebounceRef = useRef(false);
 
   // Check for callback status
   useEffect(() => {
@@ -405,6 +407,7 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
         }
 
         setStatus(data);
+        setCustomIntervalInput(String(data.auto_sync_interval_minutes || 0));
         if (data.sync_settings?.deal_settings) {
           setDealSettings({ ...DEFAULT_DEAL_SETTINGS, ...data.sync_settings.deal_settings });
         }
@@ -416,6 +419,23 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
     };
     fetchStatus();
   }, [workspaceId]);
+
+  // Debounce custom interval input
+  useEffect(() => {
+    if (!status) return;
+    if (skipDebounceRef.current) {
+      skipDebounceRef.current = false;
+      return;
+    }
+    const value = parseInt(customIntervalInput) || 0;
+    if (value < 0 || value === status.auto_sync_interval_minutes) return;
+
+    const timeoutId = setTimeout(() => {
+      handleUpdateSettings({ auto_sync_interval_minutes: value });
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [customIntervalInput]);
 
   const handleConnect = async () => {
     if (!workspaceId) return;
@@ -474,7 +494,7 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
     }
   };
 
-  const handleUpdateSettings = async (settings: { gmail_sync_enabled?: boolean; calendar_sync_enabled?: boolean }) => {
+  const handleUpdateSettings = async (settings: { gmail_sync_enabled?: boolean; calendar_sync_enabled?: boolean; auto_sync_interval_minutes?: number }) => {
     if (!workspaceId) return;
     try {
       const newStatus = await googleIntegrationApi.updateSettings(workspaceId, settings);
@@ -668,6 +688,69 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                   </button>
                 </div>
               </div>
+
+              {/* Auto-Sync Interval */}
+              {status.gmail_sync_enabled && (
+                <div className="ml-14 pl-4 border-l-2 border-slate-700 space-y-3">
+                  <div>
+                    <h4 className="font-medium text-white text-sm">Auto-Sync Schedule</h4>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Automatically sync emails at a regular interval (minimum 1 minute)
+                    </p>
+                  </div>
+
+                  {/* Quick preset buttons */}
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { value: 0, label: "Off" },
+                      { value: 5, label: "5m" },
+                      { value: 15, label: "15m" },
+                      { value: 30, label: "30m" },
+                      { value: 60, label: "1h" },
+                      { value: 1440, label: "24h" },
+                    ].map((preset) => (
+                      <button
+                        key={preset.value}
+                        onClick={() => {
+                          skipDebounceRef.current = true;
+                          setCustomIntervalInput(String(preset.value));
+                          handleUpdateSettings({ auto_sync_interval_minutes: preset.value });
+                        }}
+                        className={`px-3 py-1 text-xs rounded-lg transition-colors ${
+                          status.auto_sync_interval_minutes === preset.value
+                            ? "bg-blue-500 text-white"
+                            : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Custom input */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400">Or enter custom:</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={customIntervalInput}
+                      onChange={(e) => {
+                        setCustomIntervalInput(e.target.value);
+                      }}
+                      className="w-20 px-2 py-1 text-sm bg-slate-700 border border-slate-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="text-xs text-slate-400">minutes</span>
+                  </div>
+
+                  {status.auto_sync_interval_minutes > 0 && (
+                    <p className="text-xs text-blue-400 flex items-center gap-1">
+                      <RefreshCw className="w-3 h-3" />
+                      Auto-syncing every {status.auto_sync_interval_minutes} minute{status.auto_sync_interval_minutes !== 1 ? 's' : ''}
+                      {status.auto_sync_interval_minutes >= 60 && ` (${Math.floor(status.auto_sync_interval_minutes / 60)}h ${status.auto_sync_interval_minutes % 60}m)`}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Calendar Sync */}
               <div className="flex items-start justify-between">

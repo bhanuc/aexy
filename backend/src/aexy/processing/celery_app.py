@@ -204,5 +204,10 @@ celery_app.conf.update(
             "task": "aexy.processing.uptime_tasks.cleanup_old_checks",
             "schedule": 3600 * 24,  # Daily - keep 30 days
         },
+        # Google Gmail Auto-Sync
+        "check-gmail-auto-sync": {
+            "task": "aexy.processing.google_sync_tasks.check_auto_sync_integrations",
+            "schedule": 60,  # Every minute - checks which integrations need syncing
+        },
     },
 )
