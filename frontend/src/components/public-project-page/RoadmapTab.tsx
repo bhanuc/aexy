@@ -350,8 +350,14 @@ function CreateRequestModal({
       });
       onCreated(request);
       onClose();
-    } catch (err:any) {
-      setError(err?.response.data.detail[0].msg || "Failed to create request. Please try again.");
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { detail?: unknown } } };
+      const detail = axiosErr?.response?.data?.detail;
+      const msg =
+        (Array.isArray(detail) ? detail[0]?.msg : null) ??
+        (typeof detail === "string" ? detail : null) ??
+        "Failed to create request. Please try again.";
+      setError(msg);
     } finally {
       setIsSubmitting(false);
     }

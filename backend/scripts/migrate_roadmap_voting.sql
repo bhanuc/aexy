@@ -1,5 +1,17 @@
 -- Migration script for Roadmap Voting feature
 -- Creates tables for feature requests, votes, and comments on public project pages
+--
+-- USAGE:
+-- This is a standalone SQL migration. Use this file when:
+--   - Running migrations via scripts/run_migrations.py
+--   - Applying migrations directly to PostgreSQL
+--
+-- For Alembic users:
+--   Use alembic/versions/61fd11a7e0ea_add_public_project_visibility.py instead,
+--   which handles the project visibility columns (is_public, public_slug).
+--   The roadmap voting tables below should be added as a separate Alembic migration
+--   if using the Alembic workflow.
+--
 
 -- ============================================================================
 -- Roadmap Requests Table
