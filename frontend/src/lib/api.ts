@@ -35,8 +35,14 @@ api.interceptors.response.use(
 
 // Auth API
 export const authApi = {
-  getGitHubLoginUrl: () => `${API_BASE_URL}/auth/github/login`,
-  getGoogleLoginUrl: () => `${API_BASE_URL}/auth/google/login`,
+  getGitHubLoginUrl: (redirectUrl?: string) => {
+    const base = `${API_BASE_URL}/auth/github/login`;
+    return redirectUrl ? `${base}?redirect_url=${encodeURIComponent(redirectUrl)}` : base;
+  },
+  getGoogleLoginUrl: (redirectUrl?: string) => {
+    const base = `${API_BASE_URL}/auth/google/login`;
+    return redirectUrl ? `${base}?redirect_url=${encodeURIComponent(redirectUrl)}` : base;
+  },
 };
 
 // Developer API
@@ -9689,6 +9695,8 @@ export interface Project {
   name: string;
   slug: string;
   description: string | null;
+  is_public: boolean;
+  public_slug: string | null;
   color: string;
   icon: string;
   settings: Record<string, unknown>;
@@ -9934,6 +9942,341 @@ export const projectApi = {
     const response = await api.get(`/workspaces/${workspaceId}/projects/${projectId}/accessible-widgets`);
     return response.data;
   },
+
+  // Toggle project visibility (public/private)
+  toggleVisibility: async (workspaceId: string, projectId: string): Promise<Project> => {
+    const response = await api.post(`/workspaces/${workspaceId}/projects/${projectId}/toggle-visibility`);
+    return response.data;
+  },
+};
+
+// Public Project Types (no auth required)
+export interface PublicProject {
+  id: string;
+  name: string;
+  slug: string;
+  public_slug: string | null;
+  description: string | null;
+  color: string;
+  icon: string;
+  status: ProjectStatus;
+  member_count: number;
+  team_count: number;
+  public_tabs: string[];
+  created_at: string;
+}
+
+export interface PublicTabsConfig {
+  enabled_tabs: string[];
+}
+
+export interface PublicTaskItem {
+  id: string;
+  title: string;
+  description: string | null;
+  priority: string;
+  status: string;
+  labels: string[];
+  story_points: number | null;
+  created_at: string;
+}
+
+export interface PublicStoryItem {
+  id: string;
+  key: string;
+  title: string;
+  as_a: string;
+  i_want: string;
+  so_that: string | null;
+  priority: string;
+  status: string;
+  story_points: number | null;
+  labels: string[];
+  created_at: string;
+}
+
+export interface PublicBugItem {
+  id: string;
+  key: string;
+  title: string;
+  severity: string;
+  priority: string;
+  bug_type: string;
+  status: string;
+  is_regression: boolean;
+  labels: string[];
+  created_at: string;
+}
+
+export interface PublicGoalItem {
+  id: string;
+  key: string;
+  title: string;
+  description: string | null;
+  goal_type: string;
+  status: string;
+  progress_percentage: number;
+  target_value: number | null;
+  current_value: number | null;
+  start_date: string | null;
+  end_date: string | null;
+}
+
+export interface PublicReleaseItem {
+  id: string;
+  name: string;
+  version: string | null;
+  description: string | null;
+  status: string;
+  risk_level: string;
+  target_date: string | null;
+  actual_release_date: string | null;
+  created_at: string;
+}
+
+export interface PublicRoadmapItem {
+  id: string;
+  name: string;
+  goal: string | null;
+  status: string;
+  start_date: string;
+  end_date: string;
+  tasks_count: number;
+  completed_count: number;
+  total_points: number;
+  completed_points: number;
+}
+
+export interface PublicSprintItem {
+  id: string;
+  name: string;
+  goal: string | null;
+  status: string;
+  start_date: string;
+  end_date: string;
+  tasks_count: number;
+  completed_count: number;
+  total_points: number;
+  completed_points: number;
+}
+
+// Roadmap Voting Types
+export interface RoadmapRequestAuthor {
+  id: string;
+  name: string | null;
+  avatar_url: string | null;
+}
+
+export interface RoadmapRequest {
+  id: string;
+  title: string;
+  description: string | null;
+  category: string;
+  status: string;
+  vote_count: number;
+  comment_count: number;
+  submitted_by: RoadmapRequestAuthor;
+  admin_response: string | null;
+  responded_at: string | null;
+  created_at: string;
+  updated_at: string;
+  has_voted: boolean;
+}
+
+export interface PaginatedRoadmapRequests {
+  items: RoadmapRequest[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface RoadmapComment {
+  id: string;
+  content: string;
+  author: RoadmapRequestAuthor;
+  is_admin_response: boolean;
+  created_at: string;
+}
+
+export interface RoadmapVoteResponse {
+  success: boolean;
+  vote_count: number;
+  has_voted: boolean;
+}
+
+export type RoadmapCategory = "feature" | "improvement" | "integration" | "bug_fix" | "other";
+export type RoadmapStatus = "under_review" | "planned" | "in_progress" | "completed" | "declined";
+
+export interface PublicBoardData {
+  todo: PublicTaskItem[];
+  in_progress: PublicTaskItem[];
+  review: PublicTaskItem[];
+  done: PublicTaskItem[];
+}
+
+// Public Projects API (no auth required)
+export const publicProjectApi = {
+  // Get a public project by its public slug
+  getByPublicSlug: async (publicSlug: string): Promise<PublicProject> => {
+    const response = await api.get(`/public/projects/${publicSlug}`);
+    return response.data;
+  },
+
+  // Get backlog items
+  getBacklog: async (publicSlug: string, limit = 50, offset = 0): Promise<PublicTaskItem[]> => {
+    const response = await api.get(`/public/projects/${publicSlug}/backlog`, {
+      params: { limit, offset },
+    });
+    return response.data;
+  },
+
+  // Get board data
+  getBoard: async (publicSlug: string): Promise<PublicBoardData> => {
+    const response = await api.get(`/public/projects/${publicSlug}/board`);
+    return response.data;
+  },
+
+  // Get stories
+  getStories: async (publicSlug: string, limit = 50, offset = 0): Promise<PublicStoryItem[]> => {
+    const response = await api.get(`/public/projects/${publicSlug}/stories`, {
+      params: { limit, offset },
+    });
+    return response.data;
+  },
+
+  // Get bugs
+  getBugs: async (publicSlug: string, limit = 50, offset = 0): Promise<PublicBugItem[]> => {
+    const response = await api.get(`/public/projects/${publicSlug}/bugs`, {
+      params: { limit, offset },
+    });
+    return response.data;
+  },
+
+  // Get goals
+  getGoals: async (publicSlug: string, limit = 50, offset = 0): Promise<PublicGoalItem[]> => {
+    const response = await api.get(`/public/projects/${publicSlug}/goals`, {
+      params: { limit, offset },
+    });
+    return response.data;
+  },
+
+  // Get releases
+  getReleases: async (publicSlug: string, limit = 50, offset = 0): Promise<PublicReleaseItem[]> => {
+    const response = await api.get(`/public/projects/${publicSlug}/releases`, {
+      params: { limit, offset },
+    });
+    return response.data;
+  },
+
+  // Get roadmap (sprints) - legacy endpoint
+  getRoadmap: async (publicSlug: string, limit = 50, offset = 0): Promise<PublicRoadmapItem[]> => {
+    const response = await api.get(`/public/projects/${publicSlug}/roadmap`, {
+      params: { limit, offset },
+    });
+    return response.data;
+  },
+
+  // Get timeline (sprint timeline view)
+  getTimeline: async (publicSlug: string, limit = 50, offset = 0): Promise<PublicSprintItem[]> => {
+    const response = await api.get(`/public/projects/${publicSlug}/timeline`, {
+      params: { limit, offset },
+    });
+    return response.data;
+  },
+
+  // Get sprints
+  getSprints: async (publicSlug: string, limit = 50, offset = 0): Promise<PublicSprintItem[]> => {
+    const response = await api.get(`/public/projects/${publicSlug}/sprints`, {
+      params: { limit, offset },
+    });
+    return response.data;
+  },
+
+  // Roadmap Voting API
+  getRoadmapRequests: async (
+    publicSlug: string,
+    options?: {
+      status?: RoadmapStatus;
+      category?: RoadmapCategory;
+      sortBy?: "votes" | "newest" | "oldest";
+      page?: number;
+      pageSize?: number;
+    }
+  ): Promise<PaginatedRoadmapRequests> => {
+    const response = await api.get(`/public/projects/${publicSlug}/roadmap-requests`, {
+      params: {
+        status: options?.status,
+        category: options?.category,
+        sort_by: options?.sortBy || "votes",
+        page: options?.page || 1,
+        page_size: options?.pageSize || 10,
+      },
+    });
+    return response.data;
+  },
+
+  getRoadmapRequest: async (publicSlug: string, requestId: string): Promise<RoadmapRequest> => {
+    const response = await api.get(`/public/projects/${publicSlug}/roadmap-requests/${requestId}`);
+    return response.data;
+  },
+
+  createRoadmapRequest: async (
+    publicSlug: string,
+    data: { title: string; description?: string; category?: RoadmapCategory }
+  ): Promise<RoadmapRequest> => {
+    const response = await api.post(`/public/projects/${publicSlug}/roadmap-requests`, data);
+    return response.data;
+  },
+
+  voteRoadmapRequest: async (publicSlug: string, requestId: string): Promise<RoadmapVoteResponse> => {
+    const response = await api.post(`/public/projects/${publicSlug}/roadmap-requests/${requestId}/vote`);
+    return response.data;
+  },
+
+  getRoadmapComments: async (
+    publicSlug: string,
+    requestId: string,
+    limit = 50,
+    offset = 0
+  ): Promise<RoadmapComment[]> => {
+    const response = await api.get(`/public/projects/${publicSlug}/roadmap-requests/${requestId}/comments`, {
+      params: { limit, offset },
+    });
+    return response.data;
+  },
+
+  createRoadmapComment: async (
+    publicSlug: string,
+    requestId: string,
+    content: string
+  ): Promise<RoadmapComment> => {
+    const response = await api.post(`/public/projects/${publicSlug}/roadmap-requests/${requestId}/comments`, {
+      content,
+    });
+    return response.data;
+  },
+};
+
+// Project public tabs configuration API (authenticated)
+export const projectTabsApi = {
+  // Get public tabs configuration
+  getPublicTabs: async (workspaceId: string, projectId: string): Promise<PublicTabsConfig> => {
+    const response = await api.get(`/workspaces/${workspaceId}/projects/${projectId}/public-tabs`);
+    return response.data;
+  },
+
+  // Update public tabs configuration
+  updatePublicTabs: async (
+    workspaceId: string,
+    projectId: string,
+    enabledTabs: string[]
+  ): Promise<PublicTabsConfig> => {
+    const response = await api.put(`/workspaces/${workspaceId}/projects/${projectId}/public-tabs`, {
+      enabled_tabs: enabledTabs,
+    });
+    return response.data;
+  },
 };
 
 // ============ User Stories Types ============
@@ -9958,6 +10301,8 @@ export interface UserStory {
   so_that?: string;
   description?: string;
   acceptance_criteria: AcceptanceCriterion[];
+  acceptance_criteria_completed?:number;
+  acceptance_criteria_count?:number;
   story_points?: number;
   priority: StoryPriority;
   status: StoryStatus;
@@ -10192,7 +10537,7 @@ export const releasesApi = {
     required_items: number;
     required_completed: number;
     is_ready: boolean;
-    readiness_percentage: number;
+    story_readiness_percentage: number;
   }> => {
     const response = await api.get(`/workspaces/${workspaceId}/releases/${releaseId}/readiness`);
     return response.data;
