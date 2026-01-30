@@ -7,3 +7,4 @@ export { TicketStatsWidget } from "./TicketStatsWidget";
 export { SprintOverviewWidget } from "./SprintOverviewWidget";
 export { TrackingSummaryWidget } from "./TrackingSummaryWidget";
 export { CRMPipelineWidget } from "./CRMPipelineWidget";
+export { AIAgentsWidget } from "./AIAgentsWidget";

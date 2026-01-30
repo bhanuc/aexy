@@ -40,6 +40,7 @@ import {
     MonitorCheck,
     AlertTriangle,
     History,
+    Bot,
 } from "lucide-react";
 
 export type SidebarLayoutType = "grouped" | "flat";
@@ -118,6 +119,11 @@ const uptimeItems: SidebarItemConfig[] = [
     { href: "/uptime/monitors", label: "Monitors", icon: MonitorCheck },
     { href: "/uptime/incidents", label: "Incidents", icon: AlertTriangle },
     { href: "/uptime/history", label: "History", icon: History },
+];
+
+const aiAgentsItems: SidebarItemConfig[] = [
+    { href: "/agents", label: "All Agents", icon: Bot },
+    { href: "/agents/new", label: "Create Agent", icon: UserPlus },
 ];
 
 /**
@@ -212,6 +218,18 @@ export const GROUPED_LAYOUT: SidebarLayoutConfig = {
                 { href: "/forms", label: "Forms", icon: FormInput },
             ],
         },
+        {
+            id: "ai",
+            label: "AI",
+            items: [
+                {
+                    href: "/agents",
+                    label: "AI Agents",
+                    icon: Bot,
+                    items: aiAgentsItems,
+                },
+            ],
+        },
     ],
 };
 
@@ -271,6 +289,12 @@ export const FLAT_LAYOUT: SidebarLayoutConfig = {
                     label: "Booking",
                     icon: CalendarCheck,
                     items: bookingItems,
+                },
+                {
+                    href: "/agents",
+                    label: "AI Agents",
+                    icon: Bot,
+                    items: aiAgentsItems,
                 },
                 { href: "/learning", label: "Learning", icon: GraduationCap },
                 { href: "/docs", label: "Docs", icon: FileText },

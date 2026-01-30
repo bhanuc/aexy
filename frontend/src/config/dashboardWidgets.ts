@@ -474,6 +474,18 @@ export const DASHBOARD_WIDGETS: Record<string, WidgetDefinition> = {
     description: 'System status and health',
     requiredPermissions: ['can_manage_workspace_settings'],
   },
+
+  // === AI AGENTS ===
+  aiAgents: {
+    id: 'aiAgents',
+    name: 'AI Agents',
+    category: 'agents',
+    personas: ['all'],
+    defaultSize: 'medium',
+    icon: 'Bot',
+    description: 'AI agent overview and stats',
+    requiredPermissions: [],
+  },
 };
 
 export interface WidgetCategory {
@@ -501,6 +513,7 @@ export const WIDGET_CATEGORIES: Record<string, WidgetCategory> = {
   crm: { id: 'crm', name: 'CRM', icon: 'Building2' },
   team: { id: 'team', name: 'Team', icon: 'Users' },
   admin: { id: 'admin', name: 'Admin', icon: 'Settings' },
+  agents: { id: 'agents', name: 'AI Agents', icon: 'Bot' },
 };
 
 /**

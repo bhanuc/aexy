@@ -21,7 +21,6 @@ import {
   Rocket,
   ChevronRight,
   ChevronDown,
-  Github,
   GraduationCap,
   Cpu,
   Activity,
@@ -38,11 +37,11 @@ import {
   Heart,
   Code2,
   Briefcase,
-  HelpCircle,
   Plus,
   Minus,
   MonitorCheck
 } from "lucide-react";
+import { SiGithub } from "@icons-pack/react-simple-icons";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -59,6 +58,7 @@ const productLinks = [
   { href: "/products/hiring", label: "Technical Hiring", icon: UserPlus, desc: "AI-powered assessments", color: "from-cyan-500 to-blue-500" },
   { href: "/products/crm", label: "CRM", icon: Building2, desc: "Relationship management", color: "from-purple-500 to-violet-500" },
   { href: "/products/email-marketing", label: "Email Marketing", icon: Mail, desc: "Campaigns & automation", color: "from-sky-500 to-blue-500" },
+  { href: "/products/ai-agents", label: "AI Agents", icon: Bot, desc: "Intelligent automation", color: "from-purple-500 to-violet-500" },
   { href: "/products/uptime", label: "Uptime Monitoring", icon: MonitorCheck, desc: "Endpoint health & incidents", color: "from-emerald-500 to-green-500" },
 ];
 
@@ -110,6 +110,10 @@ const FAQS = [
   {
     question: "Is my data secure?",
     answer: "Security is our top priority. We are SOC 2 Type II certified. We process data in short-lived encrypted containers and never train our models on your proprietary code without explicit opt-in."
+  },
+  {
+    question: "What are AI Agents?",
+    answer: "AI Agents are intelligent automation assistants that handle tasks like email responses, CRM updates, and workflow automation. They support multiple LLM providers (Claude, Gemini) and include human-in-the-loop approval for sensitive actions. Create custom agents for support, sales, scheduling, and more."
   }
 ];
 
@@ -268,7 +272,7 @@ export default function Home() {
               Pricing
             </Link>
             <a href="https://github.com/aexy-io/aexy" className="text-white/60 hover:text-white transition text-sm flex items-center gap-1">
-              <Github className="h-4 w-4" />
+              <SiGithub className="h-4 w-4" />
               GitHub
             </a>
           </nav>
@@ -277,7 +281,7 @@ export default function Home() {
               href={githubLoginUrl}
               className="text-white/70 hover:text-white transition text-sm font-medium flex items-center gap-1"
             >
-              <Github className="h-4 w-4" />
+              <SiGithub className="h-4 w-4" />
               Sign In
             </a>
             <a
@@ -306,7 +310,7 @@ export default function Home() {
                 href="https://github.com/aexy-io/aexy"
                 className="group inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 border border-emerald-500/30 rounded-full text-emerald-400 text-sm hover:border-emerald-500/50 transition-all hover:scale-105"
               >
-                <Github className="h-4 w-4" />
+                <SiGithub className="h-4 w-4" />
                 <span>Open Source</span>
                 <ChevronRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
               </motion.a>
@@ -343,7 +347,7 @@ export default function Home() {
                 href={githubLoginUrl}
                 className="group bg-white/5 hover:bg-white/10 text-white px-8 py-4 rounded-full text-lg font-semibold transition-all border border-white/10 hover:border-white/20 flex items-center justify-center gap-3"
               >
-                <Github className="h-5 w-5" />
+                <SiGithub className="h-5 w-5" />
                 Continue with GitHub
               </a>
             </div>
@@ -603,7 +607,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400 text-sm mb-6">
-              <Github className="h-4 w-4" />
+              <SiGithub className="h-4 w-4" />
               Open Source
             </div>
             <h2 className="text-4xl md:text-5xl font-bold text-white mb-4 tracking-tight">
@@ -660,7 +664,7 @@ export default function Home() {
               href="https://github.com/aexy-io/aexy"
               className="group inline-flex items-center gap-2 bg-white text-black px-6 py-3 rounded-full font-semibold transition-all hover:scale-105"
             >
-              <Github className="h-5 w-5" />
+              <SiGithub className="h-5 w-5" />
               View on GitHub
             </a>
             <Link
@@ -1014,6 +1018,76 @@ export default function Home() {
               </div>
             </div>
 
+            {/* AI Agents - Medium card */}
+            <div className="col-span-12 md:col-span-6 group">
+              <div className="relative h-full overflow-hidden rounded-3xl bg-gradient-to-br from-purple-500/10 via-violet-500/5 to-transparent border border-white/10 p-8 hover:border-purple-500/30 transition-all duration-500">
+                <div className="absolute top-0 right-0 w-48 h-48 bg-purple-500/20 rounded-full blur-3xl group-hover:bg-purple-500/30 transition-all duration-500" />
+                <div className="relative">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-3 bg-gradient-to-br from-purple-500 to-violet-500 rounded-2xl shadow-lg shadow-purple-500/25">
+                      <Bot className="h-6 w-6 text-white" />
+                    </div>
+                    <span className="px-3 py-1 bg-emerald-500/20 text-emerald-400 text-xs font-semibold rounded-full border border-emerald-500/20">
+                      NEW
+                    </span>
+                  </div>
+                  <h3 className="text-2xl font-bold text-white mb-3">AI Agents</h3>
+                  <p className="text-white/50 mb-6">
+                    Deploy intelligent agents that handle email responses, CRM updates, and workflow automation with configurable tools and confidence thresholds.
+                  </p>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-white/60 text-sm">
+                      <CheckCircle2 className="h-4 w-4 text-purple-400" />
+                      Support, Sales & Custom agents
+                    </div>
+                    <div className="flex items-center gap-2 text-white/60 text-sm">
+                      <CheckCircle2 className="h-4 w-4 text-purple-400" />
+                      Multi-LLM support (Claude, Gemini)
+                    </div>
+                    <div className="flex items-center gap-2 text-white/60 text-sm">
+                      <CheckCircle2 className="h-4 w-4 text-purple-400" />
+                      Human-in-the-loop approval
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Uptime Monitoring - Medium card */}
+            <div className="col-span-12 md:col-span-6 group">
+              <div className="relative h-full overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-500/10 via-green-500/5 to-transparent border border-white/10 p-8 hover:border-emerald-500/30 transition-all duration-500">
+                <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/20 rounded-full blur-3xl group-hover:bg-emerald-500/30 transition-all duration-500" />
+                <div className="relative">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-3 bg-gradient-to-br from-emerald-500 to-green-500 rounded-2xl shadow-lg shadow-emerald-500/25">
+                      <MonitorCheck className="h-6 w-6 text-white" />
+                    </div>
+                    <span className="px-3 py-1 bg-emerald-500/20 text-emerald-400 text-xs font-semibold rounded-full border border-emerald-500/20">
+                      NEW
+                    </span>
+                  </div>
+                  <h3 className="text-2xl font-bold text-white mb-3">Uptime Monitoring</h3>
+                  <p className="text-white/50 mb-6">
+                    Monitor your endpoints with configurable intervals. Get notified instantly when services go down.
+                  </p>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-white/60 text-sm">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                      HTTP/HTTPS endpoint checks
+                    </div>
+                    <div className="flex items-center gap-2 text-white/60 text-sm">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                      Configurable check intervals
+                    </div>
+                    <div className="flex items-center gap-2 text-white/60 text-sm">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                      Incident history & reporting
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Team Analytics - Wide card */}
             <div className="col-span-12 group">
               <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-500/10 via-violet-500/5 to-purple-500/10 border border-white/10 p-8 hover:border-indigo-500/30 transition-all duration-500">
@@ -1063,7 +1137,7 @@ export default function Home() {
 
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             <IntegrationCard
-              icon={<Github className="h-8 w-8" />}
+              icon={<SiGithub className="h-8 w-8" />}
               title="GitHub"
               description="Auto-analyze commits, PRs, and code reviews. Build rich developer profiles."
               features={["Commit analysis", "PR tracking", "Code review insights", "Skill extraction"]}
@@ -1123,7 +1197,7 @@ export default function Home() {
 
           <div className="grid md:grid-cols-4 gap-6">
             {[
-              { num: "1", icon: <Github />, title: "Connect GitHub", desc: "One-click OAuth" },
+              { num: "1", icon: <SiGithub />, title: "Connect GitHub", desc: "One-click OAuth" },
               { num: "2", icon: <RefreshCw />, title: "Link Jira/Linear", desc: "Optional integrations" },
               { num: "3", icon: <Bot />, title: "Auto-Profile", desc: "AI builds profiles" },
               { num: "4", icon: <Rocket />, title: "Start Planning", desc: "Create sprints" },
@@ -1270,7 +1344,7 @@ export default function Home() {
                     href={githubLoginUrl}
                     className="group bg-white/5 hover:bg-white/10 text-white px-8 py-4 rounded-full text-lg font-semibold transition-all border border-white/10 hover:border-white/20 flex items-center justify-center gap-3"
                   >
-                    <Github className="h-5 w-5" />
+                    <SiGithub className="h-5 w-5" />
                     Continue with GitHub
                   </a>
                 </div>
@@ -1300,7 +1374,7 @@ export default function Home() {
               </p>
               <div className="flex items-center gap-3">
                 <a href="https://github.com/aexy-io/aexy" className="p-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition">
-                  <Github className="h-4 w-4 text-white/60" />
+                  <SiGithub className="h-4 w-4 text-white/60" />
                 </a>
                 <a href="#" className="p-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition">
                   <svg className="h-4 w-4 text-white/60" viewBox="0 0 24 24" fill="currentColor">
@@ -1329,6 +1403,7 @@ export default function Home() {
                 <li><Link href="/products/learning" className="hover:text-white transition">Learning</Link></li>
                 <li><Link href="/products/hiring" className="hover:text-white transition">Hiring</Link></li>
                 <li><Link href="/products/crm" className="hover:text-white transition">CRM</Link></li>
+                <li><Link href="/products/ai-agents" className="hover:text-white transition">AI Agents</Link></li>
                 <li><Link href="/products/uptime" className="hover:text-white transition">Uptime</Link></li>
               </ul>
             </div>

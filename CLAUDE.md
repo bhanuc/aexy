@@ -178,6 +178,15 @@ RATE_LIMIT_ENABLED=true
 - `backend/src/aexy/processing/celery_app.py` - Celery configuration
 - `backend/src/aexy/processing/tasks.py` - Analysis tasks
 
+### AI Agents
+- `backend/src/aexy/models/agent.py` - CRMAgent SQLAlchemy model
+- `backend/src/aexy/schemas/agent.py` - Agent Pydantic schemas
+- `backend/src/aexy/api/agents.py` - Agent API endpoints
+- `backend/src/aexy/services/agent_service.py` - Agent business logic
+- `frontend/src/app/(app)/settings/agents/` - Agent management UI
+- `frontend/src/components/agents/` - Agent UI components
+- `frontend/src/hooks/useAgents.ts` - Agent React hooks
+
 ## Common Issues
 
 ### Rate Limit Hit (429 Error)
@@ -243,3 +252,119 @@ export AEXY_TEST_TOKEN=$(cd backend && python scripts/generate_test_token.py --f
 - Algorithm: HS256
 - Default expiration: 30 days
 - Secret key: Uses `SECRET_KEY` from backend/.env (default: `dev-secret-key-change-in-production`)
+
+## Browser Testing with Playwright MCP
+
+For testing the frontend UI with authentication using Playwright MCP tools.
+
+### 1. Generate a Test Token
+
+```bash
+# Generate token via Docker (recommended - has all dependencies)
+docker exec aexy-backend python scripts/generate_test_token.py --first
+```
+
+This will output a JWT token that you can use for authentication.
+
+### 2. Set Token in Browser via Playwright
+
+The frontend stores the auth token in localStorage under the key `token`. Use the `browser_evaluate` tool to set it:
+
+```javascript
+// Set token in localStorage
+localStorage.setItem('token', '<your-jwt-token>');
+```
+
+### 3. Complete Testing Workflow
+
+1. **Navigate to localhost:3000** using `browser_navigate`
+2. **Set the token** using `browser_evaluate`:
+   ```javascript
+   () => {
+     localStorage.setItem('token', '<token>');
+     return 'Token set';
+   }
+   ```
+3. **Navigate to authenticated page** (e.g., `/settings/agents`)
+4. **Use `browser_snapshot`** to get page structure for interaction
+5. **Use `browser_take_screenshot`** for visual verification
+
+### Example Session
+
+```
+# 1. Navigate to app
+browser_navigate: http://localhost:3000
+
+# 2. Set auth token
+browser_evaluate: () => { localStorage.setItem('token', 'eyJhbGci...'); return 'done'; }
+
+# 3. Navigate to protected page
+browser_navigate: http://localhost:3000/settings/agents
+
+# 4. Wait for page load
+browser_wait_for: { time: 2 }
+
+# 5. Take screenshot to verify
+browser_take_screenshot: { type: 'png' }
+
+# 6. Get snapshot for interactions
+browser_snapshot
+```
+
+### Notes
+- The token key is `token` (not `auth_token`)
+- Tokens expire after 30 days by default
+- Some features require a workspace to be selected
+- Use `browser_console_messages` with level `error` to debug issues
+
+## AI Agents API
+
+AI Agents are intelligent automation assistants that handle tasks like email responses, CRM updates, and workflow automation.
+
+### List Agents
+```bash
+curl -H "Authorization: Bearer $AEXY_TEST_TOKEN" \
+  "http://localhost:8000/api/v1/workspaces/<workspace-id>/agents"
+```
+
+### Create Agent
+```bash
+curl -X POST -H "Authorization: Bearer $AEXY_TEST_TOKEN" \
+  -H "Content-Type: application/json" \
+  "http://localhost:8000/api/v1/workspaces/<workspace-id>/agents" \
+  -d '{
+    "name": "Support Bot",
+    "agent_type": "support",
+    "description": "Handles customer inquiries",
+    "mention_handle": "support",
+    "llm_provider": "claude",
+    "temperature": 0.7,
+    "tools": ["reply", "escalate", "search_contacts"],
+    "confidence_threshold": 0.7,
+    "require_approval_below": 0.5
+  }'
+```
+
+### Check Handle Availability
+```bash
+curl -H "Authorization: Bearer $AEXY_TEST_TOKEN" \
+  "http://localhost:8000/api/v1/workspaces/<workspace-id>/agents/check-handle?handle=support"
+```
+
+### Get Agent Metrics
+```bash
+curl -H "Authorization: Bearer $AEXY_TEST_TOKEN" \
+  "http://localhost:8000/api/v1/workspaces/<workspace-id>/agents/<agent-id>/metrics"
+```
+
+### Agent Configuration Fields
+- `name` - Display name
+- `agent_type` - support, sales, scheduling, custom
+- `mention_handle` - @handle trigger (must be unique per workspace)
+- `llm_provider` - claude or gemini
+- `temperature` - 0.0 to 1.0
+- `tools` - Array of tool names (reply, escalate, search_contacts, etc.)
+- `confidence_threshold` - Minimum confidence for auto-response (default: 0.7)
+- `require_approval_below` - Require human approval below this (default: 0.5)
+- `working_hours` - JSON config for active hours
+- `system_prompt` - Agent persona and instructions

@@ -7,6 +7,9 @@ import {
   CRMAgent,
   CRMAgentExecution,
   AgentToolInfo,
+  AgentMetrics,
+  AgentCreateData,
+  AgentUpdateData,
   WritingStyle,
   GeneratedEmail,
 } from "@/lib/api";
@@ -40,17 +43,7 @@ export function useAgents(
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: {
-      name: string;
-      description?: string;
-      agent_type?: string;
-      goal?: string;
-      system_prompt?: string;
-      tools?: string[];
-      max_iterations?: number;
-      timeout_seconds?: number;
-      model?: string;
-    }) => agentsApi.create(workspaceId!, data),
+    mutationFn: (data: AgentCreateData) => agentsApi.create(workspaceId!, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["agents", workspaceId] });
     },
@@ -62,20 +55,11 @@ export function useAgents(
       data,
     }: {
       agentId: string;
-      data: Partial<{
-        name: string;
-        description: string;
-        goal: string;
-        system_prompt: string;
-        tools: string[];
-        max_iterations: number;
-        timeout_seconds: number;
-        model: string;
-        is_active: boolean;
-      }>;
+      data: AgentUpdateData;
     }) => agentsApi.update(workspaceId!, agentId, data),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["agents", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["agent", workspaceId, variables.agentId] });
     },
   });
 
@@ -88,8 +72,9 @@ export function useAgents(
 
   const toggleMutation = useMutation({
     mutationFn: (agentId: string) => agentsApi.toggle(workspaceId!, agentId),
-    onSuccess: () => {
+    onSuccess: (_, agentId) => {
       queryClient.invalidateQueries({ queryKey: ["agents", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["agent", workspaceId, agentId] });
     },
   });
 
@@ -106,6 +91,7 @@ export function useAgents(
         queryKey: ["agentExecutions", workspaceId, variables.agentId],
       });
       queryClient.invalidateQueries({ queryKey: ["agents", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["agentMetrics", workspaceId, variables.agentId] });
     },
   });
 
@@ -141,19 +127,24 @@ export function useAgent(workspaceId: string | null, agentId: string | null) {
   });
 
   const updateMutation = useMutation({
-    mutationFn: (data: Partial<{
-      name: string;
-      description: string;
-      goal: string;
-      system_prompt: string;
-      tools: string[];
-      max_iterations: number;
-      timeout_seconds: number;
-      model: string;
-      is_active: boolean;
-    }>) => agentsApi.update(workspaceId!, agentId!, data),
+    mutationFn: (data: AgentUpdateData) => agentsApi.update(workspaceId!, agentId!, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["agent", workspaceId, agentId] });
+      queryClient.invalidateQueries({ queryKey: ["agents", workspaceId] });
+    },
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: () => agentsApi.toggle(workspaceId!, agentId!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["agent", workspaceId, agentId] });
+      queryClient.invalidateQueries({ queryKey: ["agents", workspaceId] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => agentsApi.delete(workspaceId!, agentId!),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["agents", workspaceId] });
     },
   });
@@ -166,7 +157,13 @@ export function useAgent(workspaceId: string | null, agentId: string | null) {
         queryKey: ["agentExecutions", workspaceId, agentId],
       });
       queryClient.invalidateQueries({ queryKey: ["agent", workspaceId, agentId] });
+      queryClient.invalidateQueries({ queryKey: ["agentMetrics", workspaceId, agentId] });
     },
+  });
+
+  const testMutation = useMutation({
+    mutationFn: (data: { context?: Record<string, unknown> }) =>
+      agentsApi.testAgent(workspaceId!, agentId!, data),
   });
 
   return {
@@ -175,9 +172,48 @@ export function useAgent(workspaceId: string | null, agentId: string | null) {
     error,
     refetch,
     updateAgent: updateMutation.mutateAsync,
+    toggleAgent: toggleMutation.mutateAsync,
+    deleteAgent: deleteMutation.mutateAsync,
     executeAgent: executeMutation.mutateAsync,
+    testAgent: testMutation.mutateAsync,
     isUpdating: updateMutation.isPending,
+    isToggling: toggleMutation.isPending,
+    isDeleting: deleteMutation.isPending,
     isExecuting: executeMutation.isPending,
+    isTesting: testMutation.isPending,
+  };
+}
+
+export function useAgentMetrics(workspaceId: string | null, agentId: string | null) {
+  const {
+    data: metrics,
+    isLoading,
+    error,
+    refetch,
+  } = useQuery<AgentMetrics>({
+    queryKey: ["agentMetrics", workspaceId, agentId],
+    queryFn: () => agentsApi.getMetrics(workspaceId!, agentId!),
+    enabled: !!workspaceId && !!agentId,
+    staleTime: 30000, // 30 seconds
+  });
+
+  return {
+    metrics,
+    isLoading,
+    error,
+    refetch,
+  };
+}
+
+export function useCheckMentionHandle(workspaceId: string | null) {
+  const checkMutation = useMutation({
+    mutationFn: ({ handle, excludeAgentId }: { handle: string; excludeAgentId?: string }) =>
+      agentsApi.checkMentionHandle(workspaceId!, handle, excludeAgentId),
+  });
+
+  return {
+    checkHandle: checkMutation.mutateAsync,
+    isChecking: checkMutation.isPending,
   };
 }
 

@@ -16,6 +16,8 @@ from aexy.schemas.agent import (
     AgentExecuteRequest,
     AgentExecutionResponse,
     AgentToolInfo,
+    AgentMetricsResponse,
+    HandleAvailabilityResponse,
     WritingStyleResponse,
     GenerateEmailRequest,
     GenerateEmailResponse,
@@ -86,17 +88,45 @@ async def create_agent(
     """Create a custom agent."""
     await check_workspace_permission(db, workspace_id, str(current_developer.id), "admin")
     service = AgentService(db)
+
+    # Check handle availability if provided
+    if data.mention_handle:
+        is_available = await service.check_handle_available(
+            workspace_id=workspace_id,
+            handle=data.mention_handle,
+        )
+        if not is_available:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Handle @{data.mention_handle} is already in use",
+            )
+
+    # Convert working_hours Pydantic model to dict if provided
+    working_hours_dict = data.working_hours.model_dump() if data.working_hours else None
+
     agent = await service.create_agent(
         workspace_id=workspace_id,
         name=data.name,
         description=data.description,
         agent_type=data.agent_type,
+        mention_handle=data.mention_handle,
         goal=data.goal,
         system_prompt=data.system_prompt,
+        custom_instructions=data.custom_instructions,
         tools=data.tools,
+        llm_provider=data.llm_provider,
+        model=data.model,
+        temperature=data.temperature,
+        max_tokens=data.max_tokens,
         max_iterations=data.max_iterations,
         timeout_seconds=data.timeout_seconds,
-        model=data.model,
+        confidence_threshold=data.confidence_threshold,
+        require_approval_below=data.require_approval_below,
+        max_daily_responses=data.max_daily_responses,
+        response_delay_minutes=data.response_delay_minutes,
+        working_hours=working_hours_dict,
+        escalation_email=data.escalation_email,
+        escalation_slack_channel=data.escalation_slack_channel,
         created_by_id=current_developer.id,
     )
     await db.commit()
@@ -112,6 +142,29 @@ async def list_available_tools(
     """List all available tools for agent configuration."""
     await check_workspace_permission(db, workspace_id, str(current_developer.id))
     return AgentService.get_available_tools()
+
+
+@router.get("/check-handle", response_model=HandleAvailabilityResponse)
+async def check_handle_availability(
+    workspace_id: str,
+    handle: str = Query(..., min_length=1, max_length=50),
+    exclude_agent_id: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    current_developer: Developer = Depends(get_current_developer),
+):
+    """Check if a mention handle is available."""
+    await check_workspace_permission(db, workspace_id, str(current_developer.id))
+    service = AgentService(db)
+    is_available = await service.check_handle_available(
+        workspace_id=workspace_id,
+        handle=handle,
+        exclude_agent_id=exclude_agent_id,
+    )
+    return HandleAvailabilityResponse(
+        available=is_available,
+        handle=handle,
+        message=None if is_available else f"Handle @{handle} is already in use",
+    )
 
 
 @router.get("/{agent_id}", response_model=AgentResponse)
@@ -193,6 +246,24 @@ async def toggle_agent(
     agent = await service.toggle_agent(agent_id)
     await db.commit()
     return agent
+
+
+@router.get("/{agent_id}/metrics", response_model=AgentMetricsResponse)
+async def get_agent_metrics(
+    workspace_id: str,
+    agent_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_developer: Developer = Depends(get_current_developer),
+):
+    """Get metrics for an agent."""
+    await check_workspace_permission(db, workspace_id, str(current_developer.id))
+    service = AgentService(db)
+    agent = await service.get_agent(agent_id)
+    if not agent or agent.workspace_id != workspace_id:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    metrics = await service.get_agent_metrics(agent_id)
+    return metrics
 
 
 # =============================================================================

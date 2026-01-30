@@ -1,8 +1,10 @@
 """Entity Activity API endpoints for timeline tracking."""
 
-from uuid import uuid4
+from typing import Optional
+from uuid import uuid4, UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks
+from pydantic import BaseModel
 from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -11,6 +13,7 @@ from aexy.core.database import get_db
 from aexy.api.developers import get_current_developer
 from aexy.models import Developer, EntityActivity
 from aexy.services.workspace_service import WorkspaceService
+from aexy.services.agent_mention_service import get_agent_mention_service
 from aexy.schemas.entity_activity import (
     EntityActivityCreate,
     EntityActivityResponse,
@@ -261,10 +264,15 @@ async def add_comment(
     entity_type: EntityType,
     entity_id: str,
     data: EntityCommentCreate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_developer: Developer = Depends(get_current_developer),
 ):
-    """Add a comment to an entity."""
+    """Add a comment to an entity.
+
+    If the comment contains @agent-name mentions, the corresponding agents
+    will be invoked to process the request.
+    """
     await check_workspace_permission(workspace_id, current_developer, db)
 
     activity = EntityActivity(
@@ -281,7 +289,48 @@ async def add_comment(
     await db.commit()
     await db.refresh(activity, ["actor"])
 
+    # Process @agent mentions in background
+    background_tasks.add_task(
+        _process_agent_mentions,
+        workspace_id=workspace_id,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        activity_id=activity.id,
+        content=data.content,
+        author_id=current_developer.id,
+        author_name=current_developer.name,
+    )
+
     return _format_activity_response(activity)
+
+
+async def _process_agent_mentions(
+    workspace_id: str,
+    entity_type: str,
+    entity_id: str,
+    activity_id: str,
+    content: str,
+    author_id: str,
+    author_name: Optional[str],
+):
+    """Background task to process agent mentions in a comment."""
+    from aexy.core.database import async_session_maker
+
+    async with async_session_maker() as db:
+        try:
+            service = get_agent_mention_service(db)
+            await service.process_comment_for_mentions(
+                workspace_id=UUID(workspace_id),
+                entity_type=entity_type,
+                entity_id=UUID(entity_id),
+                activity_id=UUID(activity_id),
+                comment_content=content,
+                author_id=UUID(author_id),
+                author_name=author_name,
+            )
+        except Exception as e:
+            import logging
+            logging.error(f"Failed to process agent mentions: {e}")
 
 
 @router.delete("/{activity_id}", status_code=204)
@@ -314,6 +363,129 @@ async def delete_activity(
 
     await db.delete(activity)
     await db.commit()
+
+
+# ==================== Agent Mention Endpoints ====================
+
+class AgentInfoResponse(BaseModel):
+    """Agent info for @mention autocomplete."""
+    id: str
+    name: str
+    handle: str
+    type: str
+    description: Optional[str] = None
+
+
+class PendingActionResponse(BaseModel):
+    """Pending agent action for review."""
+    id: str
+    agent_id: str
+    action_type: str
+    target_entity_type: Optional[str] = None
+    target_entity_id: Optional[str] = None
+    payload: dict
+    confidence: float
+    reasoning: Optional[str] = None
+    preview: Optional[str] = None
+
+
+class ReviewActionRequest(BaseModel):
+    """Request to review an action."""
+    notes: Optional[str] = None
+    modified_payload: Optional[dict] = None
+
+
+@router.get("/agents", response_model=list[AgentInfoResponse])
+async def get_available_agents(
+    workspace_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_developer: Developer = Depends(get_current_developer),
+):
+    """Get available AI agents for @mention autocomplete.
+
+    Returns a list of agents that can be mentioned in comments
+    to trigger automated actions.
+    """
+    await check_workspace_permission(workspace_id, current_developer, db)
+
+    service = get_agent_mention_service(db)
+    agents = await service.get_available_agents(UUID(workspace_id))
+    return [AgentInfoResponse(**a) for a in agents]
+
+
+@router.get("/agents/pending-actions", response_model=list[PendingActionResponse])
+async def get_pending_agent_actions(
+    workspace_id: str,
+    entity_type: Optional[str] = None,
+    entity_id: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_developer: Developer = Depends(get_current_developer),
+):
+    """Get pending agent actions that need review.
+
+    Returns actions proposed by AI agents that require human approval
+    before they are executed.
+    """
+    await check_workspace_permission(workspace_id, current_developer, db)
+
+    service = get_agent_mention_service(db)
+    actions = await service.get_pending_reviews_for_user(
+        workspace_id=UUID(workspace_id),
+        user_id=UUID(current_developer.id),
+        entity_type=entity_type,
+        entity_id=UUID(entity_id) if entity_id else None,
+    )
+    return [PendingActionResponse(**a) for a in actions]
+
+
+@router.post("/agents/actions/{action_id}/approve")
+async def approve_agent_action(
+    workspace_id: str,
+    action_id: str,
+    data: ReviewActionRequest,
+    db: AsyncSession = Depends(get_db),
+    current_developer: Developer = Depends(get_current_developer),
+):
+    """Approve an agent action for execution.
+
+    Once approved, the action will be executed automatically.
+    You can optionally modify the action payload before approving.
+    """
+    await check_workspace_permission(workspace_id, current_developer, db)
+
+    service = get_agent_mention_service(db)
+    result = await service.approve_action(
+        action_id=UUID(action_id),
+        user_id=UUID(current_developer.id),
+        user_name=current_developer.name,
+        notes=data.notes,
+        modified_payload=data.modified_payload,
+    )
+    return result
+
+
+@router.post("/agents/actions/{action_id}/reject")
+async def reject_agent_action(
+    workspace_id: str,
+    action_id: str,
+    data: ReviewActionRequest,
+    db: AsyncSession = Depends(get_db),
+    current_developer: Developer = Depends(get_current_developer),
+):
+    """Reject an agent action.
+
+    The action will not be executed and the agent will learn from this feedback.
+    """
+    await check_workspace_permission(workspace_id, current_developer, db)
+
+    service = get_agent_mention_service(db)
+    result = await service.reject_action(
+        action_id=UUID(action_id),
+        user_id=UUID(current_developer.id),
+        user_name=current_developer.name,
+        notes=data.notes,
+    )
+    return result
 
 
 # ==================== Helper function for other modules ====================

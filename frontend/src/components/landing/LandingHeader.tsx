@@ -4,7 +4,6 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import {
   GitBranch,
-  Github,
   ArrowRight,
   ChevronDown,
   Target,
@@ -21,7 +20,9 @@ import {
   Briefcase,
   Heart,
   Mail,
+  Bot,
 } from "lucide-react";
+import { SiGithub } from "@icons-pack/react-simple-icons";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
@@ -36,6 +37,7 @@ const productLinks = [
   { href: "/products/hiring", label: "Technical Hiring", icon: UserPlus, desc: "AI-powered assessments", color: "from-cyan-500 to-blue-500" },
   { href: "/products/crm", label: "CRM", icon: Building2, desc: "Relationship management", color: "from-purple-500 to-violet-500" },
   { href: "/products/email-marketing", label: "Email Marketing", icon: Mail, desc: "Campaigns & automation", color: "from-sky-500 to-blue-500" },
+  { href: "/products/ai-agents", label: "AI Agents", icon: Bot, desc: "Intelligent automation", color: "from-purple-500 to-violet-500" },
 ];
 
 const solutionLinks = [
@@ -175,7 +177,7 @@ export function LandingHeader({ showGetStarted = true }: LandingHeaderProps) {
             Pricing
           </Link>
           <a href="https://github.com/aexy-io/aexy" className="text-white/60 hover:text-white transition text-sm flex items-center gap-1">
-            <Github className="h-4 w-4" />
+            <SiGithub className="h-4 w-4" />
             GitHub
           </a>
         </nav>
@@ -186,7 +188,7 @@ export function LandingHeader({ showGetStarted = true }: LandingHeaderProps) {
               href={githubLoginUrl}
               className="hidden sm:flex text-white/70 hover:text-white transition text-sm font-medium items-center gap-1"
             >
-              <Github className="h-4 w-4" />
+              <SiGithub className="h-4 w-4" />
               Sign In
             </a>
             <a
@@ -220,7 +222,7 @@ export function LandingFooter() {
             </p>
             <div className="flex items-center gap-3">
               <a href="https://github.com/aexy-io/aexy" className="p-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition">
-                <Github className="h-4 w-4 text-white/60" />
+                <SiGithub className="h-4 w-4 text-white/60" />
               </a>
             </div>
           </div>
@@ -235,6 +237,7 @@ export function LandingFooter() {
               <li><Link href="/products/hiring" className="hover:text-white transition">Hiring</Link></li>
               <li><Link href="/products/crm" className="hover:text-white transition">CRM</Link></li>
               <li><Link href="/products/email-marketing" className="hover:text-white transition">Email Marketing</Link></li>
+              <li><Link href="/products/ai-agents" className="hover:text-white transition">AI Agents</Link></li>
             </ul>
           </div>
           <div>

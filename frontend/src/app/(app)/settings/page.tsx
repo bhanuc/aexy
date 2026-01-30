@@ -20,6 +20,7 @@ import {
   Send,
   Sparkles,
   Shield,
+  Bot,
 } from "lucide-react";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -150,6 +151,13 @@ export default function SettingsPage() {
               badge={!isEnterprise ? "Enterprise" : undefined}
             />
           )}
+
+          <SettingsSection
+            href="/settings/agents"
+            icon={<Bot className="h-5 w-5 text-purple-400" />}
+            title="AI Agents"
+            description="Create and manage custom AI agents for automation"
+          />
 
           <SettingsSection
             href="/settings/projects"

@@ -25,4 +25,5 @@ export {
   SprintOverviewWidget,
   TrackingSummaryWidget,
   CRMPipelineWidget,
+  AIAgentsWidget,
 } from "./widgets";

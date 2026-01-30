@@ -5,6 +5,113 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.5] - 2026-01-30
+
+### Added
+
+#### Mailagent Microservice
+
+A new standalone microservice for email administration, AI agent processing, and domain management.
+
+**Core Service:** `mailagent/`
+- FastAPI service running on port 8001
+- SQLAlchemy async models with PostgreSQL
+- Redis for caching and rate limiting
+- Docker Compose integration
+
+**Email Provider Support:** `mailagent/src/mailagent/providers/`
+- AWS SES integration with IAM credentials
+- SendGrid API integration
+- Mailgun (planned)
+- Postmark (planned)
+- Custom SMTP support
+
+**Domain Management:** `mailagent/src/mailagent/api/domains.py`
+- Domain registration and health scoring
+- DNS verification (SPF, DKIM, DMARC)
+- Automated DNS record generation
+- Domain warming schedules (conservative, moderate, aggressive)
+
+**Agent System:** `mailagent/src/mailagent/agents/`
+- Base agent class with confidence-based decisions
+- Agent types: `support`, `sales`, `scheduling`, `onboarding`, `recruiting`, `newsletter`, `custom`
+- Agent actions: `reply`, `forward`, `escalate`, `schedule`, `create_task`, `update_crm`, `wait`, `request_approval`
+- Specialized agents with pre-configured behaviors
+
+**LLM Integration:** `mailagent/src/mailagent/llm/`
+- Claude (Anthropic) provider
+- Gemini (Google) provider
+- Factory pattern for provider selection
+- Configurable temperature and max tokens
+
+**API Endpoints:**
+- `/api/v1/admin/*` - Provider CRUD and dashboard
+- `/api/v1/domains/*` - Domain management and verification
+- `/api/v1/onboarding/*` - Inbox creation and verification
+- `/api/v1/agents/*` - Agent CRUD and configuration
+- `/api/v1/agents/{id}/process` - Process email with agent
+- `/api/v1/invocations/*` - Execution history and metrics
+- `/api/v1/webhooks/*` - Inbound email processing
+- `/api/v1/send/*` - Outbound email sending
+
+**Email Processing Pipeline:**
+- Inbound webhook handlers for SES/SendGrid
+- Thread detection and conversation context
+- Knowledge base search integration
+- Contact enrichment from CRM
+- Response generation with approval workflow
+
+---
+
+#### AI Agents Management UI
+
+A comprehensive interface for creating and managing custom AI agents with configurable tool access and behavior settings.
+
+**New Routes:**
+- `/agents` - Agent list page with grid view, stats, filtering, and search
+- `/agents/new` - Multi-step agent creation wizard
+- `/agents/[agentId]` - Agent detail page with execution history and metrics
+- `/agents/[agentId]/edit` - Tabbed configuration editor
+
+**Frontend Components:** `frontend/src/components/agents/`
+- `AgentCreationWizard` - 7-step wizard (type, basic info, LLM, tools, behavior, prompts, review)
+- `AgentTypeBadge` - Type indicator with icon and color
+- `AgentStatusBadge` - Active/inactive status
+- `ToolSelector` - Multi-select tool picker with categories
+- `LLMProviderSelector` - Provider and model selection (Claude, Gemini, Ollama)
+- `ConfidenceSlider` - 0-1 range slider for thresholds
+- `WorkingHoursConfigPanel` - Hours, timezone, and days configuration
+- `PromptEditor` - System prompt editor with variable hints
+
+**Dashboard Widget:**
+- `AIAgentsWidget` - Shows active agents, total runs, success rate
+- Added to dashboard widget registry and default visible widgets
+
+**Sidebar Navigation:**
+- AI Agents added as top-level navigation item with own "AI" section
+- Sub-items: All Agents, Create Agent
+
+**Product Page:**
+- `/products/ai-agents` - Marketing page for AI Agents feature
+
+**Backend API Extensions:**
+- `GET /agents/check-handle` - Verify mention handle availability
+- `GET /agents/{id}/metrics` - Agent performance metrics (runs, success rate, avg duration)
+
+**Database Migration:** `backend/scripts/migrate_agent_extended_config.sql`
+- Extended CRMAgent model with: `mention_handle`, `llm_provider`, `temperature`, `max_tokens`, `confidence_threshold`, `require_approval_below`, `max_daily_responses`, `response_delay_minutes`, `working_hours`, `custom_instructions`, `escalation_email`, `escalation_slack_channel`
+
+**Documentation:**
+- `/docs/ai-agents.md` - Comprehensive guide covering agent types, configuration, tools, and API
+- Updated `/docs/README.md` with AI Agents in guides and products
+- Updated `/CLAUDE.md` with AI Agents key files and API testing commands
+
+### Changed
+
+- AI Agents now appears in dedicated "AI" section in grouped sidebar layout
+
+---
+
 ## [0.4.4] - 2026-01-29
 
 ### Added
