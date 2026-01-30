@@ -1,6 +1,7 @@
 """Schemas for AI Agents."""
 
 from datetime import datetime
+from typing import Literal
 from pydantic import BaseModel, Field
 
 
@@ -12,18 +13,50 @@ class AgentToolInfo(BaseModel):
     category: str
 
 
+class WorkingHoursConfig(BaseModel):
+    """Working hours configuration."""
+
+    enabled: bool = False
+    timezone: str = "UTC"
+    start: str = "09:00"
+    end: str = "17:00"
+    days: list[int] = Field(default_factory=lambda: [1, 2, 3, 4, 5])  # Mon-Fri
+
+
 class AgentCreate(BaseModel):
     """Schema for creating an agent."""
 
     name: str = Field(..., min_length=1, max_length=255)
     description: str | None = None
     agent_type: str = Field(default="custom")
+    mention_handle: str | None = Field(default=None, max_length=50)
     goal: str | None = None
     system_prompt: str | None = None
+    custom_instructions: str | None = None
     tools: list[str] = Field(default_factory=list)
+
+    # LLM configuration
+    llm_provider: Literal["claude", "gemini", "ollama"] = "claude"
+    model: str = Field(default="claude-3-sonnet-20240229")
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    max_tokens: int = Field(default=4096, ge=1, le=100000)
+
+    # LangGraph configuration
     max_iterations: int = Field(default=10, ge=1, le=50)
     timeout_seconds: int = Field(default=300, ge=30, le=1800)
-    model: str = Field(default="claude-3-sonnet-20240229")
+
+    # Behavior configuration
+    confidence_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
+    require_approval_below: float = Field(default=0.5, ge=0.0, le=1.0)
+    max_daily_responses: int | None = Field(default=None, ge=1)
+    response_delay_minutes: int = Field(default=0, ge=0, le=60)
+
+    # Working hours
+    working_hours: WorkingHoursConfig | None = None
+
+    # Escalation
+    escalation_email: str | None = Field(default=None, max_length=255)
+    escalation_slack_channel: str | None = Field(default=None, max_length=100)
 
 
 class AgentUpdate(BaseModel):
@@ -31,12 +64,35 @@ class AgentUpdate(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
+    mention_handle: str | None = Field(default=None, max_length=50)
     goal: str | None = None
     system_prompt: str | None = None
+    custom_instructions: str | None = None
     tools: list[str] | None = None
+
+    # LLM configuration
+    llm_provider: Literal["claude", "gemini", "ollama"] | None = None
+    model: str | None = None
+    temperature: float | None = Field(default=None, ge=0.0, le=2.0)
+    max_tokens: int | None = Field(default=None, ge=1, le=100000)
+
+    # LangGraph configuration
     max_iterations: int | None = Field(default=None, ge=1, le=50)
     timeout_seconds: int | None = Field(default=None, ge=30, le=1800)
-    model: str | None = None
+
+    # Behavior configuration
+    confidence_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
+    require_approval_below: float | None = Field(default=None, ge=0.0, le=1.0)
+    max_daily_responses: int | None = Field(default=None, ge=1)
+    response_delay_minutes: int | None = Field(default=None, ge=0, le=60)
+
+    # Working hours
+    working_hours: WorkingHoursConfig | None = None
+
+    # Escalation
+    escalation_email: str | None = Field(default=None, max_length=255)
+    escalation_slack_channel: str | None = Field(default=None, max_length=100)
+
     is_active: bool | None = None
 
 
@@ -48,13 +104,36 @@ class AgentResponse(BaseModel):
     name: str
     description: str | None
     agent_type: str
+    mention_handle: str | None
     is_system: bool
     goal: str | None
     system_prompt: str | None
+    custom_instructions: str | None
     tools: list[str]
+
+    # LLM configuration
+    llm_provider: str
+    model: str
+    temperature: float
+    max_tokens: int
+
+    # LangGraph configuration
     max_iterations: int
     timeout_seconds: int
-    model: str
+
+    # Behavior configuration
+    confidence_threshold: float
+    require_approval_below: float
+    max_daily_responses: int | None
+    response_delay_minutes: int
+
+    # Working hours
+    working_hours: dict | None
+
+    # Escalation
+    escalation_email: str | None
+    escalation_slack_channel: str | None
+
     is_active: bool
     created_by_id: str | None
     total_executions: int
@@ -65,6 +144,28 @@ class AgentResponse(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class HandleAvailabilityResponse(BaseModel):
+    """Response for handle availability check."""
+
+    available: bool
+    handle: str
+    message: str | None = None
+
+
+class AgentMetricsResponse(BaseModel):
+    """Response for agent metrics."""
+
+    total_runs: int
+    successful_runs: int
+    failed_runs: int
+    success_rate: float
+    avg_duration_ms: int
+    avg_confidence: float
+    runs_today: int
+    runs_this_week: int
+    recent_executions: list["AgentExecutionResponse"]
 
 
 class AgentExecuteRequest(BaseModel):

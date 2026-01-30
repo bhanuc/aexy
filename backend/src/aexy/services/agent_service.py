@@ -31,13 +31,25 @@ class AgentService:
         workspace_id: str,
         name: str,
         agent_type: str,
+        description: str | None = None,
+        mention_handle: str | None = None,
         goal: str | None = None,
         system_prompt: str | None = None,
+        custom_instructions: str | None = None,
         tools: list[str] | None = None,
+        llm_provider: str = "claude",
+        model: str = "claude-3-sonnet-20240229",
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
         max_iterations: int = 10,
         timeout_seconds: int = 300,
-        model: str = "claude-3-sonnet-20240229",
-        description: str | None = None,
+        confidence_threshold: float = 0.7,
+        require_approval_below: float = 0.5,
+        max_daily_responses: int | None = None,
+        response_delay_minutes: int = 0,
+        working_hours: dict | None = None,
+        escalation_email: str | None = None,
+        escalation_slack_channel: str | None = None,
         created_by_id: str | None = None,
     ) -> CRMAgent:
         """Create a new agent."""
@@ -47,13 +59,25 @@ class AgentService:
             name=name,
             description=description,
             agent_type=agent_type,
+            mention_handle=mention_handle,
             is_system=False,
             goal=goal,
             system_prompt=system_prompt,
+            custom_instructions=custom_instructions,
             tools=tools or [],
+            llm_provider=llm_provider,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
             max_iterations=max_iterations,
             timeout_seconds=timeout_seconds,
-            model=model,
+            confidence_threshold=confidence_threshold,
+            require_approval_below=require_approval_below,
+            max_daily_responses=max_daily_responses,
+            response_delay_minutes=response_delay_minutes,
+            working_hours=working_hours,
+            escalation_email=escalation_email,
+            escalation_slack_channel=escalation_slack_channel,
             created_by_id=created_by_id,
         )
         self.db.add(agent)
@@ -134,6 +158,28 @@ class AgentService:
         await self.db.flush()
         await self.db.refresh(agent)
         return agent
+
+    async def check_handle_available(
+        self,
+        workspace_id: str,
+        handle: str,
+        exclude_agent_id: str | None = None,
+    ) -> bool:
+        """Check if a mention handle is available within the workspace."""
+        # Normalize handle (remove @ prefix if present)
+        handle = handle.lstrip("@").lower()
+
+        stmt = select(CRMAgent).where(
+            CRMAgent.workspace_id == workspace_id,
+            func.lower(CRMAgent.mention_handle) == handle,
+        )
+
+        if exclude_agent_id:
+            stmt = stmt.where(CRMAgent.id != exclude_agent_id)
+
+        result = await self.db.execute(stmt)
+        existing = result.scalar_one_or_none()
+        return existing is None
 
     # =========================================================================
     # SYSTEM AGENTS
@@ -361,6 +407,53 @@ class AgentService:
 
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
+
+    async def get_agent_metrics(self, agent_id: str) -> dict:
+        """Get metrics for an agent."""
+        from datetime import timedelta
+
+        agent = await self.get_agent(agent_id)
+        if not agent:
+            return {}
+
+        now = datetime.now(timezone.utc)
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        week_start = today_start - timedelta(days=today_start.weekday())
+
+        # Get runs today
+        stmt_today = select(func.count()).select_from(CRMAgentExecution).where(
+            CRMAgentExecution.agent_id == agent_id,
+            CRMAgentExecution.created_at >= today_start,
+        )
+        result_today = await self.db.execute(stmt_today)
+        runs_today = result_today.scalar() or 0
+
+        # Get runs this week
+        stmt_week = select(func.count()).select_from(CRMAgentExecution).where(
+            CRMAgentExecution.agent_id == agent_id,
+            CRMAgentExecution.created_at >= week_start,
+        )
+        result_week = await self.db.execute(stmt_week)
+        runs_this_week = result_week.scalar() or 0
+
+        # Get recent executions (last 10)
+        recent_executions = await self.list_executions(agent_id=agent_id, limit=10)
+
+        # Calculate success rate
+        total = agent.total_executions
+        success_rate = (agent.successful_executions / total * 100) if total > 0 else 0.0
+
+        return {
+            "total_runs": agent.total_executions,
+            "successful_runs": agent.successful_executions,
+            "failed_runs": agent.failed_executions,
+            "success_rate": round(success_rate, 1),
+            "avg_duration_ms": agent.avg_duration_ms,
+            "avg_confidence": 0.0,  # TODO: Track confidence in executions
+            "runs_today": runs_today,
+            "runs_this_week": runs_this_week,
+            "recent_executions": recent_executions,
+        }
 
     # =========================================================================
     # AVAILABLE TOOLS

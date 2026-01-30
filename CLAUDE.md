@@ -243,3 +243,67 @@ export AEXY_TEST_TOKEN=$(cd backend && python scripts/generate_test_token.py --f
 - Algorithm: HS256
 - Default expiration: 30 days
 - Secret key: Uses `SECRET_KEY` from backend/.env (default: `dev-secret-key-change-in-production`)
+
+## Browser Testing with Playwright MCP
+
+For testing the frontend UI with authentication using Playwright MCP tools.
+
+### 1. Generate a Test Token
+
+```bash
+# Generate token via Docker (recommended - has all dependencies)
+docker exec aexy-backend python scripts/generate_test_token.py --first
+```
+
+This will output a JWT token that you can use for authentication.
+
+### 2. Set Token in Browser via Playwright
+
+The frontend stores the auth token in localStorage under the key `token`. Use the `browser_evaluate` tool to set it:
+
+```javascript
+// Set token in localStorage
+localStorage.setItem('token', '<your-jwt-token>');
+```
+
+### 3. Complete Testing Workflow
+
+1. **Navigate to localhost:3000** using `browser_navigate`
+2. **Set the token** using `browser_evaluate`:
+   ```javascript
+   () => {
+     localStorage.setItem('token', '<token>');
+     return 'Token set';
+   }
+   ```
+3. **Navigate to authenticated page** (e.g., `/settings/agents`)
+4. **Use `browser_snapshot`** to get page structure for interaction
+5. **Use `browser_take_screenshot`** for visual verification
+
+### Example Session
+
+```
+# 1. Navigate to app
+browser_navigate: http://localhost:3000
+
+# 2. Set auth token
+browser_evaluate: () => { localStorage.setItem('token', 'eyJhbGci...'); return 'done'; }
+
+# 3. Navigate to protected page
+browser_navigate: http://localhost:3000/settings/agents
+
+# 4. Wait for page load
+browser_wait_for: { time: 2 }
+
+# 5. Take screenshot to verify
+browser_take_screenshot: { type: 'png' }
+
+# 6. Get snapshot for interactions
+browser_snapshot
+```
+
+### Notes
+- The token key is `token` (not `auth_token`)
+- Tokens expire after 30 days by default
+- Some features require a workspace to be selected
+- Use `browser_console_messages` with level `error` to debug issues
