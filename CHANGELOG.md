@@ -5,6 +5,81 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.5] - 2026-01-30
+
+### Added
+
+#### Public Project Pages
+- **Project visibility toggle** - Projects can now be made public or private via settings
+- **Public project URLs** - Each public project gets a unique public slug (e.g., `/p/my-project-k3f9x2`)
+- **Customizable public tabs** - Admins can configure which tabs are visible on the public page:
+  - Overview, Backlog, Board, Stories, Bugs, Goals, Releases, Timeline, Roadmap, Sprints
+
+#### Roadmap Voting System
+- **Feature request submissions** - Authenticated users can submit feature requests with title, description, and category
+- **Voting** - Users can upvote/downvote feature requests (toggle vote)
+- **Comments** - Threaded comments on feature requests with admin badge support
+- **Request categories** - Feature, Improvement, Integration, Bug Fix, Other
+- **Status tracking** - Under Review, Planned, In Progress, Completed, Declined
+- **Admin responses** - Project admins can respond to requests and update status
+- **Pagination** - Paginated list of roadmap requests with filtering and sorting
+
+#### New UI Components
+- `Pagination` component with ellipsis support and accessibility labels
+- Public project page tab components (Overview, Backlog, Board, Stories, Bugs, Goals, Releases, Sprints, Timeline, Roadmap)
+
+#### New Backend Services
+- **Models**: `RoadmapRequest`, `RoadmapVote`, `RoadmapComment` for voting system
+- **API Router**: `/api/v1/public/projects/{public_slug}/...` for unauthenticated access
+- **Sanitization**: Input sanitization module for user-generated content (`backend/src/aexy/core/sanitize.py`)
+
+#### New API Endpoints
+- `POST /workspaces/{id}/projects/{id}/toggle-visibility` - Toggle project public/private
+- `GET/PUT /workspaces/{id}/projects/{id}/public-tabs` - Configure visible tabs
+- `GET /public/projects/{slug}` - Get public project info
+- `GET /public/projects/{slug}/backlog|board|stories|bugs|goals|releases|roadmap|sprints|timeline` - Public data endpoints
+- `GET/POST /public/projects/{slug}/roadmap-requests` - List/create feature requests
+- `POST /public/projects/{slug}/roadmap-requests/{id}/vote` - Vote on requests
+- `GET/POST /public/projects/{slug}/roadmap-requests/{id}/comments` - Comments
+
+### Changed
+- `Project` model includes `is_public` (boolean) and `public_slug` (unique string) fields
+- Sprint/roadmap/timeline endpoints use optimized SQL aggregation queries (N+1 fix)
+- Vote counting uses atomic SQL UPDATE to prevent race conditions
+- Project list and detail responses include visibility fields
+
+### Security
+- HTML tag stripping and entity escaping for user-submitted content
+- Input length validation: title (150 chars), description (1000 chars), comments (2000 chars)
+- Tab access control - public endpoints verify tab is enabled before returning data
+- Permission checks on admin endpoints require workspace owner/admin role
+
+### Database Migrations
+- `alembic/versions/61fd11a7e0ea_add_public_project_visibility.py` - Adds visibility columns
+- `scripts/migrate_roadmap_voting.sql` - Creates roadmap voting tables with indexes
+
+### Files Changed Summary
+```
+47 files changed, ~5,900 insertions(+), ~500 deletions(-)
+```
+
+**Backend:**
+- `api/public_projects.py` (new - 903 lines)
+- `api/projects.py` (+186 lines)
+- `models/roadmap_voting.py` (new - 205 lines)
+- `models/project.py` (+37 lines)
+- `schemas/project.py` (+265 lines)
+- `core/sanitize.py` (new - 107 lines)
+
+**Frontend:**
+- `app/p/[publicSlug]/page.tsx` (new - 265 lines)
+- `components/public-project-page/*` (new - 12 components)
+- `components/ui/pagination.tsx` (new - 136 lines)
+- `app/(app)/settings/projects/[projectId]/page.tsx` (+254 lines)
+- `lib/api.ts` (+351 lines)
+
+---
+
 ## [0.4.4] - 2026-01-29
 
 ### Added

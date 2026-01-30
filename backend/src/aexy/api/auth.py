@@ -77,13 +77,17 @@ def create_access_token(developer_id: str) -> str:
 
 
 @router.get("/github/login")
-async def github_login() -> RedirectResponse:
+async def github_login(redirect_url: str | None = None) -> RedirectResponse:
     """Initiate GitHub OAuth flow."""
     state = secrets.token_urlsafe(32)
 
     # Store state in Redis with TTL (auto-expires, no cleanup needed)
     redis_client = get_redis_client()
-    state_data = {"created_at": datetime.now(timezone.utc).isoformat(), "type": "github"}
+    state_data = {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "type": "github",
+        "redirect_url": redirect_url,
+    }
     redis_client.setex(f"{OAUTH_STATE_PREFIX}{state}", OAUTH_STATE_TTL, json.dumps(state_data))
 
     github_service = GitHubService()
@@ -111,12 +115,16 @@ async def github_callback(
     # Determine if this is an installation callback or OAuth callback
     is_installation_callback = installation_id is not None and setup_action == "install"
 
-    # For OAuth flow, verify state
+    # For OAuth flow, verify state and get redirect URL
+    custom_redirect_url = None
     if not is_installation_callback:
         redis_client = get_redis_client()
         state_key = f"{OAUTH_STATE_PREFIX}{state}"
-        if not state or not redis_client.exists(state_key):
+        state_data_raw = redis_client.get(state_key) if state else None
+        if not state or not state_data_raw:
             return RedirectResponse(url=f"{frontend_url}/?error=invalid_state")
+        state_data = json.loads(state_data_raw)
+        custom_redirect_url = state_data.get("redirect_url")
         redis_client.delete(state_key)
 
     github_service = GitHubService()
@@ -188,7 +196,13 @@ async def github_callback(
     access_token = create_access_token(developer.id)
 
     # Redirect to frontend callback with token
-    return RedirectResponse(url=f"{frontend_url}/auth/callback?token={access_token}")
+    if custom_redirect_url:
+        # Use custom redirect URL (e.g., from public project page)
+        separator = "&" if "?" in custom_redirect_url else "?"
+        return RedirectResponse(url=f"{custom_redirect_url}{separator}token={access_token}")
+    else:
+        # Default: redirect to frontend callback
+        return RedirectResponse(url=f"{frontend_url}/auth/callback?token={access_token}")
 
 
 # ============================================================================
@@ -202,7 +216,7 @@ def _clean_old_oauth_states():
 
 
 @router.get("/google/login")
-async def google_login() -> RedirectResponse:
+async def google_login(redirect_url: str | None = None) -> RedirectResponse:
     """Initiate Google OAuth flow for authentication."""
     if not settings.google_client_id:
         raise HTTPException(
@@ -217,7 +231,7 @@ async def google_login() -> RedirectResponse:
     state_data = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "scope_type": "login",
-        "redirect_url": None,
+        "redirect_url": redirect_url,
     }
     redis_client.setex(f"{OAUTH_STATE_PREFIX}{state}", OAUTH_STATE_TTL, json.dumps(state_data))
 
