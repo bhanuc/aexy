@@ -210,6 +210,9 @@ async def _sync_gmail(
             job.completed_at = datetime.now(timezone.utc)
             job.result = result
             job.progress_message = f"Synced {result.get('messages_synced', 0)} emails"
+
+            # Update integration's last sync time for auto-sync scheduling
+            integration.gmail_last_sync_at = datetime.now(timezone.utc)
             await db.commit()
 
             return result
@@ -437,6 +440,9 @@ async def _sync_calendar(
             job.result = result
             job.processed_items = result.get("events_synced", 0)
             job.progress_message = f"Synced {result.get('events_synced', 0)} events"
+
+            # Update integration's last sync time for auto-sync scheduling
+            integration.calendar_last_sync_at = datetime.now(timezone.utc)
             await db.commit()
 
             return result
@@ -448,3 +454,212 @@ async def _sync_calendar(
             job.completed_at = datetime.now(timezone.utc)
             await db.commit()
             raise
+
+
+# =============================================================================
+# Periodic Auto-Sync Task
+# =============================================================================
+
+
+@shared_task(bind=True)
+def check_auto_sync_integrations(self) -> dict[str, Any]:
+    """Periodic task to check and trigger auto-syncs for integrations.
+
+    This task runs every minute and checks which integrations need syncing
+    based on their configured auto_sync_interval_minutes setting.
+    """
+    logger.info("Checking for integrations that need auto-sync...")
+
+    try:
+        result = run_async(_check_and_trigger_auto_syncs())
+        return result
+    except Exception as exc:
+        logger.error(f"Auto-sync check failed: {exc}")
+        return {"error": str(exc)}
+
+
+async def _check_and_trigger_auto_syncs() -> dict[str, Any]:
+    """Check all integrations and trigger syncs where needed (Gmail and Calendar)."""
+    from datetime import timedelta
+    from uuid import uuid4
+
+    from sqlalchemy import select, and_, or_
+
+    from aexy.core.database import async_session_maker
+    from aexy.models.google_integration import GoogleIntegration, GoogleSyncJob
+
+    gmail_syncs_triggered = 0
+    gmail_syncs_skipped = 0
+    calendar_syncs_triggered = 0
+    calendar_syncs_skipped = 0
+    errors = []
+
+    async with async_session_maker() as db:
+        now = datetime.now(timezone.utc)
+
+        # =================================================================
+        # Gmail Auto-Sync
+        # =================================================================
+        gmail_result = await db.execute(
+            select(GoogleIntegration).where(
+                and_(
+                    GoogleIntegration.is_active == True,
+                    GoogleIntegration.gmail_sync_enabled == True,
+                    GoogleIntegration.auto_sync_interval_minutes > 0,
+                )
+            )
+        )
+        gmail_integrations = gmail_result.scalars().all()
+
+        for integration in gmail_integrations:
+            try:
+                interval_minutes = integration.auto_sync_interval_minutes
+                last_sync = integration.gmail_last_sync_at
+
+                # Check if enough time has passed since last sync
+                if last_sync:
+                    next_sync_time = last_sync + timedelta(minutes=interval_minutes)
+                    if now < next_sync_time:
+                        gmail_syncs_skipped += 1
+                        continue
+
+                # Check if there's already a running or pending sync job
+                existing_job_result = await db.execute(
+                    select(GoogleSyncJob).where(
+                        and_(
+                            GoogleSyncJob.workspace_id == integration.workspace_id,
+                            GoogleSyncJob.job_type == "gmail",
+                            GoogleSyncJob.status.in_(["pending", "running"]),
+                        )
+                    )
+                )
+                existing_job = existing_job_result.scalar_one_or_none()
+
+                if existing_job:
+                    logger.debug(f"Gmail sync already in progress for workspace {integration.workspace_id}")
+                    gmail_syncs_skipped += 1
+                    continue
+
+                # Create a new sync job
+                job = GoogleSyncJob(
+                    id=str(uuid4()),
+                    workspace_id=integration.workspace_id,
+                    integration_id=integration.id,
+                    job_type="gmail",
+                    status="pending",
+                    progress_message="Gmail auto-sync queued...",
+                )
+                db.add(job)
+                await db.commit()
+
+                # Queue the Celery task
+                task = sync_gmail_task.delay(
+                    job_id=job.id,
+                    workspace_id=integration.workspace_id,
+                    integration_id=integration.id,
+                    max_messages=200,  # Smaller batch for auto-sync
+                )
+
+                # Update job with Celery task ID
+                job.celery_task_id = task.id
+                await db.commit()
+
+                gmail_syncs_triggered += 1
+                logger.info(f"Gmail auto-sync triggered for workspace {integration.workspace_id}")
+
+            except Exception as e:
+                logger.error(f"Failed to trigger Gmail auto-sync for integration {integration.id}: {e}")
+                errors.append({"integration_id": integration.id, "type": "gmail", "error": str(e)})
+
+        # =================================================================
+        # Calendar Auto-Sync
+        # =================================================================
+        calendar_result = await db.execute(
+            select(GoogleIntegration).where(
+                and_(
+                    GoogleIntegration.is_active == True,
+                    GoogleIntegration.calendar_sync_enabled == True,
+                    GoogleIntegration.auto_sync_calendar_interval_minutes > 0,
+                )
+            )
+        )
+        calendar_integrations = calendar_result.scalars().all()
+
+        for integration in calendar_integrations:
+            try:
+                interval_minutes = integration.auto_sync_calendar_interval_minutes
+                last_sync = integration.calendar_last_sync_at
+
+                # Check if enough time has passed since last sync
+                if last_sync:
+                    next_sync_time = last_sync + timedelta(minutes=interval_minutes)
+                    if now < next_sync_time:
+                        calendar_syncs_skipped += 1
+                        continue
+
+                # Check if there's already a running or pending sync job
+                existing_job_result = await db.execute(
+                    select(GoogleSyncJob).where(
+                        and_(
+                            GoogleSyncJob.workspace_id == integration.workspace_id,
+                            GoogleSyncJob.job_type == "calendar",
+                            GoogleSyncJob.status.in_(["pending", "running"]),
+                        )
+                    )
+                )
+                existing_job = existing_job_result.scalar_one_or_none()
+
+                if existing_job:
+                    logger.debug(f"Calendar sync already in progress for workspace {integration.workspace_id}")
+                    calendar_syncs_skipped += 1
+                    continue
+
+                # Create a new sync job
+                job = GoogleSyncJob(
+                    id=str(uuid4()),
+                    workspace_id=integration.workspace_id,
+                    integration_id=integration.id,
+                    job_type="calendar",
+                    status="pending",
+                    progress_message="Calendar auto-sync queued...",
+                )
+                db.add(job)
+                await db.commit()
+
+                # Queue the Celery task
+                task = sync_calendar_task.delay(
+                    job_id=job.id,
+                    workspace_id=integration.workspace_id,
+                    integration_id=integration.id,
+                    days_back=30,
+                    days_forward=90,
+                )
+
+                # Update job with Celery task ID
+                job.celery_task_id = task.id
+                await db.commit()
+
+                calendar_syncs_triggered += 1
+                logger.info(f"Calendar auto-sync triggered for workspace {integration.workspace_id}")
+
+            except Exception as e:
+                logger.error(f"Failed to trigger Calendar auto-sync for integration {integration.id}: {e}")
+                errors.append({"integration_id": integration.id, "type": "calendar", "error": str(e)})
+
+    result = {
+        "gmail_syncs_triggered": gmail_syncs_triggered,
+        "gmail_syncs_skipped": gmail_syncs_skipped,
+        "calendar_syncs_triggered": calendar_syncs_triggered,
+        "calendar_syncs_skipped": calendar_syncs_skipped,
+        "total_gmail_checked": len(gmail_integrations),
+        "total_calendar_checked": len(calendar_integrations),
+    }
+
+    if errors:
+        result["errors"] = errors
+
+    logger.info(
+        f"Auto-sync check complete: Gmail {gmail_syncs_triggered} triggered/{gmail_syncs_skipped} skipped, "
+        f"Calendar {calendar_syncs_triggered} triggered/{calendar_syncs_skipped} skipped"
+    )
+    return result

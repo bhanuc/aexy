@@ -232,13 +232,23 @@ export function DocumentEditor({
 
     if (editorMode === "rich") {
       // Switching to markdown mode - extract markdown from editor
-      const markdown = editor.storage.markdown.getMarkdown();
-      setMarkdownContent(markdown);
-      setEditorMode("markdown");
+      try {
+        const markdown = editor.storage.markdown.getMarkdown();
+        setMarkdownContent(markdown);
+        setEditorMode("markdown");
+      } catch (error) {
+        console.error("Failed to extract markdown:", error);
+      }
     } else {
       // Switching to rich mode - parse markdown back into editor
-      editor.commands.setContent(markdownContent);
-      setEditorMode("rich");
+      try {
+        editor.commands.setContent(markdownContent);
+        setEditorMode("rich");
+      } catch (error) {
+        console.error("Failed to parse markdown:", error);
+        // Keep the markdown content and stay in markdown mode
+        // so the user doesn't lose their work
+      }
     }
   }, [editor, editorMode, markdownContent]);
 
