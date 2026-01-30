@@ -216,7 +216,7 @@ export default function EditAgentPage() {
           <Bot className="h-16 w-16 text-slate-600 mx-auto mb-4" />
           <h2 className="text-xl font-medium text-white mb-2">Agent Not Found</h2>
           <Link
-            href="/settings/agents"
+            href="/agents"
             className="text-purple-400 hover:text-purple-300"
           >
             Back to Agents
@@ -486,7 +486,7 @@ export default function EditAgentPage() {
         <div className="max-w-5xl mx-auto px-4 py-4">
           <div className="flex items-center gap-4">
             <Link
-              href={`/settings/agents/${agentId}`}
+              href={`/agents/${agentId}`}
               className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition"
             >
               <ArrowLeft className="h-5 w-5" />

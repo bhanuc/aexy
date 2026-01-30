@@ -178,6 +178,15 @@ RATE_LIMIT_ENABLED=true
 - `backend/src/aexy/processing/celery_app.py` - Celery configuration
 - `backend/src/aexy/processing/tasks.py` - Analysis tasks
 
+### AI Agents
+- `backend/src/aexy/models/agent.py` - CRMAgent SQLAlchemy model
+- `backend/src/aexy/schemas/agent.py` - Agent Pydantic schemas
+- `backend/src/aexy/api/agents.py` - Agent API endpoints
+- `backend/src/aexy/services/agent_service.py` - Agent business logic
+- `frontend/src/app/(app)/settings/agents/` - Agent management UI
+- `frontend/src/components/agents/` - Agent UI components
+- `frontend/src/hooks/useAgents.ts` - Agent React hooks
+
 ## Common Issues
 
 ### Rate Limit Hit (429 Error)
@@ -307,3 +316,55 @@ browser_snapshot
 - Tokens expire after 30 days by default
 - Some features require a workspace to be selected
 - Use `browser_console_messages` with level `error` to debug issues
+
+## AI Agents API
+
+AI Agents are intelligent automation assistants that handle tasks like email responses, CRM updates, and workflow automation.
+
+### List Agents
+```bash
+curl -H "Authorization: Bearer $AEXY_TEST_TOKEN" \
+  "http://localhost:8000/api/v1/workspaces/<workspace-id>/agents"
+```
+
+### Create Agent
+```bash
+curl -X POST -H "Authorization: Bearer $AEXY_TEST_TOKEN" \
+  -H "Content-Type: application/json" \
+  "http://localhost:8000/api/v1/workspaces/<workspace-id>/agents" \
+  -d '{
+    "name": "Support Bot",
+    "agent_type": "support",
+    "description": "Handles customer inquiries",
+    "mention_handle": "support",
+    "llm_provider": "claude",
+    "temperature": 0.7,
+    "tools": ["reply", "escalate", "search_contacts"],
+    "confidence_threshold": 0.7,
+    "require_approval_below": 0.5
+  }'
+```
+
+### Check Handle Availability
+```bash
+curl -H "Authorization: Bearer $AEXY_TEST_TOKEN" \
+  "http://localhost:8000/api/v1/workspaces/<workspace-id>/agents/check-handle?handle=support"
+```
+
+### Get Agent Metrics
+```bash
+curl -H "Authorization: Bearer $AEXY_TEST_TOKEN" \
+  "http://localhost:8000/api/v1/workspaces/<workspace-id>/agents/<agent-id>/metrics"
+```
+
+### Agent Configuration Fields
+- `name` - Display name
+- `agent_type` - support, sales, scheduling, custom
+- `mention_handle` - @handle trigger (must be unique per workspace)
+- `llm_provider` - claude or gemini
+- `temperature` - 0.0 to 1.0
+- `tools` - Array of tool names (reply, escalate, search_contacts, etc.)
+- `confidence_threshold` - Minimum confidence for auto-response (default: 0.7)
+- `require_approval_below` - Require human approval below this (default: 0.5)
+- `working_hours` - JSON config for active hours
+- `system_prompt` - Agent persona and instructions
