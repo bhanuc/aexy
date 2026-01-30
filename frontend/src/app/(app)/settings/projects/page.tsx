@@ -181,6 +181,11 @@ function ProjectCard({
                 >
                   {project.status.replace("_", " ")}
                 </span>
+                <span
+                  className={`px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap bg-yellow-900/30 text-yellow-400`}
+                >
+                  {project.is_public? 'Public':'Private'}
+                </span>
               </div>
               <div className="text-sm text-slate-400 mt-1">
                 {project.member_count} members

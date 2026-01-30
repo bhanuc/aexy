@@ -526,13 +526,13 @@ function ReleaseDetailModal({ release, workspaceId, onClose }: ReleaseDetailModa
               <div className="flex items-center justify-between mb-3">
                 <h4 className="text-sm font-medium text-white">Release Readiness</h4>
                 <span className={`text-sm font-medium ${readiness.is_ready ? "text-green-400" : "text-amber-400"}`}>
-                  {readiness.readiness_percentage.toFixed(0)}% ready
+                  {readiness.story_readiness_percentage.toFixed(0)}% ready
                 </span>
               </div>
               <div className="h-2 bg-slate-700 rounded-full overflow-hidden mb-2">
                 <div
                   className={`h-full transition-all ${readiness.is_ready ? "bg-green-500" : "bg-amber-500"}`}
-                  style={{ width: `${readiness.readiness_percentage}%` }}
+                  style={{ width: `${readiness.story_readiness_percentage}%` }}
                 />
               </div>
               <div className="flex items-center justify-between text-xs text-slate-400">
