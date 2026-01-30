@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Mail,
@@ -43,6 +43,87 @@ function formatDate(dateString: string) {
   } else {
     return date.toLocaleDateString([], { month: "short", day: "numeric" });
   }
+}
+
+// Isolate email HTML content using iframe to prevent style leakage
+function EmailHtmlContent({ html }: { html: string }) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [height, setHeight] = useState(200);
+
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+
+    const doc = iframe.contentDocument;
+    if (!doc) return;
+
+    // Write HTML with base styles for dark theme
+    doc.open();
+    doc.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <style>
+            body {
+              margin: 0;
+              padding: 0;
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              font-size: 14px;
+              line-height: 1.6;
+              color: #cbd5e1;
+              background: transparent;
+              word-wrap: break-word;
+              overflow-wrap: break-word;
+            }
+            a { color: #a78bfa; }
+            img { max-width: 100%; height: auto; }
+            pre, code {
+              background: #1e293b;
+              padding: 2px 6px;
+              border-radius: 4px;
+              overflow-x: auto;
+            }
+            blockquote {
+              border-left: 3px solid #475569;
+              margin: 1em 0;
+              padding-left: 1em;
+              color: #94a3b8;
+            }
+            table { border-collapse: collapse; max-width: 100%; }
+            td, th { padding: 4px 8px; }
+          </style>
+        </head>
+        <body>${html}</body>
+      </html>
+    `);
+    doc.close();
+
+    // Adjust height to fit content
+    const updateHeight = () => {
+      if (doc.body) {
+        const newHeight = doc.body.scrollHeight;
+        if (newHeight > 0) {
+          setHeight(Math.min(newHeight + 20, 800));
+        }
+      }
+    };
+
+    // Update height after content loads
+    updateHeight();
+    const timer = setTimeout(updateHeight, 100);
+
+    return () => clearTimeout(timer);
+  }, [html]);
+
+  return (
+    <iframe
+      ref={iframeRef}
+      className="w-full border-0 bg-transparent"
+      style={{ height: `${height}px`, minHeight: "100px" }}
+      sandbox="allow-same-origin"
+      title="Email content"
+    />
+  );
 }
 
 function EmailListItem({
@@ -110,11 +191,13 @@ function EmailDetail({
   workspaceId,
   onClose,
   onLinkToRecord,
+  isLoadingBody,
 }: {
   email: SyncedEmail;
   workspaceId: string;
   onClose: () => void;
   onLinkToRecord: () => void;
+  isLoadingBody?: boolean;
 }) {
   const [showReply, setShowReply] = useState(false);
   const [replyText, setReplyText] = useState("");
@@ -191,7 +274,7 @@ function EmailDetail({
                 {email.gmail_date ? new Date(email.gmail_date).toLocaleString() : ""}
               </span>
               {email.to_emails && email.to_emails.length > 0 && (
-                <span>To: {email.to_emails.join(", ")}</span>
+                <span>To: {email.to_emails.map((itm)=>itm.email).join(", ")}</span>
               )}
             </div>
           </div>
@@ -199,7 +282,14 @@ function EmailDetail({
 
         {/* Email body */}
         <div className="prose prose-invert max-w-none">
-          {email.body_text ? (
+          {isLoadingBody ? (
+            <div className="flex items-center gap-2 text-slate-400">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Loading email content...</span>
+            </div>
+          ) : email.body_html ? (
+            <EmailHtmlContent html={email.body_html} />
+          ) : email.body_text ? (
             <pre className="whitespace-pre-wrap text-slate-300 font-sans text-sm leading-relaxed">
               {email.body_text}
             </pre>
@@ -422,6 +512,7 @@ function InboxPageContent() {
 
   const [emails, setEmails] = useState<SyncedEmail[]>([]);
   const [selectedEmail, setSelectedEmail] = useState<SyncedEmail | null>(null);
+  const [isLoadingEmail, setIsLoadingEmail] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -611,6 +702,33 @@ function InboxPageContent() {
     window.location.href = `${apiBase}/auth/google/connect-crm?redirect_url=${redirectUrl}`;
   };
 
+  // Fetch full email details when selecting an email
+  const handleSelectEmail = async (email: SyncedEmail) => {
+    if (!workspaceId) return;
+
+    // If we already have body_text, use the cached email
+    if (email.body_text || email.body_html) {
+      setSelectedEmail(email);
+      return;
+    }
+
+    setIsLoadingEmail(true);
+    setSelectedEmail(email); // Show immediately with snippet while loading
+
+    try {
+      const fullEmail = await googleIntegrationApi.gmail.getEmail(workspaceId, email.id);
+      setSelectedEmail(fullEmail);
+
+      // Update the email in the list cache so we don't refetch
+      setEmails(prev => prev.map(e => e.id === email.id ? fullEmail : e));
+    } catch (err) {
+      console.error("Failed to load email details:", err);
+      // Keep showing the partial email from list
+    } finally {
+      setIsLoadingEmail(false);
+    }
+  };
+
   const filteredEmails = emails.filter(
     (email) =>
       email.subject?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -755,7 +873,7 @@ function InboxPageContent() {
                       key={email.id}
                       email={email}
                       isSelected={selectedEmail?.id === email.id}
-                      onClick={() => setSelectedEmail(email)}
+                      onClick={() => handleSelectEmail(email)}
                     />
                   ))
                 )}
@@ -780,6 +898,7 @@ function InboxPageContent() {
                   workspaceId={workspaceId}
                   onClose={() => setSelectedEmail(null)}
                   onLinkToRecord={() => setShowLinkModal(true)}
+                  isLoadingBody={isLoadingEmail}
                 />
               ) : (
                 <div className="flex-1 flex items-center justify-center text-slate-500">

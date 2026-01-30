@@ -544,6 +544,7 @@ async def get_status(
         google_email=integration.google_email,
         gmail_sync_enabled=integration.gmail_sync_enabled,
         calendar_sync_enabled=integration.calendar_sync_enabled,
+        auto_sync_interval_minutes=integration.auto_sync_interval_minutes,
         gmail_last_sync_at=integration.gmail_last_sync_at,
         calendar_last_sync_at=integration.calendar_last_sync_at,
         messages_synced=cursor.messages_synced if cursor else 0,
@@ -570,6 +571,11 @@ async def update_settings(
         integration.gmail_sync_enabled = data.gmail_sync_enabled
     if data.calendar_sync_enabled is not None:
         integration.calendar_sync_enabled = data.calendar_sync_enabled
+    if data.auto_sync_interval_minutes is not None:
+        # Validate: must be 0 (disabled) or >= 1 minute
+        if data.auto_sync_interval_minutes < 0:
+            raise HTTPException(status_code=400, detail="Auto-sync interval must be 0 or positive")
+        integration.auto_sync_interval_minutes = data.auto_sync_interval_minutes
     if data.sync_settings is not None:
         integration.sync_settings = data.sync_settings
 
