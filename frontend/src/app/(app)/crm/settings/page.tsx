@@ -423,6 +423,9 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
     fetchStatus();
   }, [workspaceId]);
 
+  // Minimum interval in minutes when enabled (to prevent aggressive syncing)
+  const MIN_SYNC_INTERVAL = 5;
+
   // Debounce custom Gmail interval input
   useEffect(() => {
     if (!status) return;
@@ -430,7 +433,12 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
       skipDebounceRef.current = false;
       return;
     }
-    const value = parseInt(customIntervalInput) || 0;
+    let value = parseInt(customIntervalInput) || 0;
+    // Enforce minimum interval when enabled (not 0)
+    if (value > 0 && value < MIN_SYNC_INTERVAL) {
+      value = MIN_SYNC_INTERVAL;
+      setCustomIntervalInput(String(value));
+    }
     if (value < 0 || value === status.auto_sync_interval_minutes) return;
 
     const timeoutId = setTimeout(() => {
@@ -447,7 +455,12 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
       skipCalendarDebounceRef.current = false;
       return;
     }
-    const value = parseInt(customCalendarIntervalInput) || 0;
+    let value = parseInt(customCalendarIntervalInput) || 0;
+    // Enforce minimum interval when enabled (not 0)
+    if (value > 0 && value < MIN_SYNC_INTERVAL) {
+      value = MIN_SYNC_INTERVAL;
+      setCustomCalendarIntervalInput(String(value));
+    }
     if (value < 0 || value === status.auto_sync_calendar_interval_minutes) return;
 
     const timeoutId = setTimeout(() => {
@@ -715,7 +728,7 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                   <div>
                     <h4 className="font-medium text-white text-sm">Auto-Sync Schedule</h4>
                     <p className="text-xs text-slate-400 mt-1">
-                      Automatically sync emails at a regular interval (minimum 1 minute)
+                      Automatically sync emails at a regular interval (minimum 5 minutes)
                     </p>
                   </div>
 
@@ -825,7 +838,7 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                   <div>
                     <h4 className="font-medium text-white text-sm">Auto-Sync Schedule</h4>
                     <p className="text-xs text-slate-400 mt-1">
-                      Automatically sync calendar events at a regular interval (minimum 1 minute)
+                      Automatically sync calendar events at a regular interval (minimum 5 minutes)
                     </p>
                   </div>
 

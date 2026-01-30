@@ -651,8 +651,8 @@ async def _check_and_trigger_auto_syncs() -> dict[str, Any]:
         "gmail_syncs_skipped": gmail_syncs_skipped,
         "calendar_syncs_triggered": calendar_syncs_triggered,
         "calendar_syncs_skipped": calendar_syncs_skipped,
-        "total_gmail_checked": len(gmail_integrations) if 'gmail_integrations' in dir() else 0,
-        "total_calendar_checked": len(calendar_integrations) if 'calendar_integrations' in dir() else 0,
+        "total_gmail_checked": len(gmail_integrations),
+        "total_calendar_checked": len(calendar_integrations),
     }
 
     if errors:
