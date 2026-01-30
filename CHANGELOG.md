@@ -5,6 +5,57 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [0.4.6] - 2026-01-30
+
+### Added
+
+#### Auto-Sync for Gmail and Calendar
+- Configurable auto-sync intervals for Gmail and Calendar integrations
+- New periodic Celery task (`check_auto_sync_integrations`) runs every minute to check which integrations need syncing
+- Preset interval buttons (Off, 5m, 15m, 30m, 1h, 24h) and custom input in settings UI
+- Minimum interval enforced at 5 minutes to prevent aggressive API usage
+- Tracks `gmail_last_sync_at` and `calendar_last_sync_at` for accurate scheduling
+- Duplicate job detection prevents overlapping sync operations
+
+**Database Migrations:**
+- `migrate_auto_sync_interval.sql` - Adds `auto_sync_interval_minutes` column
+- `migrate_auto_sync_calendar_interval.sql` - Adds `auto_sync_calendar_interval_minutes` column
+
+#### Markdown Editor Mode
+- Toggle between Rich Text and Markdown editing modes in document editor
+- `tiptap-markdown` integration for seamless markdown parsing/serialization
+- Markdown content persists when switching between modes
+- Error handling prevents data loss if markdown parsing fails
+
+#### Document Editor UI Improvements
+- Redesigned toolbar with grouped buttons and keyboard shortcut tooltips
+- Unified header layout with breadcrumb integration
+- Enhanced visual styling with backdrop blur, shadows, and animations
+- Re-enabled home navigation link in document breadcrumb
+
+#### CRM Inbox Enhancements
+- Email HTML content rendered in isolated iframe to prevent style leakage
+- Lazy loading of full email body (fetches on selection, not on list load)
+- Loading state indicator while email content is being fetched
+
+### Fixed
+
+- **Workspace Selection Race Condition**: Fixed issue where auto-selection could override user's stored workspace preference by adding `isInitialized` state guard in `useWorkspace` hook
+- **Auto-sync Task Counter**: Fixed incorrect `dir()` check that always returned 0 for total integrations checked
+- **Email Display**: Fixed `to_emails` field to properly extract email addresses from recipient objects
+- **Markdown Mode Stability**: Added try-catch error handling to prevent crashes when parsing malformed markdown
+
+### Changed
+
+- Production Dockerfile now uses `--legacy-peer-deps` for dependency compatibility
+- AppShell main content wrapper no longer uses `container` class for full-width layouts
+
+### Dependencies
+
+- Added `tiptap-markdown@^0.8.10`
+- Added `y-prosemirror@^1.3.7`
+
 ## [0.4.5] - 2026-01-30
 
 ### Added
