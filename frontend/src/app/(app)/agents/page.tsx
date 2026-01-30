@@ -72,7 +72,7 @@ function AgentCard({
           ? "border-slate-700 hover:border-slate-600"
           : "border-slate-700/50 opacity-75 hover:opacity-100"
       )}
-      onClick={() => router.push(`/settings/agents/${agent.id}`)}
+      onClick={() => router.push(`/agents/${agent.id}`)}
     >
       <div className="p-5">
         {/* Header */}
@@ -123,7 +123,7 @@ function AgentCard({
                   />
                   <div className="absolute right-0 top-full mt-1 w-48 bg-slate-700 rounded-lg shadow-xl z-20 py-1">
                     <Link
-                      href={`/settings/agents/${agent.id}/edit`}
+                      href={`/agents/${agent.id}/edit`}
                       onClick={(e) => e.stopPropagation()}
                       className="w-full px-3 py-2 text-left text-sm text-white hover:bg-slate-600 flex items-center gap-2"
                     >
@@ -240,7 +240,7 @@ function AgentEmptyState() {
         CRM data, and more.
       </p>
       <Link
-        href="/settings/agents/new"
+        href="/agents/new"
         className="inline-flex items-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition font-medium"
       >
         <Plus className="h-4 w-4" />
@@ -321,7 +321,7 @@ export default function AgentsListPage() {
         <div className="max-w-6xl mx-auto px-4 py-4">
           <div className="flex items-center gap-4">
             <Link
-              href="/settings"
+              href="/dashboard"
               className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition"
             >
               <ArrowLeft className="h-5 w-5" />
@@ -333,12 +333,12 @@ export default function AgentsListPage() {
               <div>
                 <h1 className="text-xl font-semibold text-white">AI Agents</h1>
                 <p className="text-slate-400 text-sm">
-                  Create and manage custom AI agents for your workspace
+                  Create and manage intelligent automation agents
                 </p>
               </div>
             </div>
             <Link
-              href="/settings/agents/new"
+              href="/agents/new"
               className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition text-sm font-medium"
             >
               <Plus className="h-4 w-4" />
