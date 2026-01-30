@@ -53,8 +53,8 @@ export function StoryCard({
   const priorityConfig = PRIORITY_CONFIG[story.priority];
   const statusConfig = STATUS_CONFIG[story.status];
 
-  const completedCriteria = story.acceptance_criteria.filter((c) => c.completed).length;
-  const totalCriteria = story.acceptance_criteria.length;
+  const completedCriteria = story?.acceptance_criteria_completed as number;
+  const totalCriteria = story?.acceptance_criteria_count as number;
   const criteriaProgress = totalCriteria > 0 ? (completedCriteria / totalCriteria) * 100 : 0;
 
   return (
