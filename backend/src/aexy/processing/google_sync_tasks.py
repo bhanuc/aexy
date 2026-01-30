@@ -210,6 +210,9 @@ async def _sync_gmail(
             job.completed_at = datetime.now(timezone.utc)
             job.result = result
             job.progress_message = f"Synced {result.get('messages_synced', 0)} emails"
+
+            # Update integration's last sync time for auto-sync scheduling
+            integration.gmail_last_sync_at = datetime.now(timezone.utc)
             await db.commit()
 
             return result
