@@ -9216,27 +9216,91 @@ export const googleIntegrationApi = {
 // AI Agents API
 // =============================================================================
 
+// Standard agent types with predefined configurations
+export type StandardAgentType = "support" | "sales" | "scheduling" | "onboarding" | "recruiting" | "newsletter" | "custom";
+// Allow any string for backwards compatibility with existing CRM agent types
+export type AgentType = StandardAgentType | (string & {});
+
+export interface WorkingHoursConfig {
+  enabled: boolean;
+  timezone: string;
+  start: string;  // HH:MM format
+  end: string;    // HH:MM format
+  days?: number[]; // 0-6 (Sunday-Saturday)
+}
+
 export interface CRMAgent {
   id: string;
   workspace_id: string;
   name: string;
   description: string | null;
-  agent_type: string;
+  agent_type: AgentType;
+  mention_handle?: string | null;
   is_system: boolean;
+
+  // LLM Configuration (optional for backwards compatibility)
+  llm_provider?: "claude" | "gemini" | "ollama";
+  llm_model?: string;
+  temperature?: number;
+  max_tokens?: number;
+
+  // Legacy fields (for compatibility)
   goal: string | null;
   system_prompt: string | null;
+  custom_instructions: string | null;
   tools: string[];
   max_iterations: number;
   timeout_seconds: number;
   model: string;
+
+  // Behavior (optional for backwards compatibility)
+  auto_respond?: boolean;
+  confidence_threshold?: number;
+  require_approval_below?: number;
+  max_daily_responses?: number;
+  response_delay_minutes?: number;
+
+  // Working hours
+  working_hours?: WorkingHoursConfig | null;
+
+  // Escalation
+  escalation_email?: string | null;
+  escalation_slack_channel?: string | null;
+
+  // Integration
+  crm_sync?: boolean;
+  calendar_sync?: boolean;
+  calendar_id?: string | null;
+
+  // Status
   is_active: boolean;
+  last_active_at: string | null;
   created_by_id: string | null;
+
+  // Stats (with defaults for backwards compatibility)
   total_executions: number;
   successful_executions: number;
   failed_executions: number;
   avg_duration_ms: number;
+  total_processed?: number;
+  total_auto_replied?: number;
+  total_escalated?: number;
+  avg_confidence?: number | null;
+
   created_at: string;
   updated_at: string;
+}
+
+export interface AgentMetrics {
+  total_runs: number;
+  successful_runs: number;
+  failed_runs: number;
+  success_rate: number;
+  avg_duration_ms: number;
+  avg_confidence: number;
+  runs_today: number;
+  runs_this_week: number;
+  recent_executions: CRMAgentExecution[];
 }
 
 export interface CRMAgentExecution {
@@ -9269,6 +9333,115 @@ export interface AgentToolInfo {
   name: string;
   description: string;
   category: string;
+  is_dangerous?: boolean;
+  requires_approval?: boolean;
+}
+
+export const TOOL_CATEGORIES = {
+  actions: {
+    label: "Agent Actions",
+    description: "Core actions the agent can take",
+    tools: ["reply", "forward", "escalate", "schedule", "create_task", "update_crm", "wait"],
+  },
+  crm: {
+    label: "CRM Tools",
+    description: "Interact with CRM data",
+    tools: ["search_contacts", "get_record", "update_record", "create_record", "get_activities"],
+  },
+  email: {
+    label: "Email Tools",
+    description: "Send and manage emails",
+    tools: ["send_email", "create_draft", "get_email_history", "get_writing_style"],
+  },
+  enrichment: {
+    label: "Enrichment Tools",
+    description: "Enrich contact and company data",
+    tools: ["enrich_company", "enrich_person", "web_search"],
+  },
+  communication: {
+    label: "Communication",
+    description: "Send messages via various channels",
+    tools: ["send_slack", "send_sms"],
+  },
+} as const;
+
+export type ToolCategory = keyof typeof TOOL_CATEGORIES;
+
+export interface AgentTypeConfigItem {
+  label: string;
+  description: string;
+  icon: string;
+  color: string;
+  defaultTools: string[];
+}
+
+export const AGENT_TYPE_CONFIG: Record<StandardAgentType, AgentTypeConfigItem> = {
+  support: {
+    label: "Support Agent",
+    description: "Handle customer support inquiries and issues",
+    icon: "headphones",
+    color: "#22c55e",
+    defaultTools: ["reply", "escalate", "search_contacts", "get_email_history", "create_task"],
+  },
+  sales: {
+    label: "Sales Agent",
+    description: "Assist with sales outreach and follow-ups",
+    icon: "trending-up",
+    color: "#3b82f6",
+    defaultTools: ["reply", "send_email", "search_contacts", "enrich_person", "update_crm", "schedule"],
+  },
+  scheduling: {
+    label: "Scheduling Agent",
+    description: "Manage meeting scheduling and calendar coordination",
+    icon: "calendar",
+    color: "#8b5cf6",
+    defaultTools: ["reply", "schedule", "get_email_history"],
+  },
+  onboarding: {
+    label: "Onboarding Agent",
+    description: "Guide new users through onboarding processes",
+    icon: "user-plus",
+    color: "#ec4899",
+    defaultTools: ["reply", "send_email", "create_task", "update_crm"],
+  },
+  recruiting: {
+    label: "Recruiting Agent",
+    description: "Assist with candidate outreach and screening",
+    icon: "users",
+    color: "#f97316",
+    defaultTools: ["reply", "send_email", "enrich_person", "search_contacts", "schedule"],
+  },
+  newsletter: {
+    label: "Newsletter Agent",
+    description: "Manage newsletter subscriptions and content",
+    icon: "newspaper",
+    color: "#06b6d4",
+    defaultTools: ["reply", "send_email", "get_writing_style"],
+  },
+  custom: {
+    label: "Custom Agent",
+    description: "Build a custom agent with your own configuration",
+    icon: "sparkles",
+    color: "#eab308",
+    defaultTools: [],
+  },
+};
+
+// Default config for unknown agent types
+export const DEFAULT_AGENT_TYPE_CONFIG: AgentTypeConfigItem = {
+  label: "Agent",
+  description: "Custom agent",
+  icon: "bot",
+  color: "#6366f1",
+  defaultTools: [],
+};
+
+// Helper to safely get agent type config
+export function getAgentTypeConfig(type: AgentType): AgentTypeConfigItem {
+  if (type in AGENT_TYPE_CONFIG) {
+    return AGENT_TYPE_CONFIG[type as StandardAgentType];
+  }
+  return DEFAULT_AGENT_TYPE_CONFIG;
 }
 
 export interface WritingStyle {
@@ -9297,6 +9470,40 @@ export interface GeneratedEmail {
   style_applied: string;
 }
 
+export interface AgentCreateData {
+  name: string;
+  description?: string;
+  agent_type?: AgentType;
+  mention_handle?: string;
+  llm_provider?: "claude" | "gemini" | "ollama";
+  llm_model?: string;
+  temperature?: number;
+  max_tokens?: number;
+  system_prompt?: string;
+  custom_instructions?: string;
+  tools?: string[];
+  auto_respond?: boolean;
+  confidence_threshold?: number;
+  require_approval_below?: number;
+  max_daily_responses?: number;
+  response_delay_minutes?: number;
+  working_hours?: WorkingHoursConfig | null;
+  escalation_email?: string;
+  escalation_slack_channel?: string;
+  crm_sync?: boolean;
+  calendar_sync?: boolean;
+  calendar_id?: string;
+  // Legacy fields
+  goal?: string;
+  max_iterations?: number;
+  timeout_seconds?: number;
+  model?: string;
+}
+
+export interface AgentUpdateData extends Partial<AgentCreateData> {
+  is_active?: boolean;
+}
+
 export const agentsApi = {
   // Agents CRUD
   list: async (
@@ -9320,17 +9527,7 @@ export const agentsApi = {
 
   create: async (
     workspaceId: string,
-    data: {
-      name: string;
-      description?: string;
-      agent_type?: string;
-      goal?: string;
-      system_prompt?: string;
-      tools?: string[];
-      max_iterations?: number;
-      timeout_seconds?: number;
-      model?: string;
-    }
+    data: AgentCreateData
   ): Promise<CRMAgent> => {
     const response = await api.post(`/workspaces/${workspaceId}/crm/agents`, data);
     return response.data;
@@ -9339,17 +9536,7 @@ export const agentsApi = {
   update: async (
     workspaceId: string,
     agentId: string,
-    data: Partial<{
-      name: string;
-      description: string;
-      goal: string;
-      system_prompt: string;
-      tools: string[];
-      max_iterations: number;
-      timeout_seconds: number;
-      model: string;
-      is_active: boolean;
-    }>
+    data: AgentUpdateData
   ): Promise<CRMAgent> => {
     const response = await api.patch(`/workspaces/${workspaceId}/crm/agents/${agentId}`, data);
     return response.data;
@@ -9367,6 +9554,34 @@ export const agentsApi = {
   // Tools
   getTools: async (workspaceId: string): Promise<AgentToolInfo[]> => {
     const response = await api.get(`/workspaces/${workspaceId}/crm/agents/tools`);
+    return response.data;
+  },
+
+  // Metrics
+  getMetrics: async (workspaceId: string, agentId: string): Promise<AgentMetrics> => {
+    const response = await api.get(`/workspaces/${workspaceId}/crm/agents/${agentId}/metrics`);
+    return response.data;
+  },
+
+  // Test/Dry run
+  testAgent: async (
+    workspaceId: string,
+    agentId: string,
+    data: { context?: Record<string, unknown> }
+  ): Promise<{ success: boolean; response: string; confidence: number }> => {
+    const response = await api.post(`/workspaces/${workspaceId}/crm/agents/${agentId}/test`, data);
+    return response.data;
+  },
+
+  // Check mention handle availability
+  checkMentionHandle: async (
+    workspaceId: string,
+    handle: string,
+    excludeAgentId?: string
+  ): Promise<{ available: boolean }> => {
+    const response = await api.get(`/workspaces/${workspaceId}/crm/agents/check-handle`, {
+      params: { handle, exclude_agent_id: excludeAgentId },
+    });
     return response.data;
   },
 

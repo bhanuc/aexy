@@ -5,7 +5,7 @@ from enum import Enum
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -55,6 +55,7 @@ class CRMAgent(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     agent_type: Mapped[str] = mapped_column(String(50), nullable=False)  # AgentType enum value
+    mention_handle: Mapped[str | None] = mapped_column(String(50), nullable=True, unique=True)  # @mention handle
 
     # System agents are pre-built and cannot be deleted
     is_system: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -70,10 +71,32 @@ class CRMAgent(Base):
         nullable=False,
     )  # ["crm_search", "send_email", "enrich_company", ...]
 
+    # LLM configuration
+    llm_provider: Mapped[str] = mapped_column(String(50), default="claude", nullable=False)  # claude, gemini, ollama
+    model: Mapped[str] = mapped_column(String(100), default="claude-3-sonnet-20240229", nullable=False)
+    temperature: Mapped[float] = mapped_column(Float, default=0.7, nullable=False)
+    max_tokens: Mapped[int] = mapped_column(Integer, default=4096, nullable=False)
+
     # LangGraph configuration
     max_iterations: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
     timeout_seconds: Mapped[int] = mapped_column(Integer, default=300, nullable=False)
-    model: Mapped[str] = mapped_column(String(100), default="claude-3-sonnet-20240229", nullable=False)
+
+    # Behavior configuration
+    confidence_threshold: Mapped[float] = mapped_column(Float, default=0.7, nullable=False)
+    require_approval_below: Mapped[float] = mapped_column(Float, default=0.5, nullable=False)
+    max_daily_responses: Mapped[int | None] = mapped_column(Integer, nullable=True)  # null = unlimited
+    response_delay_minutes: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # Working hours configuration (JSONB)
+    working_hours: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # { enabled: bool, timezone: str, start: str, end: str, days: int[] }
+
+    # Additional prompts
+    custom_instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Escalation settings
+    escalation_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    escalation_slack_channel: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     # Status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
