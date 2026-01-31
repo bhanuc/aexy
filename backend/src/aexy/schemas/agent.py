@@ -240,3 +240,80 @@ class GenerateEmailResponse(BaseModel):
     subject: str
     body: str
     style_applied: str
+
+
+# =============================================================================
+# CONVERSATION SCHEMAS
+# =============================================================================
+
+
+class ConversationCreate(BaseModel):
+    """Schema for creating a conversation."""
+
+    message: str = Field(..., min_length=1)
+    record_id: str | None = None
+    title: str | None = None
+
+
+class ConversationUpdate(BaseModel):
+    """Schema for updating a conversation."""
+
+    title: str | None = None
+    status: Literal["active", "completed", "archived"] | None = None
+
+
+class MessageCreate(BaseModel):
+    """Schema for sending a message in a conversation."""
+
+    content: str = Field(..., min_length=1)
+
+
+class ToolCallInfo(BaseModel):
+    """Schema for tool call information."""
+
+    id: str
+    name: str
+    args: dict
+
+
+class MessageResponse(BaseModel):
+    """Schema for a conversation message."""
+
+    id: str
+    conversation_id: str
+    execution_id: str | None
+    role: Literal["user", "assistant", "system", "tool"]
+    content: str
+    tool_calls: list[ToolCallInfo] | None = None
+    tool_name: str | None = None
+    tool_output: dict | None = None
+    message_index: int
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ConversationResponse(BaseModel):
+    """Schema for a conversation."""
+
+    id: str
+    workspace_id: str
+    agent_id: str
+    record_id: str | None
+    title: str | None
+    status: str
+    conversation_metadata: dict = {}
+    created_at: datetime
+    updated_at: datetime
+    ended_at: datetime | None
+    message_count: int = 0
+
+    model_config = {"from_attributes": True}
+
+
+class ConversationWithMessagesResponse(ConversationResponse):
+    """Schema for a conversation with messages."""
+
+    messages: list[MessageResponse] = []
+
+    model_config = {"from_attributes": True}

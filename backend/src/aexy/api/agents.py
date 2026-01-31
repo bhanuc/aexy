@@ -21,6 +21,12 @@ from aexy.schemas.agent import (
     WritingStyleResponse,
     GenerateEmailRequest,
     GenerateEmailResponse,
+    ConversationCreate,
+    ConversationUpdate,
+    ConversationResponse,
+    ConversationWithMessagesResponse,
+    MessageCreate,
+    MessageResponse,
 )
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/crm/agents")
@@ -341,6 +347,252 @@ async def get_execution(
     if not execution or execution.agent_id != agent_id:
         raise HTTPException(status_code=404, detail="Execution not found")
     return execution
+
+
+# =============================================================================
+# CONVERSATIONS
+# =============================================================================
+
+
+@router.post("/{agent_id}/conversations", response_model=ConversationWithMessagesResponse)
+async def create_conversation(
+    workspace_id: str,
+    agent_id: str,
+    data: ConversationCreate,
+    db: AsyncSession = Depends(get_db),
+    current_developer: Developer = Depends(get_current_developer),
+):
+    """Start a new conversation with an agent."""
+    await check_workspace_permission(db, workspace_id, str(current_developer.id))
+    service = AgentService(db)
+
+    agent = await service.get_agent(agent_id)
+    if not agent or agent.workspace_id != workspace_id:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    try:
+        conversation, user_message, execution = await service.create_conversation(
+            agent_id=agent_id,
+            workspace_id=workspace_id,
+            initial_message=data.message,
+            record_id=data.record_id,
+            title=data.title,
+            user_id=str(current_developer.id),
+        )
+        await db.commit()
+
+        # Refresh to get messages
+        await db.refresh(conversation)
+        messages = await service.get_conversation_messages(conversation.id)
+
+        return ConversationWithMessagesResponse(
+            id=conversation.id,
+            workspace_id=conversation.workspace_id,
+            agent_id=conversation.agent_id,
+            record_id=conversation.record_id,
+            title=conversation.title,
+            status=conversation.status,
+            conversation_metadata=conversation.conversation_metadata,
+            created_at=conversation.created_at,
+            updated_at=conversation.updated_at,
+            ended_at=conversation.ended_at,
+            message_count=len(messages),
+            messages=[MessageResponse.model_validate(m) for m in messages],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/{agent_id}/conversations", response_model=list[ConversationResponse])
+async def list_conversations(
+    workspace_id: str,
+    agent_id: str,
+    status: str | None = None,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_developer: Developer = Depends(get_current_developer),
+):
+    """List conversations for an agent."""
+    await check_workspace_permission(db, workspace_id, str(current_developer.id))
+    service = AgentService(db)
+
+    agent = await service.get_agent(agent_id)
+    if not agent or agent.workspace_id != workspace_id:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    conversations = await service.list_conversations(
+        agent_id=agent_id,
+        status=status,
+        skip=skip,
+        limit=limit,
+    )
+
+    # Get message counts
+    result = []
+    for conv in conversations:
+        messages = await service.get_conversation_messages(conv.id, limit=1000)
+        result.append(ConversationResponse(
+            id=conv.id,
+            workspace_id=conv.workspace_id,
+            agent_id=conv.agent_id,
+            record_id=conv.record_id,
+            title=conv.title,
+            status=conv.status,
+            conversation_metadata=conv.conversation_metadata,
+            created_at=conv.created_at,
+            updated_at=conv.updated_at,
+            ended_at=conv.ended_at,
+            message_count=len(messages),
+        ))
+
+    return result
+
+
+@router.get("/{agent_id}/conversations/{conversation_id}", response_model=ConversationWithMessagesResponse)
+async def get_conversation(
+    workspace_id: str,
+    agent_id: str,
+    conversation_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_developer: Developer = Depends(get_current_developer),
+):
+    """Get a conversation with messages."""
+    await check_workspace_permission(db, workspace_id, str(current_developer.id))
+    service = AgentService(db)
+
+    conversation = await service.get_conversation(conversation_id)
+    if not conversation or conversation.agent_id != agent_id:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    messages = await service.get_conversation_messages(conversation_id)
+
+    return ConversationWithMessagesResponse(
+        id=conversation.id,
+        workspace_id=conversation.workspace_id,
+        agent_id=conversation.agent_id,
+        record_id=conversation.record_id,
+        title=conversation.title,
+        status=conversation.status,
+        conversation_metadata=conversation.conversation_metadata,
+        created_at=conversation.created_at,
+        updated_at=conversation.updated_at,
+        ended_at=conversation.ended_at,
+        message_count=len(messages),
+        messages=[MessageResponse.model_validate(m) for m in messages],
+    )
+
+
+@router.post("/{agent_id}/conversations/{conversation_id}/messages", response_model=ConversationWithMessagesResponse)
+async def send_message(
+    workspace_id: str,
+    agent_id: str,
+    conversation_id: str,
+    data: MessageCreate,
+    db: AsyncSession = Depends(get_db),
+    current_developer: Developer = Depends(get_current_developer),
+):
+    """Send a message in a conversation."""
+    await check_workspace_permission(db, workspace_id, str(current_developer.id))
+    service = AgentService(db)
+
+    conversation = await service.get_conversation(conversation_id)
+    if not conversation or conversation.agent_id != agent_id:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    try:
+        user_message, execution = await service.send_message(
+            conversation_id=conversation_id,
+            content=data.content,
+            user_id=str(current_developer.id),
+        )
+        await db.commit()
+
+        # Refresh conversation and get all messages
+        conversation = await service.get_conversation(conversation_id)
+        messages = await service.get_conversation_messages(conversation_id)
+
+        return ConversationWithMessagesResponse(
+            id=conversation.id,
+            workspace_id=conversation.workspace_id,
+            agent_id=conversation.agent_id,
+            record_id=conversation.record_id,
+            title=conversation.title,
+            status=conversation.status,
+            conversation_metadata=conversation.conversation_metadata,
+            created_at=conversation.created_at,
+            updated_at=conversation.updated_at,
+            ended_at=conversation.ended_at,
+            message_count=len(messages),
+            messages=[MessageResponse.model_validate(m) for m in messages],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.patch("/{agent_id}/conversations/{conversation_id}", response_model=ConversationResponse)
+async def update_conversation(
+    workspace_id: str,
+    agent_id: str,
+    conversation_id: str,
+    data: ConversationUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_developer: Developer = Depends(get_current_developer),
+):
+    """Update a conversation (title, status)."""
+    await check_workspace_permission(db, workspace_id, str(current_developer.id))
+    service = AgentService(db)
+
+    conversation = await service.get_conversation(conversation_id)
+    if not conversation or conversation.agent_id != agent_id:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    conversation = await service.update_conversation(
+        conversation_id=conversation_id,
+        title=data.title,
+        status=data.status,
+    )
+    await db.commit()
+
+    messages = await service.get_conversation_messages(conversation_id)
+
+    return ConversationResponse(
+        id=conversation.id,
+        workspace_id=conversation.workspace_id,
+        agent_id=conversation.agent_id,
+        record_id=conversation.record_id,
+        title=conversation.title,
+        status=conversation.status,
+        conversation_metadata=conversation.conversation_metadata,
+        created_at=conversation.created_at,
+        updated_at=conversation.updated_at,
+        ended_at=conversation.ended_at,
+        message_count=len(messages),
+    )
+
+
+@router.delete("/{agent_id}/conversations/{conversation_id}")
+async def delete_conversation(
+    workspace_id: str,
+    agent_id: str,
+    conversation_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_developer: Developer = Depends(get_current_developer),
+):
+    """Archive/delete a conversation."""
+    await check_workspace_permission(db, workspace_id, str(current_developer.id))
+    service = AgentService(db)
+
+    conversation = await service.get_conversation(conversation_id)
+    if not conversation or conversation.agent_id != agent_id:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    success = await service.delete_conversation(conversation_id)
+    if not success:
+        raise HTTPException(status_code=400, detail="Failed to delete conversation")
+
+    await db.commit()
+    return {"message": "Conversation archived"}
 
 
 # =============================================================================

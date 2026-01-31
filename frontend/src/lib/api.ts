@@ -9306,6 +9306,7 @@ export interface AgentMetrics {
 export interface CRMAgentExecution {
   id: string;
   agent_id: string;
+  conversation_id?: string | null;
   record_id: string | null;
   triggered_by: string | null;
   trigger_id: string | null;
@@ -9327,6 +9328,44 @@ export interface CRMAgentExecution {
   input_tokens: number;
   output_tokens: number;
   created_at: string;
+}
+
+// Agent Conversations
+export interface AgentConversation {
+  id: string;
+  workspace_id: string;
+  agent_id: string;
+  record_id: string | null;
+  title: string | null;
+  status: "active" | "completed" | "archived";
+  conversation_metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  ended_at: string | null;
+  message_count: number;
+}
+
+export interface ToolCallInfo {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+}
+
+export interface AgentMessage {
+  id: string;
+  conversation_id: string;
+  execution_id: string | null;
+  role: "user" | "assistant" | "system" | "tool";
+  content: string;
+  tool_calls?: ToolCallInfo[] | null;
+  tool_name?: string | null;
+  tool_output?: Record<string, unknown> | null;
+  message_index: number;
+  created_at: string;
+}
+
+export interface AgentConversationWithMessages extends AgentConversation {
+  messages: AgentMessage[];
 }
 
 export interface AgentToolInfo {
@@ -9617,6 +9656,251 @@ export const agentsApi = {
     executionId: string
   ): Promise<CRMAgentExecution> => {
     const response = await api.get(`/workspaces/${workspaceId}/crm/agents/${agentId}/executions/${executionId}`);
+    return response.data;
+  },
+
+  // Conversations
+  createConversation: async (
+    workspaceId: string,
+    agentId: string,
+    data: { message: string; record_id?: string; title?: string }
+  ): Promise<AgentConversationWithMessages> => {
+    const response = await api.post(`/workspaces/${workspaceId}/crm/agents/${agentId}/conversations`, data);
+    return response.data;
+  },
+
+  listConversations: async (
+    workspaceId: string,
+    agentId: string,
+    params?: { status?: string; skip?: number; limit?: number }
+  ): Promise<AgentConversation[]> => {
+    const response = await api.get(`/workspaces/${workspaceId}/crm/agents/${agentId}/conversations`, { params });
+    return response.data;
+  },
+
+  getConversation: async (
+    workspaceId: string,
+    agentId: string,
+    conversationId: string
+  ): Promise<AgentConversationWithMessages> => {
+    const response = await api.get(`/workspaces/${workspaceId}/crm/agents/${agentId}/conversations/${conversationId}`);
+    return response.data;
+  },
+
+  sendMessage: async (
+    workspaceId: string,
+    agentId: string,
+    conversationId: string,
+    data: { content: string }
+  ): Promise<AgentConversationWithMessages> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/crm/agents/${agentId}/conversations/${conversationId}/messages`,
+      data
+    );
+    return response.data;
+  },
+
+  updateConversation: async (
+    workspaceId: string,
+    agentId: string,
+    conversationId: string,
+    data: { title?: string; status?: "active" | "completed" | "archived" }
+  ): Promise<AgentConversation> => {
+    const response = await api.patch(
+      `/workspaces/${workspaceId}/crm/agents/${agentId}/conversations/${conversationId}`,
+      data
+    );
+    return response.data;
+  },
+
+  deleteConversation: async (
+    workspaceId: string,
+    agentId: string,
+    conversationId: string
+  ): Promise<void> => {
+    await api.delete(`/workspaces/${workspaceId}/crm/agents/${agentId}/conversations/${conversationId}`);
+  },
+};
+
+// =============================================================================
+// Automation Agent Integration API
+// =============================================================================
+
+export interface AutomationAgentTrigger {
+  id: string;
+  automation_id: string;
+  agent_id: string;
+  trigger_point: "on_start" | "on_condition_match" | "as_action";
+  trigger_config: Record<string, unknown>;
+  input_mapping: Record<string, string>;
+  wait_for_completion: boolean;
+  timeout_seconds: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  agent_name?: string | null;
+  agent_type?: string | null;
+}
+
+export interface AutomationAgentTriggerListItem {
+  id: string;
+  automation_id: string;
+  agent_id: string;
+  trigger_point: string;
+  wait_for_completion: boolean;
+  timeout_seconds: number;
+  is_active: boolean;
+  created_at: string;
+  agent_name: string;
+  agent_type: string;
+  agent_is_active: boolean;
+}
+
+export interface AutomationAgentTriggerCreate {
+  agent_id: string;
+  trigger_point: "on_start" | "on_condition_match" | "as_action";
+  trigger_config?: Record<string, unknown>;
+  input_mapping?: Record<string, string>;
+  wait_for_completion?: boolean;
+  timeout_seconds?: number;
+}
+
+export interface AutomationAgentTriggerUpdate {
+  trigger_config?: Record<string, unknown>;
+  input_mapping?: Record<string, string>;
+  wait_for_completion?: boolean;
+  timeout_seconds?: number;
+  is_active?: boolean;
+}
+
+export interface AutomationAgentExecution {
+  id: string;
+  automation_run_id: string | null;
+  workflow_execution_id: string | null;
+  workflow_step_id: string | null;
+  agent_id: string;
+  agent_execution_id: string | null;
+  trigger_point: string;
+  input_context: Record<string, unknown>;
+  output_result: Record<string, unknown> | null;
+  status: "pending" | "running" | "completed" | "failed" | "timeout";
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  duration_ms: number | null;
+  created_at: string;
+  agent_name?: string | null;
+}
+
+export interface AutomationAgentExecutionListItem {
+  id: string;
+  automation_run_id: string | null;
+  workflow_execution_id: string | null;
+  agent_id: string;
+  trigger_point: string;
+  status: string;
+  started_at: string | null;
+  completed_at: string | null;
+  duration_ms: number | null;
+  created_at: string;
+  agent_name: string;
+}
+
+export const automationAgentsApi = {
+  // Agent triggers on automations
+  createTrigger: async (
+    workspaceId: string,
+    automationId: string,
+    data: AutomationAgentTriggerCreate
+  ): Promise<AutomationAgentTrigger> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/crm/automations/${automationId}/agent-triggers`,
+      data
+    );
+    return response.data;
+  },
+
+  listTriggers: async (
+    workspaceId: string,
+    automationId: string,
+    params?: { trigger_point?: string; active_only?: boolean }
+  ): Promise<AutomationAgentTriggerListItem[]> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/crm/automations/${automationId}/agent-triggers`,
+      { params }
+    );
+    return response.data;
+  },
+
+  getTrigger: async (
+    workspaceId: string,
+    automationId: string,
+    triggerId: string
+  ): Promise<AutomationAgentTrigger> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/crm/automations/${automationId}/agent-triggers/${triggerId}`
+    );
+    return response.data;
+  },
+
+  updateTrigger: async (
+    workspaceId: string,
+    automationId: string,
+    triggerId: string,
+    data: AutomationAgentTriggerUpdate
+  ): Promise<AutomationAgentTrigger> => {
+    const response = await api.patch(
+      `/workspaces/${workspaceId}/crm/automations/${automationId}/agent-triggers/${triggerId}`,
+      data
+    );
+    return response.data;
+  },
+
+  deleteTrigger: async (
+    workspaceId: string,
+    automationId: string,
+    triggerId: string
+  ): Promise<{ success: boolean; message: string }> => {
+    const response = await api.delete(
+      `/workspaces/${workspaceId}/crm/automations/${automationId}/agent-triggers/${triggerId}`
+    );
+    return response.data;
+  },
+
+  // Agent executions for automations
+  listAutomationExecutions: async (
+    workspaceId: string,
+    automationId: string,
+    params?: { skip?: number; limit?: number }
+  ): Promise<AutomationAgentExecutionListItem[]> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/crm/automations/${automationId}/agent-executions`,
+      { params }
+    );
+    return response.data;
+  },
+
+  getExecution: async (
+    workspaceId: string,
+    automationId: string,
+    executionId: string
+  ): Promise<AutomationAgentExecution> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/crm/automations/${automationId}/agent-executions/${executionId}`
+    );
+    return response.data;
+  },
+
+  // Agent executions from agent perspective
+  listAgentAutomationExecutions: async (
+    workspaceId: string,
+    agentId: string,
+    params?: { skip?: number; limit?: number }
+  ): Promise<AutomationAgentExecutionListItem[]> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/agents/${agentId}/automation-executions`,
+      { params }
+    );
     return response.data;
   },
 };

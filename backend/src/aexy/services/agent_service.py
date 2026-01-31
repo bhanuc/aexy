@@ -10,7 +10,14 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from aexy.models.agent import CRMAgent, CRMAgentExecution, AgentType, AgentExecutionStatus
+from aexy.models.agent import (
+    CRMAgent,
+    CRMAgentExecution,
+    AgentConversation,
+    AgentMessage,
+    AgentType,
+    AgentExecutionStatus,
+)
 from aexy.agents.builder import AgentBuilder
 
 logger = logging.getLogger(__name__)
@@ -126,8 +133,9 @@ class AgentService:
         if not agent:
             return None
 
-        # Don't allow modifying system agents
-        if agent.is_system and any(k != "is_active" for k in kwargs.keys()):
+        # System agents can only have certain fields modified
+        allowed_system_fields = {"is_active", "llm_provider", "llm_model", "model", "temperature"}
+        if agent.is_system and any(k not in allowed_system_fields for k in kwargs.keys()):
             return None
 
         for key, value in kwargs.items():
@@ -323,6 +331,7 @@ class AgentService:
             system_prompt=agent.system_prompt,
             tools=agent.tools,
             model=agent.model,
+            llm_provider=agent.llm_provider,
             max_iterations=agent.max_iterations,
             timeout_seconds=agent.timeout_seconds,
         )
@@ -383,6 +392,377 @@ class AgentService:
         stmt = select(CRMAgentExecution).where(CRMAgentExecution.id == execution_id)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
+
+    # =========================================================================
+    # CONVERSATION MANAGEMENT
+    # =========================================================================
+
+    async def create_conversation(
+        self,
+        agent_id: str,
+        workspace_id: str,
+        initial_message: str,
+        record_id: str | None = None,
+        title: str | None = None,
+        user_id: str | None = None,
+    ) -> tuple[AgentConversation, AgentMessage, CRMAgentExecution]:
+        """Create a new conversation and send the first message.
+
+        Returns:
+            Tuple of (conversation, user_message, execution)
+        """
+        agent = await self.get_agent(agent_id)
+        if not agent:
+            raise ValueError(f"Agent {agent_id} not found")
+        if not agent.is_active:
+            raise ValueError(f"Agent {agent.name} is not active")
+
+        # Generate title if not provided
+        if not title:
+            # Use first 50 chars of message as title
+            title = initial_message[:50] + ("..." if len(initial_message) > 50 else "")
+
+        # Create conversation
+        conversation = AgentConversation(
+            id=str(uuid4()),
+            workspace_id=workspace_id,
+            agent_id=agent_id,
+            record_id=record_id,
+            title=title,
+            status="active",
+            conversation_metadata={},
+        )
+        self.db.add(conversation)
+        await self.db.flush()
+
+        # Add user message
+        user_message = AgentMessage(
+            id=str(uuid4()),
+            conversation_id=conversation.id,
+            role="user",
+            content=initial_message,
+            message_index=0,
+        )
+        self.db.add(user_message)
+        await self.db.flush()
+
+        # Execute agent with the message
+        execution = await self._execute_conversation_message(
+            conversation=conversation,
+            agent=agent,
+            user_message=initial_message,
+            message_index=1,
+            record_id=record_id,
+            user_id=user_id,
+        )
+
+        await self.db.refresh(conversation)
+        return conversation, user_message, execution
+
+    async def get_conversation(self, conversation_id: str) -> AgentConversation | None:
+        """Get a conversation by ID with messages."""
+        stmt = select(AgentConversation).where(AgentConversation.id == conversation_id)
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def list_conversations(
+        self,
+        agent_id: str,
+        status: str | None = None,
+        skip: int = 0,
+        limit: int = 50,
+    ) -> list[AgentConversation]:
+        """List conversations for an agent."""
+        stmt = select(AgentConversation).where(AgentConversation.agent_id == agent_id)
+
+        if status:
+            stmt = stmt.where(AgentConversation.status == status)
+
+        stmt = stmt.order_by(AgentConversation.updated_at.desc())
+        stmt = stmt.offset(skip).limit(limit)
+
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def update_conversation(
+        self,
+        conversation_id: str,
+        title: str | None = None,
+        status: str | None = None,
+    ) -> AgentConversation | None:
+        """Update a conversation."""
+        conversation = await self.get_conversation(conversation_id)
+        if not conversation:
+            return None
+
+        if title is not None:
+            conversation.title = title
+        if status is not None:
+            conversation.status = status
+            if status in ("completed", "archived"):
+                conversation.ended_at = datetime.now(timezone.utc)
+
+        await self.db.flush()
+        await self.db.refresh(conversation)
+        return conversation
+
+    async def delete_conversation(self, conversation_id: str) -> bool:
+        """Delete (archive) a conversation."""
+        conversation = await self.get_conversation(conversation_id)
+        if not conversation:
+            return False
+
+        conversation.status = "archived"
+        conversation.ended_at = datetime.now(timezone.utc)
+        await self.db.flush()
+        return True
+
+    async def send_message(
+        self,
+        conversation_id: str,
+        content: str,
+        user_id: str | None = None,
+    ) -> tuple[AgentMessage, CRMAgentExecution]:
+        """Send a user message and get agent response.
+
+        Returns:
+            Tuple of (user_message, execution)
+        """
+        conversation = await self.get_conversation(conversation_id)
+        if not conversation:
+            raise ValueError(f"Conversation {conversation_id} not found")
+
+        if conversation.status != "active":
+            raise ValueError("Cannot send message to inactive conversation")
+
+        agent = await self.get_agent(conversation.agent_id)
+        if not agent:
+            raise ValueError("Agent not found")
+        if not agent.is_active:
+            raise ValueError(f"Agent {agent.name} is not active")
+
+        # Get current message count for index
+        stmt = select(func.count()).select_from(AgentMessage).where(
+            AgentMessage.conversation_id == conversation_id
+        )
+        result = await self.db.execute(stmt)
+        message_count = result.scalar() or 0
+
+        # Add user message
+        user_message = AgentMessage(
+            id=str(uuid4()),
+            conversation_id=conversation_id,
+            role="user",
+            content=content,
+            message_index=message_count,
+        )
+        self.db.add(user_message)
+        await self.db.flush()
+
+        # Execute agent with conversation history
+        execution = await self._execute_conversation_message(
+            conversation=conversation,
+            agent=agent,
+            user_message=content,
+            message_index=message_count + 1,
+            record_id=conversation.record_id,
+            user_id=user_id,
+        )
+
+        return user_message, execution
+
+    async def get_conversation_messages(
+        self,
+        conversation_id: str,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> list[AgentMessage]:
+        """Get messages for a conversation."""
+        stmt = (
+            select(AgentMessage)
+            .where(AgentMessage.conversation_id == conversation_id)
+            .order_by(AgentMessage.message_index)
+            .offset(skip)
+            .limit(limit)
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def _execute_conversation_message(
+        self,
+        conversation: AgentConversation,
+        agent: CRMAgent,
+        user_message: str,
+        message_index: int,
+        record_id: str | None = None,
+        user_id: str | None = None,
+    ) -> CRMAgentExecution:
+        """Execute agent for a conversation message and store response."""
+        from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+
+        # Get conversation history
+        messages = await self.get_conversation_messages(conversation.id)
+
+        # Convert to LangChain messages
+        conversation_history = []
+        for msg in messages:
+            if msg.role == "user":
+                conversation_history.append(HumanMessage(content=msg.content))
+            elif msg.role == "assistant":
+                conversation_history.append(AIMessage(content=msg.content))
+            elif msg.role == "tool":
+                # Reconstruct tool message with proper ID
+                tool_call_id = msg.tool_output.get("tool_call_id", "") if msg.tool_output else ""
+                conversation_history.append(
+                    ToolMessage(
+                        content=msg.content,
+                        tool_call_id=tool_call_id,
+                    )
+                )
+
+        # Add the new user message
+        conversation_history.append(HumanMessage(content=user_message))
+
+        # Load record data if needed
+        record_data = {}
+        if record_id:
+            from aexy.services.crm_service import CRMRecordService
+            record_service = CRMRecordService(self.db)
+            record = await record_service.get_record(record_id)
+            if record:
+                record_data = {
+                    "id": record.id,
+                    "object_id": record.object_id,
+                    "values": record.values,
+                    "owner_id": record.owner_id,
+                }
+
+        # Create execution record
+        execution = CRMAgentExecution(
+            id=str(uuid4()),
+            agent_id=agent.id,
+            conversation_id=conversation.id,
+            record_id=record_id,
+            triggered_by="chat",
+            input_context={"message": user_message},
+            status="running",
+            started_at=datetime.now(timezone.utc),
+        )
+        self.db.add(execution)
+        await self.db.flush()
+
+        # Build and run agent
+        builder = AgentBuilder(
+            workspace_id=agent.workspace_id,
+            user_id=user_id,
+            db=self.db,
+        )
+
+        agent_instance = builder.build_from_config(
+            name=agent.name,
+            agent_type=agent.agent_type,
+            goal=agent.goal,
+            system_prompt=agent.system_prompt,
+            tools=agent.tools,
+            model=agent.model,
+            llm_provider=agent.llm_provider,
+            max_iterations=agent.max_iterations,
+            timeout_seconds=agent.timeout_seconds,
+        )
+
+        try:
+            result = await agent_instance.run(
+                record_id=record_id,
+                record_data=record_data,
+                context={"conversation_id": conversation.id},
+                conversation_history=conversation_history,
+            )
+
+            # Update execution record
+            execution.status = result.get("status", "completed")
+            execution.output_result = result.get("output")
+            execution.steps = result.get("steps", [])
+            execution.error_message = result.get("error")
+            execution.completed_at = datetime.now(timezone.utc)
+            execution.duration_ms = int(
+                (execution.completed_at - execution.started_at).total_seconds() * 1000
+            )
+
+            # Extract assistant response and add as message
+            output = result.get("output", {})
+            assistant_content = output.get("content", "") if output else ""
+            tool_calls = output.get("tool_calls", []) if output else []
+
+            # Add assistant message
+            assistant_message = AgentMessage(
+                id=str(uuid4()),
+                conversation_id=conversation.id,
+                execution_id=execution.id,
+                role="assistant",
+                content=assistant_content,
+                tool_calls=tool_calls if tool_calls else None,
+                message_index=message_index,
+            )
+            self.db.add(assistant_message)
+
+            # Add tool messages for each tool call
+            for i, step in enumerate(result.get("steps", [])):
+                if step.get("type") == "tool_call":
+                    tool_message = AgentMessage(
+                        id=str(uuid4()),
+                        conversation_id=conversation.id,
+                        execution_id=execution.id,
+                        role="tool",
+                        content=str(step.get("output", "")),
+                        tool_name=step.get("tool"),
+                        tool_output={
+                            "input": step.get("input", {}),
+                            "output": step.get("output"),
+                            "tool_call_id": step.get("id", ""),
+                        },
+                        message_index=message_index + i + 1,
+                    )
+                    self.db.add(tool_message)
+
+            # Update agent stats
+            agent.total_executions += 1
+            if execution.status == "completed":
+                agent.successful_executions += 1
+            else:
+                agent.failed_executions += 1
+
+            if agent.avg_duration_ms > 0:
+                agent.avg_duration_ms = int(
+                    (agent.avg_duration_ms + execution.duration_ms) / 2
+                )
+            else:
+                agent.avg_duration_ms = execution.duration_ms
+
+        except Exception as e:
+            execution.status = "failed"
+            execution.error_message = str(e)
+            execution.completed_at = datetime.now(timezone.utc)
+            execution.duration_ms = int(
+                (execution.completed_at - execution.started_at).total_seconds() * 1000
+            )
+
+            # Add error message
+            error_message = AgentMessage(
+                id=str(uuid4()),
+                conversation_id=conversation.id,
+                execution_id=execution.id,
+                role="assistant",
+                content=f"I encountered an error: {str(e)}",
+                message_index=message_index,
+            )
+            self.db.add(error_message)
+
+            agent.total_executions += 1
+            agent.failed_executions += 1
+
+        await self.db.flush()
+        await self.db.refresh(execution)
+        return execution
 
     async def list_executions(
         self,
@@ -697,6 +1077,7 @@ class SyncAgentService:
                 system_prompt=agent.system_prompt,
                 tools=agent.tools,
                 model=agent.model,
+                llm_provider=agent.llm_provider,
                 max_iterations=agent.max_iterations,
                 timeout_seconds=agent.timeout_seconds,
             )
