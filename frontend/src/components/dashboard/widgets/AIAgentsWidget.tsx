@@ -6,16 +6,15 @@ import {
   ChevronRight,
   Play,
   CheckCircle,
-  XCircle,
   Plus,
   Zap,
 } from "lucide-react";
 import { useWorkspace } from "@/hooks/useWorkspace";
-import { useWorkspaceAgents } from "@/hooks/useAgents";
+import { useAgents } from "@/hooks/useAgents";
 
 export function AIAgentsWidget() {
   const { currentWorkspace } = useWorkspace();
-  const { agents, isLoading } = useWorkspaceAgents(currentWorkspace?.id || null);
+  const { agents, isLoading } = useAgents(currentWorkspace?.id || null);
 
   if (isLoading) {
     return (
@@ -45,7 +44,7 @@ export function AIAgentsWidget() {
           <h3 className="text-lg font-semibold text-white">AI Agents</h3>
         </div>
         <Link
-          href="/agents"
+          href="/crm/agents"
           className="text-purple-400 hover:text-purple-300 text-sm flex items-center gap-1 transition"
         >
           View All <ChevronRight className="w-4 h-4" />
@@ -97,7 +96,7 @@ export function AIAgentsWidget() {
                 {activeAgents.slice(0, 4).map((agent) => (
                   <Link
                     key={agent.id}
-                    href={`/agents/${agent.id}`}
+                    href={`/crm/agents/${agent.id}`}
                     className="flex items-center justify-between p-2 bg-slate-800/30 rounded-lg hover:bg-slate-800/50 transition"
                   >
                     <div className="flex items-center gap-2">
@@ -123,7 +122,7 @@ export function AIAgentsWidget() {
               <div className="text-center py-4">
                 <p className="text-slate-500 text-sm">No active agents yet.</p>
                 <Link
-                  href="/agents/new"
+                  href="/crm/agents/new"
                   className="inline-flex items-center gap-1 mt-2 text-purple-400 hover:text-purple-300 text-sm transition"
                 >
                   <Plus className="h-3 w-3" />

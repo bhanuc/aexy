@@ -160,6 +160,7 @@ class AgentBuilder:
         system_prompt: str | None = None,
         tools: list[str] | None = None,
         model: str | None = None,
+        llm_provider: str = "claude",
         max_iterations: int = 10,
         timeout_seconds: int = 300,
     ) -> BaseAgent:
@@ -178,6 +179,7 @@ class AgentBuilder:
                 user_id=self.user_id or "",
                 db=self.db,
                 model=model,
+                llm_provider=llm_provider,
                 max_iterations=max_iterations,
                 timeout_seconds=timeout_seconds,
             )
@@ -186,6 +188,7 @@ class AgentBuilder:
                 workspace_id=self.workspace_id,
                 db=self.db,
                 model=model,
+                llm_provider=llm_provider,
                 max_iterations=max_iterations,
                 timeout_seconds=timeout_seconds,
             )
@@ -195,6 +198,7 @@ class AgentBuilder:
                 user_id=self.user_id or "",
                 db=self.db,
                 model=model,
+                llm_provider=llm_provider,
                 max_iterations=max_iterations,
                 timeout_seconds=timeout_seconds,
             )
@@ -203,6 +207,7 @@ class AgentBuilder:
                 workspace_id=self.workspace_id,
                 db=self.db,
                 model=model,
+                llm_provider=llm_provider,
                 max_iterations=max_iterations,
                 timeout_seconds=timeout_seconds,
             )
@@ -217,6 +222,7 @@ class AgentBuilder:
                 user_id=self.user_id,
                 db=self.db,
                 model=model,
+                llm_provider=llm_provider,
                 max_iterations=max_iterations,
                 timeout_seconds=timeout_seconds,
             )

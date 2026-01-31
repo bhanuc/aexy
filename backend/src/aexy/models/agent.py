@@ -154,6 +154,12 @@ class CRMAgentExecution(Base):
         nullable=False,
         index=True,
     )
+    conversation_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("crm_agent_conversations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     # Context
     record_id: Mapped[str | None] = mapped_column(
@@ -211,6 +217,112 @@ class CRMAgentExecution(Base):
 
     # Relationships
     agent: Mapped["CRMAgent"] = relationship("CRMAgent", back_populates="executions")
+    conversation: Mapped["AgentConversation | None"] = relationship(
+        "AgentConversation", back_populates="executions"
+    )
+
+
+class AgentConversation(Base):
+    """Agent chat conversation."""
+
+    __tablename__ = "crm_agent_conversations"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    agent_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("crm_agents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    record_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False),
+        nullable=True,
+        index=True,
+    )
+    title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
+    conversation_metadata: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Relationships
+    workspace: Mapped["Workspace"] = relationship("Workspace", lazy="selectin")
+    agent: Mapped["CRMAgent"] = relationship("CRMAgent", lazy="selectin")
+    messages: Mapped[list["AgentMessage"]] = relationship(
+        "AgentMessage",
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        order_by="AgentMessage.message_index",
+        lazy="selectin",
+    )
+    executions: Mapped[list["CRMAgentExecution"]] = relationship(
+        "CRMAgentExecution",
+        back_populates="conversation",
+        lazy="noload",
+    )
+
+
+class AgentMessage(Base):
+    """Message in an agent conversation."""
+
+    __tablename__ = "crm_agent_messages"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+    )
+    conversation_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("crm_agent_conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    execution_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("crm_agent_executions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    role: Mapped[str] = mapped_column(String(20), nullable=False)  # user, assistant, system, tool
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    tool_calls: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    tool_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    tool_output: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    message_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    conversation: Mapped["AgentConversation"] = relationship(
+        "AgentConversation", back_populates="messages"
+    )
+    execution: Mapped["CRMAgentExecution | None"] = relationship(
+        "CRMAgentExecution", lazy="selectin"
+    )
 
 
 class UserWritingStyle(Base):

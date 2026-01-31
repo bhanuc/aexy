@@ -19,11 +19,134 @@ import {
   Mail,
   Database,
   Sparkles,
+  X,
+  Wrench,
 } from "lucide-react";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useAgent, useAgentExecutions, useAgentExecution, useAgentTools } from "@/hooks/useAgents";
 import { useAuth } from "@/hooks/useAuth";
 import { CRMAgentExecution } from "@/lib/api";
+
+// Run Agent Dialog Component
+function RunAgentDialog({
+  isOpen,
+  onClose,
+  onRun,
+  isRunning,
+  agentName,
+  tools,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onRun: (context: Record<string, unknown>) => void;
+  isRunning: boolean;
+  agentName: string;
+  tools: string[];
+}) {
+  const [task, setTask] = useState("");
+
+  if (!isOpen) return null;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onRun({ task: task || `Execute the ${agentName} agent` });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-lg mx-4">
+        {/* Header */}
+        <div className="flex items-center justify-between p-5 border-b border-slate-700">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-green-500/20 rounded-lg">
+              <Zap className="h-5 w-5 text-green-400" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-white">Run {agentName}</h2>
+              <p className="text-sm text-slate-400">Provide context for the agent</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <form onSubmit={handleSubmit} className="p-5 space-y-5">
+          {/* Task Input */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Task Description
+            </label>
+            <textarea
+              value={task}
+              onChange={(e) => setTask(e.target.value)}
+              placeholder="e.g., Search for contacts in the tech industry and draft a personalized email..."
+              className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-green-500/50 focus:border-green-500 resize-none"
+              rows={4}
+              autoFocus
+            />
+            <p className="mt-2 text-xs text-slate-500">
+              Be specific about what you want the agent to do. The agent will use its available tools to complete the task.
+            </p>
+          </div>
+
+          {/* Available Tools */}
+          {tools.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 text-sm text-slate-400 mb-2">
+                <Wrench className="h-4 w-4" />
+                <span>Available Tools</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {tools.map((tool) => (
+                  <span
+                    key={tool}
+                    className="px-2 py-1 bg-slate-800 text-slate-400 rounded text-xs"
+                  >
+                    {tool.replace(/_/g, " ")}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-slate-400 hover:text-white transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isRunning}
+              className="flex items-center gap-2 px-5 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isRunning ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Running...
+                </>
+              ) : (
+                <>
+                  <Zap className="h-4 w-4" />
+                  Run Agent
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 const agentTypeLabels: Record<string, { label: string; icon: typeof Bot; color: string }> = {
   sales_outreach: { label: "Sales Outreach", icon: Target, color: "text-green-400 bg-green-500/20" },
@@ -189,6 +312,7 @@ export default function AgentDetailPage() {
   const { agent, isLoading, executeAgent, isExecuting } = useAgent(workspaceId, agentId);
   const { executions, isLoading: isLoadingExecutions } = useAgentExecutions(workspaceId, agentId);
   const [selectedExecutionId, setSelectedExecutionId] = useState<string | null>(null);
+  const [showRunDialog, setShowRunDialog] = useState(false);
   const { execution: selectedExecution } = useAgentExecution(
     workspaceId,
     agentId,
@@ -198,10 +322,11 @@ export default function AgentDetailPage() {
   const typeInfo = agent ? (agentTypeLabels[agent.agent_type] || agentTypeLabels.custom) : agentTypeLabels.custom;
   const Icon = typeInfo.icon;
 
-  const handleExecute = async () => {
+  const handleExecute = async (context: Record<string, unknown>) => {
     try {
-      const execution = await executeAgent({});
+      const execution = await executeAgent({ context });
       setSelectedExecutionId(execution.id);
+      setShowRunDialog(false);
     } catch (error) {
       console.error("Failed to execute agent:", error);
     }
@@ -263,7 +388,7 @@ export default function AgentDetailPage() {
             <p className="text-sm text-slate-400">{typeInfo.label}</p>
           </div>
           <button
-            onClick={handleExecute}
+            onClick={() => setShowRunDialog(true)}
             disabled={isExecuting || !agent.is_active}
             className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -280,6 +405,16 @@ export default function AgentDetailPage() {
             )}
           </button>
         </div>
+
+        {/* Run Agent Dialog */}
+        <RunAgentDialog
+          isOpen={showRunDialog}
+          onClose={() => setShowRunDialog(false)}
+          onRun={handleExecute}
+          isRunning={isExecuting}
+          agentName={agent.name}
+          tools={agent.tools}
+        />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Column - Agent Info */}
