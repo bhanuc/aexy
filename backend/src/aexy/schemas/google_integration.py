@@ -22,6 +22,8 @@ class GoogleIntegrationStatusResponse(BaseModel):
     google_email: str | None = None
     gmail_sync_enabled: bool = False
     calendar_sync_enabled: bool = False
+    auto_sync_interval_minutes: int = 0  # 0 = disabled, >0 = interval in minutes (Gmail)
+    auto_sync_calendar_interval_minutes: int = 0  # 0 = disabled, >0 = interval in minutes (Calendar)
     gmail_last_sync_at: datetime | None = None
     calendar_last_sync_at: datetime | None = None
     messages_synced: int = 0
@@ -36,6 +38,8 @@ class GoogleIntegrationSettingsUpdate(BaseModel):
 
     gmail_sync_enabled: bool | None = None
     calendar_sync_enabled: bool | None = None
+    auto_sync_interval_minutes: int | None = Field(default=None, ge=0, description="Gmail auto-sync interval in minutes. 0 = disabled.")
+    auto_sync_calendar_interval_minutes: int | None = Field(default=None, ge=0, description="Calendar auto-sync interval in minutes. 0 = disabled.")
     sync_settings: dict[str, Any] | None = None  # labels, calendars, privacy
 
 

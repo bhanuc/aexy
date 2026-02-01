@@ -109,6 +109,7 @@ from aexy.api.dashboard import router as dashboard_router
 # Roles & Projects
 from aexy.api.roles import router as roles_router
 from aexy.api.projects import router as projects_router
+from aexy.api.public_projects import router as public_projects_router
 # App Access Control
 from aexy.api.app_access import router as app_access_router
 # Email Marketing
@@ -249,6 +250,7 @@ api_router.include_router(dashboard_router, tags=["dashboard"])
 # Roles & Projects
 api_router.include_router(roles_router, tags=["roles"])
 api_router.include_router(projects_router, tags=["projects"])
+api_router.include_router(public_projects_router, tags=["public-projects"])
 # App Access Control
 api_router.include_router(app_access_router, tags=["app-access"])
 # Email Marketing

@@ -145,6 +145,11 @@ class ReleaseListResponse(BaseModel):
     progress_percentage: float = 0.0
     open_bugs: int = 0
     critical_bugs: int = 0
+    readiness_checklist: list[ReadinessChecklistItem] = Field(default_factory=list)
+
+class ReleaseListResult(BaseModel):
+    items: list[ReleaseListResponse]
+    total: int
 
 
 class ReleaseDetailResponse(ReleaseResponse):
