@@ -22,7 +22,6 @@ import {
   AtSign,
   X,
 } from "lucide-react";
-import Link from "next/link";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useAgent, useAgentTools } from "@/hooks/useAgents";
 import { useAgentEmail, useEmailDomains } from "@/hooks/useAgentInbox";
