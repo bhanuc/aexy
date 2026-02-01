@@ -295,7 +295,7 @@ Return valid JSON only."""
             reasoning=decision.reasoning,
             response_draft=decision.draft_response,
             requires_approval=decision.requires_approval,
-            metadata=decision.metadata,
+            decision_metadata=decision.metadata,
         )
 
         db_session.add(log_entry)

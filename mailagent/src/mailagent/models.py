@@ -254,7 +254,7 @@ class AgentDecision(Base):
     confidence: Mapped[float] = mapped_column(nullable=False)
     reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
     response_draft: Mapped[str | None] = mapped_column(Text, nullable=True)
-    metadata: Mapped[dict] = mapped_column(JSON, default=dict)
+    decision_metadata: Mapped[dict] = mapped_column(JSON, default=dict)
 
     # Execution
     executed: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -391,3 +391,7 @@ class AgentAction(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+
+
+# Alias for backwards compatibility
+AgentDecisionLog = AgentDecision

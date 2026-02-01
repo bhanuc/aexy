@@ -12,10 +12,11 @@ import {
   ToolSelectionStep,
   BehaviorStep,
   PromptEditorStep,
+  EmailConfigStep,
   ReviewStep,
 } from "./steps";
 import { useAgents } from "@/hooks/useAgents";
-import { AgentType, StandardAgentType, WorkingHoursConfig, AGENT_TYPE_CONFIG } from "@/lib/api";
+import { AgentType, StandardAgentType, WorkingHoursConfig, AGENT_TYPE_CONFIG, agentsApi } from "@/lib/api";
 
 const WIZARD_STEPS: WizardStep[] = [
   { id: "type", title: "Type", description: "Choose agent type" },
@@ -24,6 +25,7 @@ const WIZARD_STEPS: WizardStep[] = [
   { id: "tools", title: "Tools", description: "Select capabilities" },
   { id: "behavior", title: "Behavior", description: "Thresholds & limits" },
   { id: "prompts", title: "Prompts", description: "System prompt" },
+  { id: "email", title: "Email", description: "Email configuration" },
   { id: "review", title: "Review", description: "Final review" },
 ];
 
@@ -60,6 +62,13 @@ export function AgentCreationWizard({
   const [systemPrompt, setSystemPrompt] = useState("");
   const [customInstructions, setCustomInstructions] = useState("");
 
+  // Email configuration state
+  const [emailEnabled, setEmailEnabled] = useState(false);
+  const [emailHandle, setEmailHandle] = useState("");
+  const [emailDomain, setEmailDomain] = useState("");
+  const [autoReplyEnabled, setAutoReplyEnabled] = useState(true);
+  const [emailSignature, setEmailSignature] = useState("");
+
   // When agent type is selected, initialize with defaults
   const handleTypeSelect = (type: AgentType) => {
     setAgentType(type);
@@ -90,7 +99,13 @@ export function AgentCreationWizard({
         );
       case 5: // Prompts
         return true; // Prompts are optional
-      case 6: // Review
+      case 6: // Email
+        // If email is enabled, handle and domain must be set
+        if (emailEnabled) {
+          return emailHandle.trim().length > 0 && emailDomain.length > 0;
+        }
+        return true; // Email is optional
+      case 7: // Review
         return true;
       default:
         return false;
@@ -142,10 +157,28 @@ export function AgentCreationWizard({
         working_hours: workingHours,
         system_prompt: systemPrompt.trim() || undefined,
         custom_instructions: customInstructions.trim() || undefined,
+        // Email settings that go with the agent
+        auto_reply_enabled: autoReplyEnabled,
+        email_signature: emailSignature.trim() || undefined,
       });
 
+      // If email is enabled, enable it for the agent
+      if (emailEnabled && emailHandle && emailDomain) {
+        try {
+          await agentsApi.enableEmail(
+            workspaceId,
+            newAgent.id,
+            emailHandle,
+            emailDomain
+          );
+        } catch (emailErr) {
+          console.error("Failed to enable email:", emailErr);
+          // Don't fail the whole creation, just log the error
+        }
+      }
+
       // Redirect to the new agent's page
-      router.push(`/settings/agents/${newAgent.id}`);
+      router.push(`/agents/${newAgent.id}`);
     } catch (err) {
       console.error("Failed to create agent:", err);
       setError(err instanceof Error ? err.message : "Failed to create agent");
@@ -180,6 +213,13 @@ export function AgentCreationWizard({
             onNameChange={setName}
             onDescriptionChange={setDescription}
             onMentionHandleChange={setMentionHandle}
+            // Email quick setup props
+            emailEnabled={emailEnabled}
+            emailHandle={emailHandle}
+            emailDomain={emailDomain}
+            onEmailEnabledChange={setEmailEnabled}
+            onEmailHandleChange={setEmailHandle}
+            onEmailDomainChange={setEmailDomain}
           />
         );
       case 2:
@@ -233,6 +273,24 @@ export function AgentCreationWizard({
         );
       case 6:
         return (
+          <EmailConfigStep
+            workspaceId={workspaceId}
+            agentName={name}
+            mentionHandle={mentionHandle}
+            emailEnabled={emailEnabled}
+            emailHandle={emailHandle}
+            emailDomain={emailDomain}
+            autoReplyEnabled={autoReplyEnabled}
+            emailSignature={emailSignature}
+            onEmailEnabledChange={setEmailEnabled}
+            onEmailHandleChange={setEmailHandle}
+            onEmailDomainChange={setEmailDomain}
+            onAutoReplyEnabledChange={setAutoReplyEnabled}
+            onEmailSignatureChange={setEmailSignature}
+          />
+        );
+      case 7:
+        return (
           <ReviewStep
             config={{
               agentType: agentType || "custom",
@@ -252,6 +310,11 @@ export function AgentCreationWizard({
               workingHours,
               systemPrompt,
               customInstructions,
+              emailEnabled,
+              emailHandle,
+              emailDomain,
+              autoReplyEnabled,
+              emailSignature,
             }}
             onEditStep={handleGoToStep}
           />

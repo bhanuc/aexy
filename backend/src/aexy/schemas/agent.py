@@ -93,6 +93,11 @@ class AgentUpdate(BaseModel):
     escalation_email: str | None = Field(default=None, max_length=255)
     escalation_slack_channel: str | None = Field(default=None, max_length=100)
 
+    # Email integration
+    email_enabled: bool | None = None
+    auto_reply_enabled: bool | None = None
+    email_signature: str | None = None
+
     is_active: bool | None = None
 
 
@@ -133,6 +138,12 @@ class AgentResponse(BaseModel):
     # Escalation
     escalation_email: str | None
     escalation_slack_channel: str | None
+
+    # Email integration
+    email_address: str | None = None
+    email_enabled: bool = False
+    auto_reply_enabled: bool = True
+    email_signature: str | None = None
 
     is_active: bool
     created_by_id: str | None
@@ -315,5 +326,127 @@ class ConversationWithMessagesResponse(ConversationResponse):
     """Schema for a conversation with messages."""
 
     messages: list[MessageResponse] = []
+
+    model_config = {"from_attributes": True}
+
+
+# =============================================================================
+# EMAIL/INBOX SCHEMAS
+# =============================================================================
+
+
+class EmailDomainResponse(BaseModel):
+    """Schema for an available email domain."""
+
+    domain: str
+    is_default: bool = False
+    is_verified: bool = True
+    display_name: str | None = None
+
+
+class EmailDomainsListResponse(BaseModel):
+    """Schema for list of available email domains."""
+
+    domains: list[EmailDomainResponse]
+    default_domain: str
+
+
+class EmailEnableRequest(BaseModel):
+    """Schema for enabling email on an agent."""
+
+    preferred_handle: str | None = Field(default=None, max_length=50)
+    domain: str | None = Field(default=None, description="Domain to use for email address")
+
+
+class EmailEnableResponse(BaseModel):
+    """Schema for email enable response."""
+
+    email_address: str
+    domain: str
+    enabled: bool = True
+
+
+class InboxMessageClassification(BaseModel):
+    """Classification results from AI processing."""
+
+    intent: str | None = None
+    sentiment: str | None = None  # positive, neutral, negative
+    urgency: str | None = None  # low, normal, high, urgent
+    topics: list[str] = []
+
+
+class InboxMessageResponse(BaseModel):
+    """Schema for inbox message response."""
+
+    id: str
+    agent_id: str
+    workspace_id: str
+    message_id: str
+    thread_id: str | None
+    from_email: str
+    from_name: str | None
+    to_email: str
+    subject: str | None
+    body_text: str | None
+    body_html: str | None
+    status: str
+    priority: str
+    classification: dict | None
+    summary: str | None
+    suggested_response: str | None
+    confidence_score: float | None
+    response_id: str | None
+    responded_at: datetime | None
+    escalated_to: str | None
+    escalated_at: datetime | None
+    attachments: list | None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class InboxReplyRequest(BaseModel):
+    """Schema for replying to an inbox message."""
+
+    body: str = Field(..., min_length=1)
+    use_suggested: bool = False  # Use AI-suggested response
+    subject: str | None = None  # Override subject
+
+
+class InboxEscalateRequest(BaseModel):
+    """Schema for escalating an inbox message."""
+
+    escalate_to: str = Field(..., description="Developer ID to escalate to")
+    note: str | None = None  # Optional note for the escalation
+
+
+class InboxActionResponse(BaseModel):
+    """Generic response for inbox actions."""
+
+    success: bool
+    message: str
+    inbox_message_id: str
+
+
+class EmailRoutingRuleCreate(BaseModel):
+    """Schema for creating an email routing rule."""
+
+    rule_type: Literal["domain", "sender", "subject_contains", "keyword"]
+    rule_value: str = Field(..., min_length=1)
+    priority: int = Field(default=0, ge=0, le=100)
+
+
+class EmailRoutingRuleResponse(BaseModel):
+    """Schema for email routing rule response."""
+
+    id: str
+    workspace_id: str
+    agent_id: str
+    rule_type: str
+    rule_value: str
+    priority: int
+    is_active: bool
+    created_at: datetime
 
     model_config = {"from_attributes": True}

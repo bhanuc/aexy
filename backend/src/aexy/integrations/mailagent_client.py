@@ -450,22 +450,75 @@ class MailagentClient:
     # DOMAINS & INBOXES
     # ==========================================
 
-    async def list_domains(self) -> list[dict]:
-        """List all domains."""
-        result = await self._request("GET", "/domains")
+    async def list_domains(
+        self,
+        status: Optional[str] = None,
+    ) -> list[dict]:
+        """List all domains.
+
+        Args:
+            status: Optional filter by status (pending, verified, active, etc.)
+
+        Returns:
+            List of domain details
+        """
+        params = {}
+        if status:
+            params["status"] = status
+        result = await self._request("GET", "/domains", params=params)
         return result.get("domains", [])
 
     async def get_domain(self, domain_id: UUID) -> dict:
         """Get domain details."""
         return await self._request("GET", f"/domains/{domain_id}")
 
+    async def get_domain_by_name(self, domain_name: str) -> dict:
+        """Get domain by name."""
+        return await self._request("GET", f"/domains/by-name/{domain_name}")
+
     async def list_inboxes(self, domain_id: Optional[UUID] = None) -> list[dict]:
         """List inboxes, optionally filtered by domain."""
         params = {}
         if domain_id:
             params["domain_id"] = str(domain_id)
-        result = await self._request("GET", "/admin/inboxes", params=params)
-        return result.get("inboxes", [])
+        result = await self._request("GET", "/onboarding/inboxes", params=params)
+        return result.get("inboxes", result) if isinstance(result, dict) else result
+
+    async def create_inbox(
+        self,
+        email: str,
+        display_name: Optional[str] = None,
+        domain_id: Optional[UUID] = None,
+    ) -> dict:
+        """Create a new inbox (email address).
+
+        Args:
+            email: Full email address (e.g., "support@workspace.aexy.email")
+            display_name: Optional display name for the inbox
+            domain_id: Optional domain ID to link the inbox to
+
+        Returns:
+            Created inbox details
+        """
+        payload = {"email": email}
+        if display_name:
+            payload["display_name"] = display_name
+        if domain_id:
+            payload["domain_id"] = str(domain_id)
+
+        return await self._request("POST", "/onboarding/inboxes", json=payload)
+
+    async def get_inbox(self, inbox_id: UUID) -> dict:
+        """Get inbox by ID."""
+        return await self._request("GET", f"/onboarding/inboxes/{inbox_id}")
+
+    async def get_inbox_by_email(self, email: str) -> dict:
+        """Get inbox by email address."""
+        return await self._request("GET", f"/onboarding/inboxes/by-email/{email}")
+
+    async def delete_inbox(self, inbox_id: UUID) -> None:
+        """Delete an inbox."""
+        await self._request("DELETE", f"/onboarding/inboxes/{inbox_id}")
 
     # ==========================================
     # HEALTH & STATUS

@@ -28,6 +28,12 @@ interface AgentConfig {
   workingHours: WorkingHoursConfig | null;
   systemPrompt: string;
   customInstructions: string;
+  // Email configuration
+  emailEnabled?: boolean;
+  emailHandle?: string;
+  emailDomain?: string;
+  autoReplyEnabled?: boolean;
+  emailSignature?: string;
 }
 
 interface ReviewStepProps {
@@ -250,6 +256,46 @@ export function ReviewStep({ config, onEditStep }: ReviewStepProps) {
                 </p>
               </div>
             </div>
+          )}
+        </div>
+      </ReviewSection>
+
+      {/* Email Configuration */}
+      <ReviewSection title="Email" step={6} onEdit={onEditStep}>
+        <div className="space-y-1 divide-y divide-slate-700">
+          <ReviewItem
+            label="Email Enabled"
+            value={
+              <span className={config.emailEnabled ? "text-green-400" : "text-slate-400"}>
+                {config.emailEnabled ? "Yes" : "No"}
+              </span>
+            }
+          />
+          {config.emailEnabled && (
+            <>
+              <ReviewItem
+                label="Email Address"
+                value={
+                  config.emailHandle && config.emailDomain
+                    ? `${config.emailHandle}@${config.emailDomain}`
+                    : "Not configured"
+                }
+                empty={!config.emailHandle}
+              />
+              <ReviewItem
+                label="Auto-Reply"
+                value={
+                  <span className={config.autoReplyEnabled ? "text-green-400" : "text-slate-400"}>
+                    {config.autoReplyEnabled ? "Enabled" : "Disabled"}
+                  </span>
+                }
+              />
+              <ReviewItem
+                label="Email Signature"
+                value={config.emailSignature ? "Configured" : "Not set"}
+                empty={!config.emailSignature}
+              />
+            </>
           )}
         </div>
       </ReviewSection>

@@ -188,7 +188,7 @@ class SendingDomainResponse(BaseModel):
 
     id: str
     workspace_id: str
-    provider_id: str
+    provider_id: str | None
     domain: str
     subdomain: str | None
     status: str

@@ -337,10 +337,10 @@ class AgentOrchestrator:
             text("""
                 INSERT INTO mailagent_agent_decisions (
                     id, agent_id, message_id, action, confidence,
-                    reasoning, response_draft, requires_approval, metadata
+                    reasoning, response_draft, requires_approval, decision_metadata
                 ) VALUES (
                     :id, :agent_id, :message_id, :action, :confidence,
-                    :reasoning, :response_draft, :requires_approval, :metadata
+                    :reasoning, :response_draft, :requires_approval, :decision_metadata
                 )
             """),
             {
@@ -352,7 +352,7 @@ class AgentOrchestrator:
                 "reasoning": decision.reasoning,
                 "response_draft": decision.draft_response,
                 "requires_approval": decision.requires_approval,
-                "metadata": decision.metadata,
+                "decision_metadata": decision.metadata,
             },
         )
         await session.commit()
