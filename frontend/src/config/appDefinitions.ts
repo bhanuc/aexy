@@ -19,6 +19,7 @@ import {
   Phone,
   CalendarCheck,
   MonitorCheck,
+  Bot,
   LucideIcon,
 } from "lucide-react";
 
@@ -253,6 +254,26 @@ export const APP_CATALOG: Record<string, AppDefinition> = {
       { id: "history", name: "History", description: "Check history and uptime reports", route: "/history" },
     ],
   },
+  automations: {
+    id: "automations",
+    name: "Automations",
+    description: "Platform-wide workflow automations",
+    icon: Zap,
+    category: "productivity",
+    baseRoute: "/automations",
+    requiredPermission: "can_view_automations",
+    modules: [],
+  },
+  agents: {
+    id: "agents",
+    name: "AI Agents",
+    description: "AI-powered automation agents",
+    icon: Bot,
+    category: "productivity",
+    baseRoute: "/agents",
+    requiredPermission: "can_view_agents",
+    modules: [],
+  },
 };
 
 // Get app definition by ID
@@ -323,6 +344,8 @@ export const SYSTEM_BUNDLES: AppBundleTemplate[] = [
       email_marketing: { enabled: false },
       forms: { enabled: false },
       booking: { enabled: false },
+      automations: { enabled: true },
+      agents: { enabled: true },
     },
   },
   {
@@ -350,6 +373,8 @@ export const SYSTEM_BUNDLES: AppBundleTemplate[] = [
       oncall: { enabled: false },
       uptime: { enabled: false },
       booking: { enabled: false },
+      automations: { enabled: true },
+      agents: { enabled: true },
     },
   },
   {
@@ -377,6 +402,8 @@ export const SYSTEM_BUNDLES: AppBundleTemplate[] = [
       oncall: { enabled: false },
       uptime: { enabled: false },
       booking: { enabled: true, modules: { event_types: true, availability: true, calendars: true } },
+      automations: { enabled: true },
+      agents: { enabled: true },
     },
   },
   {
@@ -407,6 +434,8 @@ export const SYSTEM_BUNDLES: AppBundleTemplate[] = [
       oncall: { enabled: true },
       uptime: { enabled: true, modules: { monitors: true, incidents: true, history: true } },
       booking: { enabled: true, modules: { event_types: true, availability: true, calendars: true } },
+      automations: { enabled: true },
+      agents: { enabled: true },
     },
   },
 ];
@@ -440,10 +469,12 @@ export const SIDEBAR_TO_APP_MAP: Record<string, string> = {
   "/learning": "learning",
   "/crm": "crm",
   "/crm/inbox": "crm",
-  "/crm/agents": "crm",
   "/crm/activities": "crm",
-  "/crm/automations": "crm",
   "/crm/calendar": "crm",
+  "/automations": "automations",
+  "/automations/new": "automations",
+  "/agents": "agents",
+  "/agents/new": "agents",
   "/email-marketing": "email_marketing",
   "/email-marketing/campaigns": "email_marketing",
   "/email-marketing/templates": "email_marketing",

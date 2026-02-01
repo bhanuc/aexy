@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "aexy"
-version = "0.4.6"
+version = "0.5.0"
 description = "GitHub-Based Developer Profiling & Analytics Platform"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -28,6 +28,7 @@ dependencies = [
     "langchain>=0.3.0",
     "langchain-core>=0.3.0",
     "langchain-anthropic>=0.2.0",
+    "langchain-google-genai>=2.0.0",
     # SMS
     "twilio>=9.0.0",
     # Email (SMTP and AWS SES)

@@ -556,3 +556,223 @@ def _update_campaign_recipient(
         recipient.status = RecipientStatus.UNSUBSCRIBED.value
 
     db.commit()
+
+
+# =============================================================================
+# INBOUND EMAIL WEBHOOKS (FOR AGENT INBOX)
+# =============================================================================
+
+
+@router.post("/inbound")
+async def handle_inbound_email(
+    request: Request,
+    background_tasks: BackgroundTasks,
+):
+    """
+    Webhook endpoint for inbound emails from email providers.
+    Routes to appropriate agent and triggers processing.
+
+    Supports multiple providers:
+    - SendGrid Inbound Parse
+    - Mailgun Routes
+    - AWS SES (via SNS)
+    - Postmark Inbound
+    """
+    try:
+        content_type = request.headers.get("content-type", "")
+
+        # Parse based on content type
+        if "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
+            # SendGrid/Mailgun format (form data)
+            form_data = await request.form()
+            email_data = _parse_inbound_form_data(dict(form_data))
+        else:
+            # JSON format (Postmark, custom)
+            body = await request.body()
+            payload = json.loads(body)
+            email_data = _parse_inbound_json(payload)
+
+        if not email_data:
+            return {"status": "ignored", "reason": "Could not parse email data"}
+
+        # Process in background
+        background_tasks.add_task(
+            process_inbound_email,
+            email_data,
+        )
+
+        return {"status": "queued"}
+
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid payload format",
+        )
+    except Exception as e:
+        logger.error(f"Error handling inbound email: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error processing inbound email",
+        )
+
+
+def _parse_inbound_form_data(form_data: dict) -> dict | None:
+    """Parse inbound email from form data (SendGrid/Mailgun format)."""
+    try:
+        # SendGrid Inbound Parse format
+        to_email = form_data.get("to", form_data.get("envelope", {}).get("to", [""]))[0] if isinstance(form_data.get("to", ""), list) else form_data.get("to", "")
+        from_email = form_data.get("from", "")
+        subject = form_data.get("subject", "")
+        body_text = form_data.get("text", "")
+        body_html = form_data.get("html", "")
+
+        # Parse from field if it contains name
+        from_name = None
+        if "<" in from_email:
+            parts = from_email.split("<")
+            from_name = parts[0].strip().strip('"')
+            from_email = parts[1].rstrip(">")
+
+        # Parse to field if it contains name
+        if isinstance(to_email, str) and "<" in to_email:
+            parts = to_email.split("<")
+            to_email = parts[1].rstrip(">")
+
+        # Headers
+        headers = {}
+        if "headers" in form_data:
+            try:
+                headers = json.loads(form_data["headers"]) if isinstance(form_data["headers"], str) else form_data["headers"]
+            except json.JSONDecodeError:
+                pass
+
+        # Attachments info
+        attachments = []
+        attachment_count = int(form_data.get("attachments", 0))
+        for i in range(1, attachment_count + 1):
+            attach_info = form_data.get(f"attachment-info")
+            if attach_info:
+                try:
+                    attachments = json.loads(attach_info) if isinstance(attach_info, str) else attach_info
+                except json.JSONDecodeError:
+                    pass
+
+        return {
+            "to": to_email,
+            "from": from_email,
+            "from_name": from_name,
+            "subject": subject,
+            "body": body_text,
+            "body_html": body_html,
+            "message_id": headers.get("Message-Id", headers.get("message-id", "")),
+            "thread_id": headers.get("In-Reply-To", headers.get("References", "")).split()[0] if headers.get("In-Reply-To") or headers.get("References") else None,
+            "headers": headers,
+            "attachments": attachments,
+        }
+
+    except Exception as e:
+        logger.error(f"Error parsing inbound form data: {e}")
+        return None
+
+
+def _parse_inbound_json(payload: dict) -> dict | None:
+    """Parse inbound email from JSON (Postmark/custom format)."""
+    try:
+        # Postmark Inbound format
+        if "FromFull" in payload or "ToFull" in payload:
+            from_data = payload.get("FromFull", {})
+            to_data = payload.get("ToFull", [{}])[0] if isinstance(payload.get("ToFull"), list) else payload.get("ToFull", {})
+
+            return {
+                "to": to_data.get("Email", payload.get("To", "")),
+                "from": from_data.get("Email", payload.get("From", "")),
+                "from_name": from_data.get("Name"),
+                "subject": payload.get("Subject", ""),
+                "body": payload.get("TextBody", ""),
+                "body_html": payload.get("HtmlBody", ""),
+                "message_id": payload.get("MessageID", ""),
+                "thread_id": payload.get("Headers", [{}])[0].get("In-Reply-To") if payload.get("Headers") else None,
+                "headers": {h.get("Name"): h.get("Value") for h in payload.get("Headers", [])},
+                "attachments": [
+                    {"name": a.get("Name"), "content_type": a.get("ContentType"), "length": a.get("ContentLength")}
+                    for a in payload.get("Attachments", [])
+                ],
+            }
+
+        # Generic JSON format
+        return {
+            "to": payload.get("to", ""),
+            "from": payload.get("from", ""),
+            "from_name": payload.get("from_name"),
+            "subject": payload.get("subject", ""),
+            "body": payload.get("body", payload.get("text", "")),
+            "body_html": payload.get("body_html", payload.get("html", "")),
+            "message_id": payload.get("message_id", ""),
+            "thread_id": payload.get("thread_id", payload.get("in_reply_to")),
+            "headers": payload.get("headers", {}),
+            "attachments": payload.get("attachments", []),
+        }
+
+    except Exception as e:
+        logger.error(f"Error parsing inbound JSON: {e}")
+        return None
+
+
+def process_inbound_email(email_data: dict):
+    """Process inbound email in background - route to agent and queue for AI processing."""
+    from aexy.services.agent_email_service import AgentEmailService
+
+    try:
+        # Use sync session for background task to avoid event loop issues
+        with get_sync_session() as db:
+            from aexy.models.agent import CRMAgent
+            from aexy.models.agent_inbox import AgentInboxMessage
+            from uuid import uuid4
+
+            to_email = email_data.get("to", "")
+            from_email = email_data.get("from", "")
+
+            # Find agent by email address
+            agent = db.execute(
+                select(CRMAgent).where(
+                    and_(
+                        CRMAgent.email_address == to_email,
+                        CRMAgent.email_enabled == True
+                    )
+                )
+            ).scalar_one_or_none()
+
+            if not agent:
+                logger.warning(f"No agent found for inbound email to {to_email}")
+                return
+
+            # Create inbox message
+            message = AgentInboxMessage(
+                id=uuid4(),
+                agent_id=agent.id,
+                workspace_id=agent.workspace_id,
+                message_id=email_data.get("message_id") or str(uuid4()),
+                thread_id=email_data.get("thread_id"),
+                from_email=from_email,
+                from_name=email_data.get("from_name"),
+                to_email=to_email,
+                subject=email_data.get("subject", ""),
+                body_text=email_data.get("body", ""),
+                body_html=email_data.get("body_html"),
+                status="pending",
+                priority="normal",
+                headers=email_data.get("headers", {}),
+                attachments=email_data.get("attachments", []),
+                raw_payload=email_data,
+            )
+            db.add(message)
+            db.commit()
+            db.refresh(message)
+
+            logger.info(f"Created inbox message {message.id} for agent {agent.id}")
+
+            # Note: AI processing should be done via Celery task or separate async service
+            # For now, just save the message - processing can be triggered manually or via a worker
+
+    except Exception as e:
+        logger.error(f"Error processing inbound email: {e}")

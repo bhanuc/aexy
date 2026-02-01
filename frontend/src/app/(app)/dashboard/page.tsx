@@ -36,6 +36,7 @@ import {
   SprintOverviewWidget,
   TrackingSummaryWidget,
   CRMPipelineWidget,
+  AIAgentsWidget,
 } from "@/components/dashboard";
 
 export default function DashboardPage() {
@@ -52,7 +53,8 @@ export default function DashboardPage() {
   const visibleWidgets = preferences?.visible_widgets || [
     "welcome", "quickStats", "languageProficiency", "workPatterns",
     "domainExpertise", "frameworksTools", "aiInsights", "softSkills",
-    "growthTrajectory", "peerBenchmark", "taskMatcher", "myGoals", "performanceReviews"
+    "growthTrajectory", "peerBenchmark", "taskMatcher", "myGoals", "performanceReviews",
+    "aiAgents"
   ];
 
   // Helper to check if a widget should be shown
@@ -569,6 +571,13 @@ export default function DashboardPage() {
         <div className="grid lg:grid-cols-2 gap-6 mt-10">
           {showWidget("ticketStats") && <TicketStatsWidget />}
           {showWidget("crmPipeline") && <CRMPipelineWidget />}
+        </div>
+      )}
+
+      {/* AI Agents Section */}
+      {showWidget("aiAgents") && (
+        <div className="grid lg:grid-cols-2 gap-6 mt-10">
+          <AIAgentsWidget />
         </div>
       )}
 

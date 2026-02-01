@@ -232,6 +232,7 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     frontend_url: str = "http://localhost:3000"
     backend_url: str = "http://localhost:8000"
+    mailagent_url: str = "http://localhost:8001"
 
     # Database
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/aexy"

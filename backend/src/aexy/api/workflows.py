@@ -274,6 +274,15 @@ async def execute_workflow(
     # Load record data if record_id provided
     record_data = {}
     if data.record_id:
+        # Validate UUID format
+        import re
+        uuid_pattern = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.I)
+        if not uuid_pattern.match(data.record_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid record_id format: must be a valid UUID",
+            )
+
         from aexy.services.crm_service import CRMRecordService
 
         record_service = CRMRecordService(db)
@@ -286,13 +295,17 @@ async def execute_workflow(
                 "owner_id": record.owner_id,
             }
 
+    # Only store record_id if the record actually exists (FK constraint)
+    # record_data will have 'id' key if a record was found
+    actual_record_id = data.record_id if record_data.get("id") else None
+
     # Create execution record
     execution = WorkflowExecution(
         id=str(uuid4()),
         workflow_id=workflow.id,
         automation_id=automation_id,
         workspace_id=workspace_id,
-        record_id=data.record_id,
+        record_id=actual_record_id,
         status=WorkflowExecutionStatus.PENDING.value,
         context={
             "record_data": record_data,
@@ -311,6 +324,7 @@ async def execute_workflow(
     # For dry runs, execute synchronously and return results immediately
     if data.dry_run:
         context = WorkflowExecutionContext(
+            workspace_id=workspace_id,
             record_id=data.record_id,
             record_data=record_data,
             trigger_data=trigger_data,

@@ -26,7 +26,11 @@ class SearchContactsTool(BaseTool):
         return f"Found contacts matching '{query}'"
 
     async def _arun(self, query: str, object_type: str = "person", limit: int = 10) -> str:
-        """Search for contacts in the CRM."""
+        """Search for contacts in the CRM.
+
+        Searches records in the workspace, filtering by object type (slug) and query.
+        Only returns data the user has access to (workspace-scoped).
+        """
         from sqlalchemy import select, or_
         from aexy.models.crm import CRMRecord, CRMObject
 
@@ -34,18 +38,30 @@ class SearchContactsTool(BaseTool):
             return "Error: Database connection not available"
 
         try:
-            # Find the object ID for the type
+            # Find the object ID by slug (person, company, deal) or object_type for system objects
             obj_stmt = select(CRMObject).where(
                 CRMObject.workspace_id == self.workspace_id,
-                CRMObject.object_type == object_type,
+                or_(
+                    CRMObject.slug == object_type,
+                    CRMObject.object_type == object_type,
+                ),
             )
             result = await self.db.execute(obj_stmt)
             obj = result.scalar_one_or_none()
 
             if not obj:
-                return f"No {object_type} object found in workspace"
+                # Try to find any object if specific type not found
+                obj_stmt = select(CRMObject).where(
+                    CRMObject.workspace_id == self.workspace_id,
+                    CRMObject.is_active == True,
+                ).limit(1)
+                result = await self.db.execute(obj_stmt)
+                obj = result.scalar_one_or_none()
 
-            # Search records
+            if not obj:
+                return f"No CRM objects found in workspace"
+
+            # Search records - scoped to workspace for security
             stmt = (
                 select(CRMRecord)
                 .where(
@@ -53,29 +69,51 @@ class SearchContactsTool(BaseTool):
                     CRMRecord.object_id == obj.id,
                     CRMRecord.is_archived == False,
                 )
-                .limit(limit)
+                .limit(limit * 2)  # Fetch more to filter
             )
             result = await self.db.execute(stmt)
             records = result.scalars().all()
 
-            # Filter by query in values
+            if not records:
+                return f"No {obj.name} records found in the CRM"
+
+            # Filter by query in values (case-insensitive)
+            # Values are stored as JSONB: {attribute_slug: value}
             matching = []
-            query_lower = query.lower()
+            query_lower = query.lower().strip()
+
             for record in records:
-                values_str = str(record.values).lower()
-                if query_lower in values_str:
+                # Combine display_name and all values from JSONB for search
+                values = record.values or {}
+                searchable = f"{record.display_name or ''} {' '.join(str(v) for v in values.values())}".lower()
+
+                # If query is empty, return all records
+                if not query_lower or query_lower in searchable:
                     matching.append({
                         "id": record.id,
                         "display_name": record.display_name,
-                        "values": record.values,
+                        "values": values,
                     })
 
-            if not matching:
-                return f"No {object_type} records found matching '{query}'"
+                    if len(matching) >= limit:
+                        break
 
-            return f"Found {len(matching)} matching records:\n" + "\n".join(
-                f"- {r['display_name'] or r['id']}: {r['values']}" for r in matching[:limit]
-            )
+            if not matching:
+                return f"No {obj.name} records found matching '{query}'"
+
+            # Format output
+            output_lines = [f"Found {len(matching)} {obj.name} record(s):"]
+            for r in matching:
+                name = r.get("display_name") or r.get("id", "Unknown")
+                values = r.get("values", {})
+                # Get readable values
+                details = [f"{k}: {v}" for k, v in values.items() if v]
+                if details:
+                    output_lines.append(f"- {name} ({', '.join(details[:5])})")
+                else:
+                    output_lines.append(f"- {name}")
+
+            return "\n".join(output_lines)
         except Exception as e:
             return f"Error searching contacts: {str(e)}"
 

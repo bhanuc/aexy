@@ -53,6 +53,7 @@ class WorkflowActionHandler:
             "send_campaign": self._send_campaign,
             "trigger_onboarding": self._trigger_onboarding,
             "complete_onboarding_step": self._complete_onboarding_step,
+            "run_agent": self._execute_agent,
         }
 
         handler = handlers.get(action_type)
@@ -974,6 +975,129 @@ class WorkflowActionHandler:
             output={"record_id": record_id, "owner_id": owner_id},
         )
 
+    async def _execute_agent(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Execute an AI agent with full context integration.
+
+        This action allows workflows to spawn AI agents with access to:
+        - Record data from the triggering context
+        - Trigger data and workflow variables
+        - Upstream node outputs
+
+        Args:
+            data: Node configuration with:
+                - agent_id: ID of the agent to execute
+                - input_mapping: Optional custom mapping of context to agent input
+                - wait_for_completion: Whether to wait for agent (default: True)
+                - timeout_seconds: Max wait time (default: 300)
+                - output_variable: Variable name to store agent output
+            context: Current workflow execution context
+
+        Returns:
+            NodeExecutionResult with agent execution details
+        """
+        from aexy.services.automation_agent_service import AutomationAgentService
+
+        agent_id = data.get("agent_id")
+        if not agent_id:
+            return NodeExecutionResult(
+                node_id="",
+                status="failed",
+                error="No agent_id specified",
+            )
+
+        # Build context from workflow state
+        agent_context = {
+            "record_id": context.record_id,
+            "record_data": context.record_data,
+            "trigger_data": context.trigger_data,
+            "workflow_variables": context.variables,
+        }
+
+        # Apply custom input mapping if provided
+        input_mapping = data.get("input_mapping", {})
+        if input_mapping:
+            for key, path in input_mapping.items():
+                value = self._get_context_value(path, context)
+                if value is not None:
+                    agent_context[key] = value
+
+        # Get execution options
+        wait_for_completion = data.get("wait_for_completion", True)
+        timeout_seconds = data.get("timeout_seconds", 300)
+
+        # Get workflow execution ID from context if available
+        workflow_execution_id = context.trigger_data.get("execution_id")
+
+        try:
+            agent_service = AutomationAgentService(self.db)
+
+            execution = await agent_service.spawn_agent(
+                agent_id=agent_id,
+                trigger_point="as_action",
+                context=agent_context,
+                workflow_execution_id=workflow_execution_id,
+                input_mapping=input_mapping,
+                wait_for_completion=wait_for_completion,
+                timeout_seconds=timeout_seconds,
+            )
+
+            # Build result
+            if wait_for_completion:
+                if execution.status == "completed":
+                    # Store output in workflow variable if specified
+                    output_variable = data.get("output_variable")
+                    if output_variable and execution.output_result:
+                        context.variables[output_variable] = execution.output_result
+
+                    return NodeExecutionResult(
+                        node_id="",
+                        status="success",
+                        output={
+                            "execution_id": execution.id,
+                            "agent_id": agent_id,
+                            "status": execution.status,
+                            "result": execution.output_result,
+                            "duration_ms": execution.duration_ms,
+                        },
+                    )
+                else:
+                    return NodeExecutionResult(
+                        node_id="",
+                        status="failed",
+                        output={
+                            "execution_id": execution.id,
+                            "agent_id": agent_id,
+                            "status": execution.status,
+                        },
+                        error=execution.error_message or f"Agent execution {execution.status}",
+                    )
+            else:
+                # Fire and forget
+                return NodeExecutionResult(
+                    node_id="",
+                    status="success",
+                    output={
+                        "execution_id": execution.id,
+                        "agent_id": agent_id,
+                        "status": "spawned",
+                    },
+                )
+
+        except ValueError as e:
+            return NodeExecutionResult(
+                node_id="",
+                status="failed",
+                error=str(e),
+            )
+        except Exception as e:
+            return NodeExecutionResult(
+                node_id="",
+                status="failed",
+                error=f"Agent execution failed: {str(e)}",
+            )
+
     def _get_context_value(self, path: str, context: WorkflowExecutionContext) -> Any:
         """Get a value from context using dot notation."""
         parts = path.split(".")
@@ -1043,6 +1167,7 @@ class SyncWorkflowActionHandler:
             "send_campaign": self._send_campaign,
             "trigger_onboarding": self._trigger_onboarding,
             "complete_onboarding_step": self._complete_onboarding_step,
+            "run_agent": self._execute_agent,
         }
 
         handler = handlers.get(action_type)
@@ -1050,6 +1175,70 @@ class SyncWorkflowActionHandler:
             return {"status": "failed", "error": f"Unknown action type: {action_type}"}
 
         return handler(data, context, execution)
+
+    def _execute_agent(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Execute an AI agent synchronously (for Celery workers)."""
+        from aexy.services.automation_agent_service import SyncAutomationAgentService
+
+        agent_id = data.get("agent_id")
+        if not agent_id:
+            return {"status": "failed", "error": "No agent_id specified"}
+
+        # Build context from workflow state
+        agent_context = {
+            "record_id": execution.record_id,
+            "record_data": context.get("record_data", {}),
+            "trigger_data": context.get("trigger_data", {}),
+            "workflow_variables": context.get("variables", {}),
+        }
+
+        # Apply custom input mapping if provided
+        input_mapping = data.get("input_mapping", {})
+        if input_mapping:
+            for key, path in input_mapping.items():
+                value = self._get_context_value(path, context)
+                if value is not None:
+                    agent_context[key] = value
+
+        try:
+            agent_service = SyncAutomationAgentService(self.db)
+
+            result = agent_service.spawn_agent_sync(
+                agent_id=agent_id,
+                trigger_point="as_action",
+                context=agent_context,
+                workflow_execution_id=execution.id,
+                input_mapping=input_mapping,
+            )
+
+            if result.get("status") == "completed":
+                # Store output in workflow variable if specified
+                output_variable = data.get("output_variable")
+                if output_variable and result.get("output"):
+                    context.setdefault("variables", {})[output_variable] = result.get("output")
+
+                return {
+                    "status": "success",
+                    "output": {
+                        "execution_id": result.get("execution_id"),
+                        "agent_id": agent_id,
+                        "status": result.get("status"),
+                        "result": result.get("output"),
+                    },
+                }
+            else:
+                return {
+                    "status": "failed",
+                    "output": {
+                        "execution_id": result.get("execution_id"),
+                        "agent_id": agent_id,
+                        "status": result.get("status"),
+                    },
+                    "error": result.get("error") or f"Agent execution {result.get('status')}",
+                }
+
+        except Exception as e:
+            return {"status": "failed", "error": f"Agent execution failed: {str(e)}"}
 
     def _update_record(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
         """Update a CRM record."""

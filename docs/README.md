@@ -24,6 +24,7 @@ We're on a mission to bring positive change by building world-class tools actual
 - [CLI Usage](./guides/cli-usage.md) - Command-line interface guide
 - [VS Code Extension](./guides/vscode-extension.md) - IDE extension guide
 - [Deployment](./guides/deployment.md) - Production deployment guide
+- [AI Agents](./ai-agents.md) - Intelligent automation assistants
 - [Email Marketing](./email-marketing.md) - Campaigns, automation & infrastructure
 - [Booking](./booking.md) - Calendar scheduling, team bookings & RSVP
 - [Uptime Monitoring](./uptime.md) - Endpoint monitoring & incident management
@@ -49,6 +50,7 @@ Aexy is a complete Engineering OS with 10 integrated products:
 | **CRM** | Relationship management for teams |
 | **Email Marketing** | Campaigns, automation & multi-domain infrastructure |
 | **Booking** | Calendar scheduling with team support |
+| **AI Agents** | Intelligent automation for email, support & workflows |
 
 ## For Different Personas
 
