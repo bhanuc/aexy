@@ -9447,6 +9447,12 @@ export interface CRMAgent {
   escalation_email?: string | null;
   escalation_slack_channel?: string | null;
 
+  // Email Integration
+  email_address?: string | null;
+  email_enabled?: boolean;
+  auto_reply_enabled?: boolean;
+  email_signature?: string | null;
+
   // Integration
   crm_sync?: boolean;
   calendar_sync?: boolean;
@@ -9508,6 +9514,74 @@ export interface CRMAgentExecution {
   input_tokens: number;
   output_tokens: number;
   created_at: string;
+}
+
+// Agent Inbox Types
+export interface AgentInboxMessage {
+  id: string;
+  agent_id: string;
+  workspace_id: string;
+  message_id: string;
+  thread_id: string | null;
+  from_email: string;
+  from_name: string | null;
+  to_email: string;
+  subject: string | null;
+  body_text: string | null;
+  body_html: string | null;
+  status: "pending" | "processing" | "responded" | "escalated" | "archived";
+  priority: "low" | "normal" | "high" | "urgent";
+  classification: {
+    intent?: string;
+    sentiment?: string;
+    urgency?: string;
+    topics?: string[];
+  } | null;
+  summary: string | null;
+  suggested_response: string | null;
+  confidence_score: number | null;
+  response_id: string | null;
+  responded_at: string | null;
+  escalated_to: string | null;
+  escalated_at: string | null;
+  attachments: Array<{ name: string; content_type?: string; length?: number }> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmailRoutingRule {
+  id: string;
+  workspace_id: string;
+  agent_id: string;
+  rule_type: "domain" | "sender" | "subject_contains" | "keyword";
+  rule_value: string;
+  priority: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface EmailDomain {
+  domain: string;
+  is_default: boolean;
+  is_verified: boolean;
+  display_name: string | null;
+}
+
+export interface EmailDomainsListResponse {
+  domains: EmailDomain[];
+  default_domain: string;
+}
+
+export interface EmailEnableResponse {
+  email_address: string;
+  domain: string;
+  enabled: boolean;
+}
+
+export interface InboxActionResponse {
+  success: boolean;
+  message: string;
+  inbox_message_id: string;
 }
 
 // Agent Conversations
@@ -9899,6 +9973,134 @@ export const agentsApi = {
     conversationId: string
   ): Promise<void> => {
     await api.delete(`/workspaces/${workspaceId}/crm/agents/${agentId}/conversations/${conversationId}`);
+  },
+
+  // Email Integration
+  listEmailDomains: async (workspaceId: string): Promise<EmailDomainsListResponse> => {
+    const response = await api.get(`/workspaces/${workspaceId}/crm/agents/email/domains`);
+    return response.data;
+  },
+
+  enableEmail: async (
+    workspaceId: string,
+    agentId: string,
+    preferredHandle?: string,
+    domain?: string
+  ): Promise<EmailEnableResponse> => {
+    const response = await api.post(`/workspaces/${workspaceId}/crm/agents/${agentId}/email/enable`, {
+      preferred_handle: preferredHandle,
+      domain: domain,
+    });
+    return response.data;
+  },
+
+  disableEmail: async (workspaceId: string, agentId: string): Promise<void> => {
+    await api.post(`/workspaces/${workspaceId}/crm/agents/${agentId}/email/disable`);
+  },
+
+  // Inbox
+  listInboxMessages: async (
+    workspaceId: string,
+    agentId: string,
+    params?: {
+      status?: string;
+      priority?: string;
+      skip?: number;
+      limit?: number;
+    }
+  ): Promise<AgentInboxMessage[]> => {
+    const response = await api.get(`/workspaces/${workspaceId}/crm/agents/${agentId}/inbox`, { params });
+    return response.data;
+  },
+
+  getInboxMessage: async (
+    workspaceId: string,
+    agentId: string,
+    messageId: string
+  ): Promise<AgentInboxMessage> => {
+    const response = await api.get(`/workspaces/${workspaceId}/crm/agents/${agentId}/inbox/${messageId}`);
+    return response.data;
+  },
+
+  replyToInboxMessage: async (
+    workspaceId: string,
+    agentId: string,
+    messageId: string,
+    data: { body: string; use_suggested?: boolean; subject?: string }
+  ): Promise<InboxActionResponse> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/crm/agents/${agentId}/inbox/${messageId}/reply`,
+      data
+    );
+    return response.data;
+  },
+
+  escalateInboxMessage: async (
+    workspaceId: string,
+    agentId: string,
+    messageId: string,
+    data: { escalate_to: string; note?: string }
+  ): Promise<InboxActionResponse> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/crm/agents/${agentId}/inbox/${messageId}/escalate`,
+      data
+    );
+    return response.data;
+  },
+
+  archiveInboxMessage: async (
+    workspaceId: string,
+    agentId: string,
+    messageId: string
+  ): Promise<InboxActionResponse> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/crm/agents/${agentId}/inbox/${messageId}/archive`
+    );
+    return response.data;
+  },
+
+  processInboxMessage: async (
+    workspaceId: string,
+    agentId: string,
+    messageId: string
+  ): Promise<AgentInboxMessage> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/crm/agents/${agentId}/inbox/${messageId}/process`
+    );
+    return response.data;
+  },
+
+  // Routing Rules
+  listRoutingRules: async (
+    workspaceId: string,
+    agentId: string
+  ): Promise<EmailRoutingRule[]> => {
+    const response = await api.get(`/workspaces/${workspaceId}/crm/agents/${agentId}/email/routing-rules`);
+    return response.data;
+  },
+
+  createRoutingRule: async (
+    workspaceId: string,
+    agentId: string,
+    data: {
+      rule_type: "domain" | "sender" | "subject_contains" | "keyword";
+      rule_value: string;
+      priority?: number;
+    }
+  ): Promise<EmailRoutingRule> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/crm/agents/${agentId}/email/routing-rules`,
+      data
+    );
+    return response.data;
+  },
+
+  deleteRoutingRule: async (
+    workspaceId: string,
+    agentId: string,
+    ruleId: string
+  ): Promise<void> => {
+    await api.delete(`/workspaces/${workspaceId}/crm/agents/${agentId}/email/routing-rules/${ruleId}`);
   },
 };
 

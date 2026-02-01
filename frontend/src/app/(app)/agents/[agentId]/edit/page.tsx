@@ -15,9 +15,17 @@ import {
   Bell,
   Loader2,
   Check,
+  Mail,
+  Copy,
+  ExternalLink,
+  Globe,
+  AtSign,
+  X,
 } from "lucide-react";
+import Link from "next/link";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useAgent, useAgentTools } from "@/hooks/useAgents";
+import { useAgentEmail, useEmailDomains } from "@/hooks/useAgentInbox";
 import { getAgentTypeConfig, AgentType, WorkingHoursConfig } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
@@ -30,7 +38,7 @@ import {
   InstructionsEditor,
 } from "@/components/agents/shared";
 
-type TabId = "general" | "llm" | "tools" | "behavior" | "prompts" | "escalation";
+type TabId = "general" | "llm" | "tools" | "behavior" | "prompts" | "escalation" | "email";
 
 interface Tab {
   id: TabId;
@@ -45,6 +53,7 @@ const TABS: Tab[] = [
   { id: "behavior", label: "Behavior", icon: SlidersHorizontal },
   { id: "prompts", label: "Prompts", icon: MessageSquare },
   { id: "escalation", label: "Escalation", icon: Bell },
+  { id: "email", label: "Email", icon: Mail },
 ];
 
 export default function EditAgentPage() {
@@ -61,6 +70,8 @@ export default function EditAgentPage() {
   } = useAgent(currentWorkspaceId, agentId);
 
   const { tools: availableTools, isLoading: toolsLoading } = useAgentTools(currentWorkspaceId);
+  const { enableEmail, disableEmail, isEnabling, isDisabling } = useAgentEmail(currentWorkspaceId, agentId);
+  const { domains, defaultDomain } = useEmailDomains(currentWorkspaceId);
 
   const [activeTab, setActiveTab] = useState<TabId>("general");
   const [hasChanges, setHasChanges] = useState(false);
@@ -87,6 +98,15 @@ export default function EditAgentPage() {
   const [customInstructions, setCustomInstructions] = useState("");
   const [escalationEmail, setEscalationEmail] = useState("");
   const [escalationSlackChannel, setEscalationSlackChannel] = useState("");
+  const [emailEnabled, setEmailEnabled] = useState(false);
+  const [autoReplyEnabled, setAutoReplyEnabled] = useState(true);
+  const [emailSignature, setEmailSignature] = useState("");
+  const [emailCopied, setEmailCopied] = useState(false);
+
+  // Email setup form state
+  const [showEmailSetup, setShowEmailSetup] = useState(false);
+  const [newEmailHandle, setNewEmailHandle] = useState("");
+  const [newEmailDomain, setNewEmailDomain] = useState("");
 
   // Initialize form from agent
   useEffect(() => {
@@ -110,6 +130,9 @@ export default function EditAgentPage() {
       setCustomInstructions(agent.custom_instructions || "");
       setEscalationEmail(agent.escalation_email || "");
       setEscalationSlackChannel(agent.escalation_slack_channel || "");
+      setEmailEnabled(agent.email_enabled || false);
+      setAutoReplyEnabled(agent.auto_reply_enabled ?? true);
+      setEmailSignature(agent.email_signature || "");
     }
   }, [agent]);
 
@@ -135,7 +158,9 @@ export default function EditAgentPage() {
       systemPrompt !== (agent.system_prompt || "") ||
       customInstructions !== (agent.custom_instructions || "") ||
       escalationEmail !== (agent.escalation_email || "") ||
-      escalationSlackChannel !== (agent.escalation_slack_channel || "");
+      escalationSlackChannel !== (agent.escalation_slack_channel || "") ||
+      autoReplyEnabled !== (agent.auto_reply_enabled ?? true) ||
+      emailSignature !== (agent.email_signature || "");
 
     setHasChanges(changed);
   }, [
@@ -158,6 +183,8 @@ export default function EditAgentPage() {
     customInstructions,
     escalationEmail,
     escalationSlackChannel,
+    autoReplyEnabled,
+    emailSignature,
   ]);
 
   const handleSave = async () => {
@@ -186,6 +213,8 @@ export default function EditAgentPage() {
         custom_instructions: customInstructions.trim() || undefined,
         escalation_email: escalationEmail.trim() || undefined,
         escalation_slack_channel: escalationSlackChannel.trim() || undefined,
+        auto_reply_enabled: autoReplyEnabled,
+        email_signature: emailSignature.trim() || undefined,
       });
 
       setSaveSuccess(true);
@@ -471,6 +500,264 @@ export default function EditAgentPage() {
                 Slack channel to post escalation notifications
               </p>
             </div>
+          </div>
+        );
+
+      case "email":
+        const handleEnableEmail = async () => {
+          if (!newEmailHandle || !newEmailDomain) {
+            setError("Please enter an email handle and select a domain");
+            return;
+          }
+          try {
+            await enableEmail({
+              preferredHandle: newEmailHandle,
+              domain: newEmailDomain,
+            });
+            setEmailEnabled(true);
+            setShowEmailSetup(false);
+            setNewEmailHandle("");
+            setNewEmailDomain("");
+          } catch (err) {
+            console.error("Failed to enable email:", err);
+            setError(err instanceof Error ? err.message : "Failed to enable email");
+          }
+        };
+
+        const handleDisableEmail = async () => {
+          try {
+            await disableEmail();
+            setEmailEnabled(false);
+          } catch (err) {
+            console.error("Failed to disable email:", err);
+            setError(err instanceof Error ? err.message : "Failed to disable email");
+          }
+        };
+
+        const copyEmailAddress = async () => {
+          if (agent?.email_address) {
+            await navigator.clipboard.writeText(agent.email_address);
+            setEmailCopied(true);
+            setTimeout(() => setEmailCopied(false), 2000);
+          }
+        };
+
+        const openEmailSetup = () => {
+          // Pre-fill with mention handle or agent name
+          const suggestedHandle = mentionHandle || name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+          setNewEmailHandle(suggestedHandle);
+          setNewEmailDomain(defaultDomain);
+          setShowEmailSetup(true);
+        };
+
+        return (
+          <div className="space-y-6">
+            {/* Email Setup Modal */}
+            {showEmailSetup && !agent?.email_enabled && (
+              <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-medium text-white flex items-center gap-2">
+                    <AtSign className="h-4 w-4 text-purple-400" />
+                    Configure Email Address
+                  </h3>
+                  <button
+                    onClick={() => setShowEmailSetup(false)}
+                    className="p-1 text-slate-400 hover:text-white transition-colors"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  {/* Email Handle */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      Email Handle
+                    </label>
+                    <input
+                      type="text"
+                      value={newEmailHandle}
+                      onChange={(e) => setNewEmailHandle(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                      placeholder="support"
+                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                    <p className="mt-1 text-xs text-slate-500">
+                      Letters, numbers, and hyphens only
+                    </p>
+                  </div>
+
+                  {/* Domain Selector */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      Domain
+                    </label>
+                    <div className="relative">
+                      <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                      <select
+                        value={newEmailDomain}
+                        onChange={(e) => setNewEmailDomain(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 appearance-none"
+                      >
+                        {domains.map((d) => (
+                          <option key={d.domain} value={d.domain}>
+                            {d.domain} {d.is_default && "(Default)"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Preview */}
+                {newEmailHandle && newEmailDomain && (
+                  <div className="p-3 bg-slate-800 rounded-lg border border-slate-700 mb-4">
+                    <span className="text-sm text-slate-400">Email address: </span>
+                    <code className="text-blue-400 font-mono">{newEmailHandle}@{newEmailDomain}</code>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => setShowEmailSetup(false)}
+                    className="px-4 py-2 text-slate-400 hover:text-white transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleEnableEmail}
+                    disabled={isEnabling || !newEmailHandle || !newEmailDomain}
+                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
+                  >
+                    {isEnabling ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Enable Email"
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Email Status */}
+            <div className="p-4 bg-slate-700/50 rounded-lg border border-slate-600">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={cn(
+                    "p-2 rounded-lg",
+                    agent?.email_enabled ? "bg-green-500/20" : "bg-slate-600"
+                  )}>
+                    <Mail className={cn(
+                      "h-5 w-5",
+                      agent?.email_enabled ? "text-green-400" : "text-slate-400"
+                    )} />
+                  </div>
+                  <div>
+                    <h3 className="font-medium text-white">
+                      {agent?.email_enabled ? "Email Enabled" : "Email Disabled"}
+                    </h3>
+                    {agent?.email_address ? (
+                      <div className="flex items-center gap-2 mt-1">
+                        <code className="text-sm text-blue-400 bg-slate-800 px-2 py-0.5 rounded">
+                          {agent.email_address}
+                        </code>
+                        <button
+                          onClick={copyEmailAddress}
+                          className="p-1 text-slate-400 hover:text-white transition-colors"
+                          title="Copy email address"
+                        >
+                          {emailCopied ? (
+                            <Check className="h-4 w-4 text-green-400" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-slate-400">
+                        Enable email to get an address for this agent
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {agent?.email_enabled ? (
+                  <button
+                    onClick={handleDisableEmail}
+                    disabled={isDisabling}
+                    className="px-4 py-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors disabled:opacity-50"
+                  >
+                    {isDisabling ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Disable"
+                    )}
+                  </button>
+                ) : !showEmailSetup ? (
+                  <button
+                    onClick={openEmailSetup}
+                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                  >
+                    Enable Email
+                  </button>
+                ) : null}
+              </div>
+            </div>
+
+            {agent?.email_enabled && (
+              <>
+                {/* Auto Reply */}
+                <label className="flex items-start gap-4 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={autoReplyEnabled}
+                    onChange={(e) => setAutoReplyEnabled(e.target.checked)}
+                    className="w-5 h-5 mt-0.5 rounded border-slate-600 bg-slate-700 text-purple-500 focus:ring-purple-500"
+                  />
+                  <div>
+                    <div className="font-medium text-white">Enable Auto-Reply</div>
+                    <p className="text-sm text-slate-400 mt-1">
+                      Automatically respond to emails when AI confidence is above threshold ({Math.round(confidenceThreshold * 100)}%)
+                    </p>
+                  </div>
+                </label>
+
+                {/* Email Signature */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Email Signature
+                  </label>
+                  <textarea
+                    value={emailSignature}
+                    onChange={(e) => setEmailSignature(e.target.value)}
+                    rows={4}
+                    placeholder="Best regards,&#10;{agent_name}"
+                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                  />
+                  <p className="mt-1 text-sm text-slate-500">
+                    Signature appended to all outgoing emails from this agent
+                  </p>
+                </div>
+
+                {/* Inbox Link */}
+                <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-medium text-blue-300">Agent Inbox</h4>
+                      <p className="text-sm text-slate-400 mt-1">
+                        View and manage emails received by this agent
+                      </p>
+                    </div>
+                    <Link
+                      href={`/agents/${agentId}/inbox`}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                    >
+                      <Mail className="h-4 w-4" />
+                      View Inbox
+                      <ExternalLink className="h-4 w-4" />
+                    </Link>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         );
 

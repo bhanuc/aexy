@@ -14,6 +14,7 @@ from aexy.core.database import Base
 if TYPE_CHECKING:
     from aexy.models.developer import Developer
     from aexy.models.workspace import Workspace
+    from aexy.models.agent_inbox import AgentInboxMessage
 
 
 class AgentType(str, Enum):
@@ -98,6 +99,12 @@ class CRMAgent(Base):
     escalation_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     escalation_slack_channel: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
+    # Email integration fields
+    email_address: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
+    email_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    auto_reply_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    email_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # Status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
@@ -132,6 +139,12 @@ class CRMAgent(Base):
     created_by: Mapped["Developer"] = relationship("Developer", lazy="selectin")
     executions: Mapped[list["CRMAgentExecution"]] = relationship(
         "CRMAgentExecution",
+        back_populates="agent",
+        cascade="all, delete-orphan",
+        lazy="noload",
+    )
+    inbox_messages: Mapped[list["AgentInboxMessage"]] = relationship(
+        "AgentInboxMessage",
         back_populates="agent",
         cascade="all, delete-orphan",
         lazy="noload",

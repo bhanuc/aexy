@@ -9,6 +9,7 @@ from aexy.models.developer import Developer
 from aexy.services.workspace_service import WorkspaceService
 from aexy.services.agent_service import AgentService
 from aexy.services.writing_style_service import WritingStyleService
+from aexy.services.agent_email_service import AgentEmailService
 from aexy.schemas.agent import (
     AgentCreate,
     AgentUpdate,
@@ -27,6 +28,17 @@ from aexy.schemas.agent import (
     ConversationWithMessagesResponse,
     MessageCreate,
     MessageResponse,
+    # Email/Inbox schemas
+    EmailDomainResponse,
+    EmailDomainsListResponse,
+    EmailEnableRequest,
+    EmailEnableResponse,
+    InboxMessageResponse,
+    InboxReplyRequest,
+    InboxEscalateRequest,
+    InboxActionResponse,
+    EmailRoutingRuleCreate,
+    EmailRoutingRuleResponse,
 )
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/crm/agents")
@@ -651,3 +663,446 @@ async def generate_email(
         tone_override=data.tone_override,
     )
     return GenerateEmailResponse(**result)
+
+
+# =============================================================================
+# AGENT EMAIL INTEGRATION (uses Mailagent microservice)
+# =============================================================================
+
+
+@router.get("/email/domains", response_model=EmailDomainsListResponse)
+async def list_email_domains(
+    workspace_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_developer: Developer = Depends(get_current_developer),
+):
+    """List available email domains for agent email addresses.
+
+    Returns domains from the mailagent service plus the default aexy.email domain.
+    """
+    await check_workspace_permission(db, workspace_id, str(current_developer.id))
+
+    from aexy.integrations.mailagent_client import get_mailagent_client, MailagentError
+
+    # Get workspace for default domain
+    workspace_service = WorkspaceService(db)
+    workspace = await workspace_service.get_workspace(workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    default_domain = f"{workspace.slug}.aexy.email"
+    domains = [
+        EmailDomainResponse(
+            domain=default_domain,
+            is_default=True,
+            is_verified=True,
+            display_name="Default (Aexy Email)",
+        )
+    ]
+
+    # Fetch verified domains from mailagent
+    try:
+        client = get_mailagent_client()
+        mailagent_domains = await client.list_domains(status="verified")
+
+        for d in mailagent_domains:
+            domains.append(
+                EmailDomainResponse(
+                    domain=d.get("domain", ""),
+                    is_default=False,
+                    is_verified=d.get("status") in ("verified", "active"),
+                    display_name=d.get("domain"),
+                )
+            )
+
+        # Also include active (warmed) domains
+        active_domains = await client.list_domains(status="active")
+        existing = {d.domain for d in domains}
+        for d in active_domains:
+            if d.get("domain") not in existing:
+                domains.append(
+                    EmailDomainResponse(
+                        domain=d.get("domain", ""),
+                        is_default=False,
+                        is_verified=True,
+                        display_name=d.get("domain"),
+                    )
+                )
+    except MailagentError:
+        # If mailagent is unavailable, just return the default domain
+        pass
+
+    return EmailDomainsListResponse(domains=domains, default_domain=default_domain)
+
+
+@router.post("/{agent_id}/email/enable", response_model=EmailEnableResponse)
+async def enable_agent_email(
+    workspace_id: str,
+    agent_id: str,
+    data: EmailEnableRequest | None = None,
+    db: AsyncSession = Depends(get_db),
+    current_developer: Developer = Depends(get_current_developer),
+):
+    """Enable email for an agent by creating an inbox via mailagent.
+
+    Creates an inbox in the mailagent service and assigns the agent to it.
+    The email address format is: {handle}@{domain}
+    """
+    await check_workspace_permission(db, workspace_id, str(current_developer.id), "admin")
+
+    from aexy.integrations.mailagent_client import get_mailagent_client, MailagentError
+    from uuid import UUID as PyUUID
+
+    service = AgentService(db)
+    agent = await service.get_agent(agent_id)
+    if not agent or agent.workspace_id != workspace_id:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    if agent.email_address:
+        raise HTTPException(status_code=400, detail="Email already enabled for this agent")
+
+    # Determine email handle
+    preferred_handle = data.preferred_handle if data else None
+    handle = preferred_handle or agent.mention_handle or agent.name.lower().replace(" ", "-")
+    # Clean the handle
+    handle = "".join(c for c in handle if c.isalnum() or c == "-").strip("-")
+
+    # Determine domain
+    workspace_service = WorkspaceService(db)
+    workspace = await workspace_service.get_workspace(workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    domain = data.domain if data else None
+    if not domain:
+        domain = f"{workspace.slug}.aexy.email"
+
+    email_address = f"{handle}@{domain}"
+
+    # Create inbox in mailagent
+    try:
+        client = get_mailagent_client()
+
+        # Check if inbox already exists
+        try:
+            existing = await client.get_inbox_by_email(email_address)
+            if existing:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Email address {email_address} is already in use"
+                )
+        except MailagentError as e:
+            if e.status_code != 404:
+                raise
+
+        # Create the inbox
+        inbox = await client.create_inbox(
+            email=email_address,
+            display_name=agent.name,
+        )
+
+        # Assign agent to inbox
+        await client.assign_agent_to_inbox(
+            inbox_id=PyUUID(inbox["id"]),
+            agent_id=PyUUID(agent_id),
+            priority=100,
+        )
+
+    except MailagentError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create inbox: {e}")
+
+    # Update agent with email address
+    agent.email_address = email_address
+    agent.email_enabled = True
+    await db.commit()
+
+    return EmailEnableResponse(email_address=email_address, domain=domain, enabled=True)
+
+
+@router.post("/{agent_id}/email/disable")
+async def disable_agent_email(
+    workspace_id: str,
+    agent_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_developer: Developer = Depends(get_current_developer),
+):
+    """Disable email for an agent.
+
+    Removes the inbox from mailagent and clears the agent's email address.
+    """
+    await check_workspace_permission(db, workspace_id, str(current_developer.id), "admin")
+
+    from aexy.integrations.mailagent_client import get_mailagent_client, MailagentError
+    from uuid import UUID as PyUUID
+
+    service = AgentService(db)
+    agent = await service.get_agent(agent_id)
+    if not agent or agent.workspace_id != workspace_id:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    if not agent.email_address:
+        raise HTTPException(status_code=400, detail="Email not enabled for this agent")
+
+    # Delete inbox from mailagent
+    try:
+        client = get_mailagent_client()
+        inbox = await client.get_inbox_by_email(agent.email_address)
+        if inbox:
+            await client.delete_inbox(PyUUID(inbox["id"]))
+    except MailagentError:
+        # If mailagent is unavailable or inbox not found, continue with disabling
+        pass
+
+    # Update agent
+    agent.email_address = None
+    agent.email_enabled = False
+    await db.commit()
+
+    return {"message": "Email disabled"}
+
+
+@router.get("/{agent_id}/inbox", response_model=list[InboxMessageResponse])
+async def get_agent_inbox(
+    workspace_id: str,
+    agent_id: str,
+    status: str | None = None,
+    priority: str | None = None,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_developer: Developer = Depends(get_current_developer),
+):
+    """Get inbox messages for an agent."""
+    await check_workspace_permission(db, workspace_id, str(current_developer.id))
+
+    service = AgentService(db)
+    agent = await service.get_agent(agent_id)
+    if not agent or agent.workspace_id != workspace_id:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    email_service = AgentEmailService(db)
+    messages = await email_service.list_inbox_messages(
+        agent_id=agent_id,
+        status=status,
+        priority=priority,
+        skip=skip,
+        limit=limit,
+    )
+    return messages
+
+
+@router.get("/{agent_id}/inbox/{message_id}", response_model=InboxMessageResponse)
+async def get_inbox_message(
+    workspace_id: str,
+    agent_id: str,
+    message_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_developer: Developer = Depends(get_current_developer),
+):
+    """Get a specific inbox message with full details."""
+    await check_workspace_permission(db, workspace_id, str(current_developer.id))
+
+    email_service = AgentEmailService(db)
+    message = await email_service.get_inbox_message(message_id)
+
+    if not message or message.agent_id != agent_id:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    return message
+
+
+@router.post("/{agent_id}/inbox/{message_id}/reply", response_model=InboxActionResponse)
+async def reply_to_inbox_message(
+    workspace_id: str,
+    agent_id: str,
+    message_id: str,
+    data: InboxReplyRequest,
+    db: AsyncSession = Depends(get_db),
+    current_developer: Developer = Depends(get_current_developer),
+):
+    """Send a reply to an inbox message (manual or AI-suggested)."""
+    await check_workspace_permission(db, workspace_id, str(current_developer.id))
+
+    email_service = AgentEmailService(db)
+    message = await email_service.get_inbox_message(message_id)
+
+    if not message or message.agent_id != agent_id:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    # Use suggested response if requested
+    reply_body = message.suggested_response if data.use_suggested else data.body
+
+    if not reply_body:
+        raise HTTPException(status_code=400, detail="Reply body is required")
+
+    # Send the reply
+    response_id = await email_service._send_auto_reply(message, reply_body)
+    await email_service.mark_as_responded(message_id, response_id)
+    await db.commit()
+
+    return InboxActionResponse(
+        success=True,
+        message="Reply sent successfully",
+        inbox_message_id=message_id,
+    )
+
+
+@router.post("/{agent_id}/inbox/{message_id}/escalate", response_model=InboxActionResponse)
+async def escalate_inbox_message(
+    workspace_id: str,
+    agent_id: str,
+    message_id: str,
+    data: InboxEscalateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_developer: Developer = Depends(get_current_developer),
+):
+    """Escalate a message to a team member."""
+    await check_workspace_permission(db, workspace_id, str(current_developer.id))
+
+    email_service = AgentEmailService(db)
+    message = await email_service.get_inbox_message(message_id)
+
+    if not message or message.agent_id != agent_id:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    await email_service.escalate_message(
+        message_id=message_id,
+        escalate_to=data.escalate_to,
+        note=data.note,
+    )
+    await db.commit()
+
+    return InboxActionResponse(
+        success=True,
+        message=f"Message escalated to {data.escalate_to}",
+        inbox_message_id=message_id,
+    )
+
+
+@router.post("/{agent_id}/inbox/{message_id}/archive", response_model=InboxActionResponse)
+async def archive_inbox_message(
+    workspace_id: str,
+    agent_id: str,
+    message_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_developer: Developer = Depends(get_current_developer),
+):
+    """Archive an inbox message."""
+    await check_workspace_permission(db, workspace_id, str(current_developer.id))
+
+    email_service = AgentEmailService(db)
+    message = await email_service.get_inbox_message(message_id)
+
+    if not message or message.agent_id != agent_id:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    await email_service.archive_message(message_id)
+    await db.commit()
+
+    return InboxActionResponse(
+        success=True,
+        message="Message archived",
+        inbox_message_id=message_id,
+    )
+
+
+@router.post("/{agent_id}/inbox/{message_id}/process", response_model=InboxMessageResponse)
+async def process_inbox_message(
+    workspace_id: str,
+    agent_id: str,
+    message_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_developer: Developer = Depends(get_current_developer),
+):
+    """Process an inbox message with AI (classify, summarize, suggest response)."""
+    await check_workspace_permission(db, workspace_id, str(current_developer.id))
+
+    email_service = AgentEmailService(db)
+    message = await email_service.get_inbox_message(message_id)
+
+    if not message or message.agent_id != agent_id:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    try:
+        await email_service.process_inbox_message(message_id)
+        await db.commit()
+
+        # Return updated message
+        message = await email_service.get_inbox_message(message_id)
+        return message
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# ROUTING RULES
+# =============================================================================
+
+
+@router.get("/{agent_id}/email/routing-rules", response_model=list[EmailRoutingRuleResponse])
+async def list_routing_rules(
+    workspace_id: str,
+    agent_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_developer: Developer = Depends(get_current_developer),
+):
+    """List email routing rules for an agent."""
+    await check_workspace_permission(db, workspace_id, str(current_developer.id))
+
+    service = AgentService(db)
+    agent = await service.get_agent(agent_id)
+    if not agent or agent.workspace_id != workspace_id:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    email_service = AgentEmailService(db)
+    rules = await email_service.list_routing_rules(agent_id)
+    return rules
+
+
+@router.post("/{agent_id}/email/routing-rules", response_model=EmailRoutingRuleResponse)
+async def create_routing_rule(
+    workspace_id: str,
+    agent_id: str,
+    data: EmailRoutingRuleCreate,
+    db: AsyncSession = Depends(get_db),
+    current_developer: Developer = Depends(get_current_developer),
+):
+    """Create an email routing rule for an agent."""
+    await check_workspace_permission(db, workspace_id, str(current_developer.id), "admin")
+
+    service = AgentService(db)
+    agent = await service.get_agent(agent_id)
+    if not agent or agent.workspace_id != workspace_id:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    email_service = AgentEmailService(db)
+    rule = await email_service.create_routing_rule(
+        workspace_id=workspace_id,
+        agent_id=agent_id,
+        rule_type=data.rule_type,
+        rule_value=data.rule_value,
+        priority=data.priority,
+    )
+    await db.commit()
+    return rule
+
+
+@router.delete("/{agent_id}/email/routing-rules/{rule_id}")
+async def delete_routing_rule(
+    workspace_id: str,
+    agent_id: str,
+    rule_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_developer: Developer = Depends(get_current_developer),
+):
+    """Delete an email routing rule."""
+    await check_workspace_permission(db, workspace_id, str(current_developer.id), "admin")
+
+    email_service = AgentEmailService(db)
+    success = await email_service.delete_routing_rule(rule_id)
+
+    if not success:
+        raise HTTPException(status_code=404, detail="Routing rule not found")
+
+    await db.commit()
+    return {"message": "Routing rule deleted"}

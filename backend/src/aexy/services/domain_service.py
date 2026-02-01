@@ -46,12 +46,36 @@ class DomainService:
     # DOMAIN CRUD
     # -------------------------------------------------------------------------
 
+    async def check_domain_exists(
+        self,
+        workspace_id: str,
+        domain: str,
+    ) -> bool:
+        """Check if a domain already exists for this workspace."""
+        result = await self.db.execute(
+            select(SendingDomain).where(
+                and_(
+                    SendingDomain.workspace_id == workspace_id,
+                    SendingDomain.domain == domain,
+                )
+            )
+        )
+        return result.scalar_one_or_none() is not None
+
     async def create_domain(
         self,
         workspace_id: str,
         data: SendingDomainCreate,
     ) -> SendingDomain:
-        """Create a new sending domain."""
+        """Create a new sending domain.
+
+        Raises:
+            ValueError: If domain already exists for this workspace
+        """
+        # Check for duplicate domain
+        if await self.check_domain_exists(workspace_id, data.domain):
+            raise ValueError(f"Domain '{data.domain}' already exists in this workspace")
+
         # Generate verification token
         token_source = f"{workspace_id}:{data.domain}:{uuid4()}"
         verification_token = hashlib.sha256(token_source.encode()).hexdigest()[:32]
