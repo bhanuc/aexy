@@ -233,6 +233,7 @@ class WorkflowDefinitionResponse(BaseModel):
 
 class WorkflowExecutionContext(BaseModel):
     """Context passed between workflow nodes during execution."""
+    workspace_id: str | None = None
     record_id: str | None = None
     record_data: dict[str, Any] = Field(default_factory=dict)
     trigger_data: dict[str, Any] = Field(default_factory=dict)

@@ -5,7 +5,7 @@ from enum import Enum
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -14,6 +14,7 @@ from aexy.core.database import Base
 if TYPE_CHECKING:
     from aexy.models.developer import Developer
     from aexy.models.workspace import Workspace
+    from aexy.models.agent_inbox import AgentInboxMessage
 
 
 class AgentType(str, Enum):
@@ -55,6 +56,7 @@ class CRMAgent(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     agent_type: Mapped[str] = mapped_column(String(50), nullable=False)  # AgentType enum value
+    mention_handle: Mapped[str | None] = mapped_column(String(50), nullable=True, unique=True)  # @mention handle
 
     # System agents are pre-built and cannot be deleted
     is_system: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -70,10 +72,38 @@ class CRMAgent(Base):
         nullable=False,
     )  # ["crm_search", "send_email", "enrich_company", ...]
 
+    # LLM configuration
+    llm_provider: Mapped[str] = mapped_column(String(50), default="claude", nullable=False)  # claude, gemini, ollama
+    model: Mapped[str] = mapped_column(String(100), default="claude-3-sonnet-20240229", nullable=False)
+    temperature: Mapped[float] = mapped_column(Float, default=0.7, nullable=False)
+    max_tokens: Mapped[int] = mapped_column(Integer, default=4096, nullable=False)
+
     # LangGraph configuration
     max_iterations: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
     timeout_seconds: Mapped[int] = mapped_column(Integer, default=300, nullable=False)
-    model: Mapped[str] = mapped_column(String(100), default="claude-3-sonnet-20240229", nullable=False)
+
+    # Behavior configuration
+    confidence_threshold: Mapped[float] = mapped_column(Float, default=0.7, nullable=False)
+    require_approval_below: Mapped[float] = mapped_column(Float, default=0.5, nullable=False)
+    max_daily_responses: Mapped[int | None] = mapped_column(Integer, nullable=True)  # null = unlimited
+    response_delay_minutes: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # Working hours configuration (JSONB)
+    working_hours: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # { enabled: bool, timezone: str, start: str, end: str, days: int[] }
+
+    # Additional prompts
+    custom_instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Escalation settings
+    escalation_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    escalation_slack_channel: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    # Email integration fields
+    email_address: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
+    email_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    auto_reply_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    email_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -113,6 +143,12 @@ class CRMAgent(Base):
         cascade="all, delete-orphan",
         lazy="noload",
     )
+    inbox_messages: Mapped[list["AgentInboxMessage"]] = relationship(
+        "AgentInboxMessage",
+        back_populates="agent",
+        cascade="all, delete-orphan",
+        lazy="noload",
+    )
 
 
 class CRMAgentExecution(Base):
@@ -129,6 +165,12 @@ class CRMAgentExecution(Base):
         UUID(as_uuid=False),
         ForeignKey("crm_agents.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
+    )
+    conversation_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("crm_agent_conversations.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
 
@@ -188,6 +230,112 @@ class CRMAgentExecution(Base):
 
     # Relationships
     agent: Mapped["CRMAgent"] = relationship("CRMAgent", back_populates="executions")
+    conversation: Mapped["AgentConversation | None"] = relationship(
+        "AgentConversation", back_populates="executions"
+    )
+
+
+class AgentConversation(Base):
+    """Agent chat conversation."""
+
+    __tablename__ = "crm_agent_conversations"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    agent_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("crm_agents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    record_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False),
+        nullable=True,
+        index=True,
+    )
+    title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
+    conversation_metadata: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Relationships
+    workspace: Mapped["Workspace"] = relationship("Workspace", lazy="selectin")
+    agent: Mapped["CRMAgent"] = relationship("CRMAgent", lazy="selectin")
+    messages: Mapped[list["AgentMessage"]] = relationship(
+        "AgentMessage",
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        order_by="AgentMessage.message_index",
+        lazy="selectin",
+    )
+    executions: Mapped[list["CRMAgentExecution"]] = relationship(
+        "CRMAgentExecution",
+        back_populates="conversation",
+        lazy="noload",
+    )
+
+
+class AgentMessage(Base):
+    """Message in an agent conversation."""
+
+    __tablename__ = "crm_agent_messages"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+    )
+    conversation_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("crm_agent_conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    execution_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("crm_agent_executions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    role: Mapped[str] = mapped_column(String(20), nullable=False)  # user, assistant, system, tool
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    tool_calls: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    tool_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    tool_output: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    message_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    conversation: Mapped["AgentConversation"] = relationship(
+        "AgentConversation", back_populates="messages"
+    )
+    execution: Mapped["CRMAgentExecution | None"] = relationship(
+        "CRMAgentExecution", lazy="selectin"
+    )
 
 
 class UserWritingStyle(Base):

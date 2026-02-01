@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   Save,
   Play,
@@ -302,9 +303,9 @@ export function WorkflowToolbar({
         </div>
       </div>
 
-      {/* Test Modal */}
-      {showTestModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      {/* Test Modal - rendered via portal to escape stacking context */}
+      {showTestModal && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]">
           <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 w-full max-w-md shadow-xl">
             <h3 className="text-lg font-semibold text-white mb-4">Test Workflow</h3>
 
@@ -313,15 +314,24 @@ export function WorkflowToolbar({
                 <label className="block text-sm text-slate-400 mb-1">
                   Record ID (optional)
                 </label>
-                <input
-                  type="text"
-                  value={testRecordId}
-                  onChange={(e) => setTestRecordId(e.target.value)}
-                  placeholder="Enter a record ID to test with..."
-                  className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={testRecordId}
+                    onChange={(e) => setTestRecordId(e.target.value)}
+                    placeholder="Enter a record ID to test with..."
+                    className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setTestRecordId(crypto.randomUUID())}
+                    className="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-300 text-sm hover:bg-slate-600 transition-colors whitespace-nowrap"
+                  >
+                    Generate
+                  </button>
+                </div>
                 <p className="text-xs text-slate-500 mt-1">
-                  Leave empty for a dry run without a specific record
+                  Leave empty for a dry run, or generate a mock ID for testing
                 </p>
               </div>
 
@@ -356,12 +366,13 @@ export function WorkflowToolbar({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Import Modal */}
-      {showImportModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      {/* Import Modal - rendered via portal to escape stacking context */}
+      {showImportModal && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]">
           <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 w-full max-w-md shadow-xl">
             <h3 className="text-lg font-semibold text-white mb-4">Import Workflow</h3>
 
@@ -417,7 +428,8 @@ export function WorkflowToolbar({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

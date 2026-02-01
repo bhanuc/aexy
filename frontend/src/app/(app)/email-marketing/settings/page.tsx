@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
   ChevronLeft,
   Globe,
@@ -616,10 +617,14 @@ export default function EmailSettingsPage() {
     if (!newDomain) return;
     try {
       await createDomain({ domain: newDomain });
+      toast.success(`Domain ${newDomain} added successfully`);
       setNewDomain("");
       setShowAddDomain(false);
-    } catch {
-      // Error handled by mutation
+    } catch (error: unknown) {
+      // Extract error message from API response
+      const err = error as { response?: { data?: { detail?: string } }; message?: string };
+      const message = err.response?.data?.detail || err.message || "Failed to add domain";
+      toast.error(message);
     }
   };
 

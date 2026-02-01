@@ -257,8 +257,15 @@ async def create_domain(
     await check_workspace_permission(db, workspace_id, current_user.id, "admin")
 
     service = DomainService(db)
-    domain = await service.create_domain(workspace_id, data)
-    return domain
+    try:
+        domain = await service.create_domain(workspace_id, data)
+        return domain
+    except ValueError as e:
+        # Domain already exists
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(e),
+        )
 
 
 @router.get("/domains", response_model=list[SendingDomainListResponse])

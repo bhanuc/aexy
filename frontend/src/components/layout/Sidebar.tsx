@@ -53,14 +53,17 @@ export function Sidebar({ className, user, logout }: SidebarProps) {
     // Sidebar layout preference
     const { layoutConfig } = useSidebarLayout();
 
-    // Auto-hide sidebar on docs pages
+    // Check if on automation editor page (edit or new)
+    const isAutomationEditorPage = pathname.startsWith("/automations/") && pathname !== "/automations";
+
+    // Auto-hide sidebar on docs pages and automation editor
     React.useEffect(() => {
-        if (isDocsPage) {
+        if (isDocsPage || isAutomationEditorPage) {
             setIsHidden(true);
         } else {
             setIsHidden(false);
         }
-    }, [isDocsPage]);
+    }, [isDocsPage, isAutomationEditorPage]);
 
     // Docs data
     const { currentWorkspace } = useWorkspace();
