@@ -8253,6 +8253,63 @@ export interface CRMAutomationRun {
   created_at: string;
 }
 
+// =============================================================================
+// PLATFORM-WIDE AUTOMATION TYPES
+// =============================================================================
+
+export type AutomationModule =
+  | "crm"
+  | "tickets"
+  | "hiring"
+  | "email_marketing"
+  | "uptime"
+  | "sprints"
+  | "forms"
+  | "booking";
+
+export type AutomationTriggerType = string; // Module-specific triggers
+export type AutomationActionType = string; // Module-specific actions
+
+export interface Automation {
+  id: string;
+  workspace_id: string;
+  name: string;
+  description: string | null;
+  module: AutomationModule;
+  module_config: Record<string, unknown>;
+  object_id: string | null;
+  trigger_type: string;
+  trigger_config: Record<string, unknown>;
+  conditions: Record<string, unknown>[];
+  actions: { type: string; config: Record<string, unknown> }[];
+  is_active: boolean;
+  runs_this_month: number;
+  run_limit_per_month: number | null;
+  error_handling: "stop" | "continue" | "retry";
+  total_runs: number;
+  successful_runs: number;
+  failed_runs: number;
+  last_run_at: string | null;
+  created_by_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AutomationRun {
+  id: string;
+  automation_id: string;
+  module: string;
+  record_id: string | null;
+  trigger_data: Record<string, unknown>;
+  status: "pending" | "running" | "completed" | "failed" | "cancelled";
+  steps_executed: Record<string, unknown>[];
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  duration_ms: number | null;
+  created_at: string;
+}
+
 export interface CRMSequence {
   id: string;
   workspace_id: string;
@@ -8884,6 +8941,129 @@ export const crmAutomationApi = {
       const response = await api.post(`/workspaces/${workspaceId}/crm/webhook-deliveries/${deliveryId}/retry`);
       return response.data;
     },
+  },
+};
+
+// =============================================================================
+// PLATFORM-WIDE AUTOMATIONS API
+// =============================================================================
+
+export const automationsApi = {
+  // List automations (optionally filter by module)
+  list: async (
+    workspaceId: string,
+    params?: { module?: AutomationModule; object_id?: string; is_active?: boolean; skip?: number; limit?: number }
+  ): Promise<Automation[]> => {
+    const response = await api.get(`/workspaces/${workspaceId}/automations`, { params });
+    return response.data;
+  },
+
+  // Get single automation
+  get: async (workspaceId: string, automationId: string): Promise<Automation> => {
+    const response = await api.get(`/workspaces/${workspaceId}/automations/${automationId}`);
+    return response.data;
+  },
+
+  // Create automation
+  create: async (
+    workspaceId: string,
+    data: {
+      name: string;
+      module: AutomationModule;
+      trigger_type: string;
+      description?: string;
+      module_config?: Record<string, unknown>;
+      object_id?: string;
+      trigger_config?: Record<string, unknown>;
+      conditions?: Record<string, unknown>[];
+      actions: { type: string; config: Record<string, unknown> }[];
+      error_handling?: "stop" | "continue" | "retry";
+      run_limit_per_month?: number;
+      is_active?: boolean;
+    }
+  ): Promise<Automation> => {
+    const response = await api.post(`/workspaces/${workspaceId}/automations`, data);
+    return response.data;
+  },
+
+  // Update automation
+  update: async (
+    workspaceId: string,
+    automationId: string,
+    data: Partial<{
+      name: string;
+      description: string;
+      module_config: Record<string, unknown>;
+      trigger_config: Record<string, unknown>;
+      conditions: Record<string, unknown>[];
+      actions: { type: string; config: Record<string, unknown> }[];
+      is_active: boolean;
+      run_limit_per_month: number;
+      error_handling: "stop" | "continue" | "retry";
+    }>
+  ): Promise<Automation> => {
+    const response = await api.patch(`/workspaces/${workspaceId}/automations/${automationId}`, data);
+    return response.data;
+  },
+
+  // Delete automation
+  delete: async (workspaceId: string, automationId: string): Promise<void> => {
+    await api.delete(`/workspaces/${workspaceId}/automations/${automationId}`);
+  },
+
+  // Toggle automation active status
+  toggle: async (workspaceId: string, automationId: string): Promise<Automation> => {
+    const response = await api.post(`/workspaces/${workspaceId}/automations/${automationId}/toggle`);
+    return response.data;
+  },
+
+  // Manually trigger automation
+  trigger: async (
+    workspaceId: string,
+    automationId: string,
+    recordId?: string
+  ): Promise<{ message: string; automation_id: string; record_id: string | null; module: string }> => {
+    const response = await api.post(`/workspaces/${workspaceId}/automations/${automationId}/trigger`, null, {
+      params: recordId ? { record_id: recordId } : undefined,
+    });
+    return response.data;
+  },
+
+  // List automation runs
+  listRuns: async (
+    workspaceId: string,
+    automationId: string,
+    params?: { skip?: number; limit?: number }
+  ): Promise<AutomationRun[]> => {
+    const response = await api.get(`/workspaces/${workspaceId}/automations/${automationId}/runs`, { params });
+    return response.data;
+  },
+
+  // Get single automation run
+  getRun: async (workspaceId: string, runId: string): Promise<AutomationRun> => {
+    const response = await api.get(`/workspaces/${workspaceId}/automations/runs/${runId}`);
+    return response.data;
+  },
+
+  // Registry endpoints
+  getTriggerRegistry: async (workspaceId: string): Promise<{ triggers: Record<string, string[]> }> => {
+    const response = await api.get(`/workspaces/${workspaceId}/automations/registry/triggers`);
+    return response.data;
+  },
+
+  getActionRegistry: async (workspaceId: string): Promise<{ actions: Record<string, string[]> }> => {
+    const response = await api.get(`/workspaces/${workspaceId}/automations/registry/actions`);
+    return response.data;
+  },
+
+  getModuleTriggers: async (workspaceId: string, module: string): Promise<{ module: string; triggers: string[] }> => {
+    const response = await api.get(`/workspaces/${workspaceId}/automations/registry/modules/${module}/triggers`);
+    return response.data;
+  },
+
+  getModuleActions: async (workspaceId: string, module: string): Promise<{ module: string; actions: string[] }> => {
+    const response = await api.get(`/workspaces/${workspaceId}/automations/registry/modules/${module}/actions`);
+    return response.data;
   },
 };
 

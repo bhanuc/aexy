@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, useEffect } from "react";
+import { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import {
   ReactFlow,
   Background,
@@ -66,6 +66,7 @@ interface TestExecution {
 export interface WorkflowCanvasProps {
   automationId: string;
   workspaceId: string;
+  module?: string;
   initialNodes?: Node[];
   initialEdges?: Edge[];
   initialViewport?: { x: number; y: number; zoom: number };
@@ -107,6 +108,7 @@ const defaultEdgeOptions = {
 function WorkflowCanvasInner({
   automationId,
   workspaceId,
+  module = "crm",
   initialNodes = [],
   initialEdges = [],
   initialViewport = { x: 0, y: 0, zoom: 1 },
@@ -234,13 +236,13 @@ function WorkflowCanvasInner({
   }, [edges, nodeResultsMap]);
 
   // Handle test execution
-  const handleTest = useCallback(async () => {
+  const handleTest = useCallback(async (recordId?: string) => {
     setShowTestResults(true);
     setIsTestRunning(true);
     setTestResult(null);
 
     try {
-      const result = await onTest();
+      const result = await onTest(recordId);
       if (result) {
         setTestResult(result);
         // Highlight executed nodes
@@ -256,14 +258,20 @@ function WorkflowCanvasInner({
 
   const { getViewport, fitView, setViewport, screenToFlowPosition } = useReactFlow();
 
-  // Apply initial viewport
-  useMemo(() => {
-    if (initialViewport) {
-      setTimeout(() => {
+  // Track if initial viewport has been applied
+  const viewportInitialized = useRef(false);
+
+  // Apply initial viewport only once on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (initialViewport && !viewportInitialized.current) {
+      viewportInitialized.current = true;
+      // Use requestAnimationFrame to ensure React Flow is ready
+      requestAnimationFrame(() => {
         setViewport(initialViewport);
-      }, 0);
+      });
     }
-  }, [initialViewport, setViewport]);
+  }, []); // Intentionally empty - only run on mount
 
   // Load initial version number
   useEffect(() => {
@@ -380,16 +388,18 @@ function WorkflowCanvasInner({
       await onSave(nodes, edges, viewport);
       setHasChanges(false);
 
-      // Fetch updated version number
-      try {
-        const response = await api.get(
-          `/workspaces/${workspaceId}/crm/automations/${automationId}/workflow`
-        );
-        if (response.data?.version) {
-          setCurrentVersion(response.data.version);
+      // Fetch updated version number (skip for new automations)
+      if (automationId && automationId !== "new") {
+        try {
+          const response = await api.get(
+            `/workspaces/${workspaceId}/crm/automations/${automationId}/workflow`
+          );
+          if (response.data?.version) {
+            setCurrentVersion(response.data.version);
+          }
+        } catch {
+          // Ignore version fetch errors
         }
-      } catch {
-        // Ignore version fetch errors
       }
     } finally {
       setIsSaving(false);
@@ -398,6 +408,10 @@ function WorkflowCanvasInner({
 
   // Export workflow as JSON file
   const handleExport = useCallback(async () => {
+    if (!automationId || automationId === "new") {
+      console.warn("Cannot export workflow for unsaved automation");
+      return;
+    }
     try {
       const response = await api.get(
         `/workspaces/${workspaceId}/crm/automations/${automationId}/workflow/export`
@@ -422,6 +436,10 @@ function WorkflowCanvasInner({
 
   // Import workflow from JSON data
   const handleImport = useCallback(async (data: unknown) => {
+    if (!automationId || automationId === "new") {
+      console.warn("Cannot import workflow for unsaved automation");
+      return;
+    }
     try {
       // Import the workflow
       await api.post(
@@ -452,6 +470,10 @@ function WorkflowCanvasInner({
 
   // Handle version restore
   const handleRestoreVersion = useCallback(async () => {
+    if (!automationId || automationId === "new") {
+      console.warn("Cannot restore version for unsaved automation");
+      return;
+    }
     // Fetch the updated workflow after restore
     try {
       const workflowResponse = await api.get(
@@ -576,6 +598,8 @@ function WorkflowCanvasInner({
       {/* Node Palette (left sidebar) - responsive */}
       <div className="hidden md:block">
         <NodePalette
+          workspaceId={workspaceId}
+          module={module}
           onAddNode={addNode}
           isCollapsed={isPaletteCollapsed}
           onToggleCollapse={() => setIsPaletteCollapsed(!isPaletteCollapsed)}
@@ -591,6 +615,8 @@ function WorkflowCanvasInner({
           />
           <div className="fixed inset-y-0 left-0 w-72 bg-slate-800 z-50 md:hidden">
             <NodePalette
+              workspaceId={workspaceId}
+              module={module}
               onAddNode={(type, subtype) => {
                 addNode(type, subtype);
                 setShowMobilePalette(false);
@@ -635,6 +661,8 @@ function WorkflowCanvasInner({
           <Background color="#334155" gap={15} />
           <Controls className="bg-slate-800 border-slate-700" />
           <MiniMap
+            pannable
+            zoomable
             nodeColor={(node: Node) => {
               switch (node.type) {
                 case "trigger":
@@ -687,6 +715,7 @@ function WorkflowCanvasInner({
           node={selectedNode}
           workspaceId={workspaceId}
           automationId={automationId}
+          module={module}
           onUpdate={(data) => updateNodeData(selectedNode.id, data)}
           onDelete={() => deleteNode(selectedNode.id)}
           onClose={() => setSelectedNode(null)}

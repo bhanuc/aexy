@@ -96,9 +96,7 @@ const hiringItems: SidebarItemConfig[] = [
 const crmItems: SidebarItemConfig[] = [
     { href: "/crm", label: "Overview", icon: LayoutDashboard },
     { href: "/crm/inbox", label: "Inbox", icon: Inbox },
-    { href: "/crm/agents", label: "Agents", icon: Headphones },
     { href: "/crm/activities", label: "Activities", icon: Activity },
-    { href: "/crm/automations", label: "Automations", icon: Zap },
     { href: "/crm/calendar", label: "Calendar", icon: Calendar },
 ];
 
@@ -126,6 +124,11 @@ const aiAgentsItems: SidebarItemConfig[] = [
     { href: "/agents/new", label: "Create Agent", icon: UserPlus },
 ];
 
+const automationsItems: SidebarItemConfig[] = [
+    { href: "/automations", label: "All Automations", icon: Zap },
+    { href: "/automations/new", label: "Create Automation", icon: UserPlus },
+];
+
 /**
  * Version 1: Grouped Layout (Role-Based)
  * Items organized by functional areas: Engineering, People, Business, Knowledge
@@ -140,6 +143,24 @@ export const GROUPED_LAYOUT: SidebarLayoutConfig = {
             label: "", // No label for dashboard
             items: [
                 { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+            ],
+        },
+        {
+            id: "ai",
+            label: "AI",
+            items: [
+                {
+                    href: "/agents",
+                    label: "AI Agents",
+                    icon: Bot,
+                    items: aiAgentsItems,
+                },
+                {
+                    href: "/automations",
+                    label: "Automations",
+                    icon: Zap,
+                    items: automationsItems,
+                },
             ],
         },
         {
@@ -217,19 +238,7 @@ export const GROUPED_LAYOUT: SidebarLayoutConfig = {
                 { href: "/docs", label: "Docs", icon: FileText },
                 { href: "/forms", label: "Forms", icon: FormInput },
             ],
-        },
-        {
-            id: "ai",
-            label: "AI",
-            items: [
-                {
-                    href: "/agents",
-                    label: "AI Agents",
-                    icon: Bot,
-                    items: aiAgentsItems,
-                },
-            ],
-        },
+        }
     ],
 };
 
@@ -295,6 +304,12 @@ export const FLAT_LAYOUT: SidebarLayoutConfig = {
                     label: "AI Agents",
                     icon: Bot,
                     items: aiAgentsItems,
+                },
+                {
+                    href: "/automations",
+                    label: "Automations",
+                    icon: Zap,
+                    items: automationsItems,
                 },
                 { href: "/learning", label: "Learning", icon: GraduationCap },
                 { href: "/docs", label: "Docs", icon: FileText },
