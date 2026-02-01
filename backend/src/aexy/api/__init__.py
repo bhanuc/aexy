@@ -88,6 +88,8 @@ from aexy.api.question_bank import router as question_bank_router
 # CRM
 from aexy.api.crm import router as crm_router
 from aexy.api.crm_automation import router as crm_automation_router
+# Platform-wide Automations
+from aexy.api.automations import router as automations_router
 # Visual Workflow Builder
 from aexy.api.workflows import router as workflows_router
 from aexy.api.workflows import workflows_router as workflows_list_router
@@ -226,6 +228,8 @@ api_router.include_router(question_bank_router, tags=["question-bank"])
 # CRM
 api_router.include_router(crm_router, tags=["crm"])
 api_router.include_router(crm_automation_router, tags=["crm-automation"])
+# Platform-wide Automations
+api_router.include_router(automations_router, tags=["automations"])
 # Visual Workflow Builder
 api_router.include_router(workflows_router, tags=["workflows"])
 api_router.include_router(workflows_list_router, tags=["workflows"])

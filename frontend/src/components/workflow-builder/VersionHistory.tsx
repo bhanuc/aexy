@@ -207,7 +207,7 @@ export function VersionHistory({
   };
 
   return (
-    <div className="fixed inset-y-0 right-0 w-[450px] bg-slate-800 border-l border-slate-700 shadow-xl z-40 flex flex-col">
+    <div className="fixed inset-y-0 right-0 w-[450px] bg-slate-800 border-l border-slate-700 shadow-xl z-[100] flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-slate-700">
         <div className="flex items-center gap-2">
