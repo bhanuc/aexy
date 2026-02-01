@@ -76,25 +76,21 @@ export default function DocumentPage() {
   if (collaborationEnabled && user) {
     return (
       <div className="flex flex-col h-full">
-        <header className="flex items-center px-3 py-3 border-b border-slate-800/50 bg-slate-950/80 backdrop-blur-sm">
-          <DocumentBreadcrumb workspaceId={currentWorkspaceId} documentId={documentId} />
-        </header>
-        <div className="flex-1 overflow-hidden">
-          <CollaborativeEditor
-            documentId={documentId}
-            content={document.content || { type: "doc", content: [] }}
-            title={document.title}
-            icon={document.icon}
-            onSave={handleSave}
-            isLoading={isUpdating}
-            autoSave={true}
-            autoSaveDelay={2000}
-            userId={user.id}
-            userName={user.name || "Unknown"}
-            userEmail={user.email || undefined}
-            collaborationEnabled={collaborationEnabled}
-          />
-        </div>
+        <CollaborativeEditor
+          documentId={documentId}
+          content={document.content || { type: "doc", content: [] }}
+          title={document.title}
+          icon={document.icon}
+          onSave={handleSave}
+          isLoading={isUpdating}
+          autoSave={true}
+          autoSaveDelay={2000}
+          breadcrumb={<DocumentBreadcrumb workspaceId={currentWorkspaceId} documentId={documentId} />}
+          userId={user.id}
+          userName={user.name || "Unknown"}
+          userEmail={user.email || undefined}
+          collaborationEnabled={collaborationEnabled}
+        />
       </div>
     );
   }
@@ -102,20 +98,16 @@ export default function DocumentPage() {
   // Fallback to regular editor
   return (
     <div className="flex flex-col h-full">
-      <header className="flex items-center px-6 py-3 border-b border-slate-800/50 bg-slate-950/80 backdrop-blur-sm">
-        <DocumentBreadcrumb workspaceId={currentWorkspaceId} documentId={documentId} />
-      </header>
-      <div className="flex-1 overflow-hidden">
-        <DocumentEditor
-          content={document.content || { type: "doc", content: [] }}
-          title={document.title}
-          icon={document.icon}
-          onSave={handleSave}
-          isLoading={isUpdating}
-          autoSave={true}
-          autoSaveDelay={1000}
-        />
-      </div>
+      <DocumentEditor
+        content={document.content || { type: "doc", content: [] }}
+        title={document.title}
+        icon={document.icon}
+        onSave={handleSave}
+        isLoading={isUpdating}
+        autoSave={true}
+        autoSaveDelay={1000}
+        breadcrumb={<DocumentBreadcrumb workspaceId={currentWorkspaceId} documentId={documentId} />}
+      />
     </div>
   );
 }

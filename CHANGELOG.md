@@ -181,12 +181,6 @@ Client for communicating with the mailagent microservice.
 - `public_projects` API (consolidated into projects API)
 - Some Google sync tasks (moved to separate service)
 
----
-
-## [0.4.5] - 2026-01-30
-
-### Added
-
 #### Mailagent Microservice
 
 A new standalone microservice for email administration, AI agent processing, and domain management.
@@ -287,6 +281,129 @@ A comprehensive interface for creating and managing custom AI agents with config
 ### Changed
 
 - AI Agents now appears in dedicated "AI" section in grouped sidebar layout
+
+---
+
+## [0.4.6] - 2026-01-30
+
+### Added
+
+#### Auto-Sync for Gmail and Calendar
+- Configurable auto-sync intervals for Gmail and Calendar integrations
+- New periodic Celery task (`check_auto_sync_integrations`) runs every minute to check which integrations need syncing
+- Preset interval buttons (Off, 5m, 15m, 30m, 1h, 24h) and custom input in settings UI
+- Minimum interval enforced at 5 minutes to prevent aggressive API usage
+- Tracks `gmail_last_sync_at` and `calendar_last_sync_at` for accurate scheduling
+- Duplicate job detection prevents overlapping sync operations
+
+**Database Migrations:**
+- `migrate_auto_sync_interval.sql` - Adds `auto_sync_interval_minutes` column
+- `migrate_auto_sync_calendar_interval.sql` - Adds `auto_sync_calendar_interval_minutes` column
+
+#### Markdown Editor Mode
+- Toggle between Rich Text and Markdown editing modes in document editor
+- `tiptap-markdown` integration for seamless markdown parsing/serialization
+- Markdown content persists when switching between modes
+- Error handling prevents data loss if markdown parsing fails
+
+#### Document Editor UI Improvements
+- Redesigned toolbar with grouped buttons and keyboard shortcut tooltips
+- Unified header layout with breadcrumb integration
+- Enhanced visual styling with backdrop blur, shadows, and animations
+- Re-enabled home navigation link in document breadcrumb
+
+#### CRM Inbox Enhancements
+- Email HTML content rendered in isolated iframe to prevent style leakage
+- Lazy loading of full email body (fetches on selection, not on list load)
+- Loading state indicator while email content is being fetched
+
+### Fixed
+
+- **Workspace Selection Race Condition**: Fixed issue where auto-selection could override user's stored workspace preference by adding `isInitialized` state guard in `useWorkspace` hook
+- **Auto-sync Task Counter**: Fixed incorrect `dir()` check that always returned 0 for total integrations checked
+- **Email Display**: Fixed `to_emails` field to properly extract email addresses from recipient objects
+- **Markdown Mode Stability**: Added try-catch error handling to prevent crashes when parsing malformed markdown
+
+### Changed
+
+- Production Dockerfile now uses `--legacy-peer-deps` for dependency compatibility
+- AppShell main content wrapper no longer uses `container` class for full-width layouts
+
+### Dependencies
+
+- Added `tiptap-markdown@^0.8.10`
+- Added `y-prosemirror@^1.3.7`
+
+## [0.4.5] - 2026-01-30
+
+#### Public Project Pages
+- **Project visibility toggle** - Projects can now be made public or private via settings
+- **Public project URLs** - Each public project gets a unique public slug (e.g., `/p/my-project-k3f9x2`)
+- **Customizable public tabs** - Admins can configure which tabs are visible on the public page:
+  - Overview, Backlog, Board, Stories, Bugs, Goals, Releases, Timeline, Roadmap, Sprints
+
+#### Roadmap Voting System
+- **Feature request submissions** - Authenticated users can submit feature requests with title, description, and category
+- **Voting** - Users can upvote/downvote feature requests (toggle vote)
+- **Comments** - Threaded comments on feature requests with admin badge support
+- **Request categories** - Feature, Improvement, Integration, Bug Fix, Other
+- **Status tracking** - Under Review, Planned, In Progress, Completed, Declined
+- **Admin responses** - Project admins can respond to requests and update status
+- **Pagination** - Paginated list of roadmap requests with filtering and sorting
+
+#### New UI Components
+- `Pagination` component with ellipsis support and accessibility labels
+- Public project page tab components (Overview, Backlog, Board, Stories, Bugs, Goals, Releases, Sprints, Timeline, Roadmap)
+
+#### New Backend Services
+- **Models**: `RoadmapRequest`, `RoadmapVote`, `RoadmapComment` for voting system
+- **API Router**: `/api/v1/public/projects/{public_slug}/...` for unauthenticated access
+- **Sanitization**: Input sanitization module for user-generated content (`backend/src/aexy/core/sanitize.py`)
+
+#### New API Endpoints
+- `POST /workspaces/{id}/projects/{id}/toggle-visibility` - Toggle project public/private
+- `GET/PUT /workspaces/{id}/projects/{id}/public-tabs` - Configure visible tabs
+- `GET /public/projects/{slug}` - Get public project info
+- `GET /public/projects/{slug}/backlog|board|stories|bugs|goals|releases|roadmap|sprints|timeline` - Public data endpoints
+- `GET/POST /public/projects/{slug}/roadmap-requests` - List/create feature requests
+- `POST /public/projects/{slug}/roadmap-requests/{id}/vote` - Vote on requests
+- `GET/POST /public/projects/{slug}/roadmap-requests/{id}/comments` - Comments
+
+### Changed
+- `Project` model includes `is_public` (boolean) and `public_slug` (unique string) fields
+- Sprint/roadmap/timeline endpoints use optimized SQL aggregation queries (N+1 fix)
+- Vote counting uses atomic SQL UPDATE to prevent race conditions
+- Project list and detail responses include visibility fields
+
+### Security
+- HTML tag stripping and entity escaping for user-submitted content
+- Input length validation: title (150 chars), description (1000 chars), comments (2000 chars)
+- Tab access control - public endpoints verify tab is enabled before returning data
+- Permission checks on admin endpoints require workspace owner/admin role
+
+### Database Migrations
+- `alembic/versions/61fd11a7e0ea_add_public_project_visibility.py` - Adds visibility columns
+- `scripts/migrate_roadmap_voting.sql` - Creates roadmap voting tables with indexes
+
+### Files Changed Summary
+```
+47 files changed, ~5,900 insertions(+), ~500 deletions(-)
+```
+
+**Backend:**
+- `api/public_projects.py` (new - 903 lines)
+- `api/projects.py` (+186 lines)
+- `models/roadmap_voting.py` (new - 205 lines)
+- `models/project.py` (+37 lines)
+- `schemas/project.py` (+265 lines)
+- `core/sanitize.py` (new - 107 lines)
+
+**Frontend:**
+- `app/p/[publicSlug]/page.tsx` (new - 265 lines)
+- `components/public-project-page/*` (new - 12 components)
+- `components/ui/pagination.tsx` (new - 136 lines)
+- `app/(app)/settings/projects/[projectId]/page.tsx` (+254 lines)
+- `lib/api.ts` (+351 lines)
 
 ---
 

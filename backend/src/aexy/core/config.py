@@ -236,6 +236,7 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/aexy"
+    database_sync_url:str='postgresql+psycopg2://postgres:postgres@localhost:5432/aexy'
     database_echo: bool = False
 
     # GitHub App (for OAuth and installations)
@@ -245,7 +246,10 @@ class Settings(BaseSettings):
     github_private_key: str = ""  # PEM format, can use \n for newlines
     github_private_key_path: str = ""  # Alternative: path to PEM file
     github_redirect_uri: str = "http://localhost:8000/api/v1/auth/github/callback"
-    github_app_install_url: str = ""  # e.g., https://github.com/apps/your-app/installations/new
+    github_app_install_url: str = Field(
+        default="",
+        validation_alias="GITHUB_APP_INSTALL_URL",
+    )
 
     def get_github_private_key(self) -> str:
         """Get the GitHub private key, either from env var or file."""

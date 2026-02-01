@@ -54,6 +54,10 @@ class GoogleIntegration(Base):
     gmail_sync_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     calendar_sync_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Auto-sync interval in minutes (0 = disabled, min 1 minute when enabled)
+    auto_sync_interval_minutes: Mapped[int] = mapped_column(default=0)
+    auto_sync_calendar_interval_minutes: Mapped[int] = mapped_column(default=0)
+
     # Sync settings (JSON) - labels to sync, calendars to sync, privacy options
     sync_settings: Mapped[dict] = mapped_column(JSONB, default=dict)
 
