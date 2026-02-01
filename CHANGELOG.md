@@ -5,6 +5,184 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-02-02
+
+### Added
+
+#### Platform-Wide Automations
+
+Migrated automations from CRM-specific to a platform-wide automation framework accessible from `/automations`.
+
+**New Routes:**
+- `/automations` - List all automations with module filtering (CRM, Tickets, Hiring, Email, etc.)
+- `/automations/new` - Create new automation with module selector
+- `/automations/[automationId]` - Edit automation with workflow builder
+
+**Module Support:**
+- CRM: `record.created`, `record.updated`, `field.changed`, `stage.changed`
+- Tickets: `ticket.created`, `ticket.status_changed`, `sla.breached`, `ticket.assigned`
+- Hiring: `candidate.created`, `candidate.stage_changed`, `interview.scheduled`
+- Email Marketing: `campaign.sent`, `email.opened`, `email.bounced`
+- Uptime: `monitor.down`, `incident.created`
+- Sprints: `task.status_changed`, `sprint.completed`
+- Forms: `form.submitted`
+- Booking: `booking.confirmed`, `booking.cancelled`
+
+**Backend:**
+- New API router: `api/automations.py` at `/workspaces/{id}/automations/*`
+- New schemas: `schemas/automation.py` with `AutomationModule` enum
+- New service: `services/automation_service.py` for generic automation handling
+- Trigger/Action registry pattern for extensible module support
+- Migration: `migrate_platform_automations.sql` adds `module` column to automations
+
+**CRM Routes Redirected:**
+- `/crm/automations` → `/automations?module=crm`
+- `/crm/automations/new` → `/automations/new?module=crm`
+- `/crm/automations/[id]` → `/automations/[id]`
+
+---
+
+#### Agent Email Integration
+
+Agents can now have dedicated email addresses and manage their own inboxes.
+
+**Email Address Allocation:**
+- Agents can be assigned email addresses like `support@workspace.aexy.email`
+- Email address allocation via mailagent microservice integration
+- Enable/disable email per agent
+- Auto-reply configuration with confidence threshold
+
+**Agent Inbox:** `frontend/src/app/(app)/agents/[agentId]/inbox/page.tsx`
+- View incoming emails assigned to the agent
+- Email status tracking: `pending`, `processing`, `responded`, `escalated`, `archived`
+- AI classification results with confidence scores
+- Suggested responses from agent processing
+- Manual reply and escalation actions
+
+**Backend:**
+- New model: `models/agent_inbox.py` - `AgentInboxMessage` for storing received emails
+- New service: `services/agent_email_service.py` - Email allocation, routing, and processing
+- New API: `api/email_webhooks.py` - Inbound email webhook handlers
+- Migration: `migrate_agent_email.sql` - Agent email fields and inbox table
+
+**Agent Model Extensions:**
+- `email_address` - Unique email address for the agent
+- `email_enabled` - Toggle email processing
+- `auto_reply_enabled` - Enable automatic responses
+- `email_signature` - Custom signature for outgoing emails
+
+---
+
+#### Agent Chat Interface
+
+New conversational interface for interacting with AI agents.
+
+**New Routes:**
+- `/agents/[agentId]/chat` - Start new conversation with agent
+- `/agents/[agentId]/chat/[conversationId]` - Continue existing conversation
+
+**Features:**
+- Real-time chat interface with message streaming
+- Conversation history and context preservation
+- Agent tool execution display (CRM lookups, email sends, etc.)
+- Confidence indicators for agent responses
+- Conversation list with search and filtering
+
+**Backend:**
+- Migration: `migrate_agent_conversations.sql` - Conversation and message tables
+- Extended `api/agents.py` with conversation endpoints
+- Message types: `user`, `assistant`, `system`, `tool_call`, `tool_result`
+
+---
+
+#### Automation Agents Integration
+
+Connect AI agents to workflow automations for intelligent task handling.
+
+**New Model:** `models/automation_agent.py`
+- `AutomationAgent` - Links agents to automation workflows
+- `AutomationAgentExecution` - Tracks agent executions within workflows
+- `AutomationAgentConfig` - Stores agent-specific workflow configuration
+
+**New API:** `api/automation_agents.py`
+- `POST /automations/{id}/agents` - Add agent to automation
+- `DELETE /automations/{id}/agents/{agent_id}` - Remove agent
+- `GET /automations/{id}/agents` - List agents in automation
+- `POST /automations/{id}/agents/{agent_id}/execute` - Manually trigger agent
+
+**Workflow Actions:** `services/workflow_actions.py`
+- `run_agent` action type for workflow nodes
+- Agent execution with context from trigger data
+- Result handling and error propagation
+
+**Migration:** `migrate_automation_agents.sql`
+
+---
+
+#### Mailagent Integration Client
+
+Client for communicating with the mailagent microservice.
+
+**New Integration:** `integrations/mailagent_client.py`
+- Async HTTP client for mailagent API
+- Domain management (create, verify, list)
+- Agent email provisioning
+- Inbound email processing delegation
+- Email sending via mailagent infrastructure
+
+**Configuration:**
+- `MAILAGENT_URL` environment variable (default: `http://mailagent:8001`)
+- Automatic retry with exponential backoff
+- Health check integration
+
+---
+
+#### Agent Management Improvements
+
+**Agent Detail Page:** `/agents/[agentId]`
+- Comprehensive agent overview with metrics
+- Execution history with status and duration
+- Performance charts (success rate, response time)
+- Quick actions (test, enable/disable, edit)
+
+**Agent Edit Page:** `/agents/[agentId]/edit`
+- Tabbed configuration editor
+- Email configuration section
+- Tool selection with categories
+- Behavior settings (confidence, approval thresholds)
+- Working hours configuration
+
+**Agents List Page:** `/agents`
+- Grid view with agent cards
+- Status badges (active, inactive, error)
+- Filtering by type and status
+- Search functionality
+- Quick stats (total agents, active, executions)
+
+### Changed
+
+- CRM Agents routes now redirect to platform-wide `/agents` routes
+- CRM Automations routes now redirect to platform-wide `/automations` routes
+- Sidebar navigation updated with Automations in dedicated section
+- Agent tools now include email tools: `send_email`, `create_draft`, `get_email_history`, `get_writing_style`
+
+### Fixed
+
+- Domain creation now returns HTTP 409 Conflict for duplicates instead of 500 with SQL error
+- `SendingDomainResponse.provider_id` is now optional (nullable)
+- SQLAlchemy reserved word error in mailagent (`metadata` → `decision_metadata`)
+- Missing `LLMConfig` export in mailagent LLM module
+- Email marketing domain creation toast notifications for success/error feedback
+
+### Removed
+
+- Alembic migration files (using raw SQL migrations via `run_migrations.py`)
+- `roadmap_voting` model and related code
+- `public_projects` API (consolidated into projects API)
+- Some Google sync tasks (moved to separate service)
+
+---
+
 ## [0.4.5] - 2026-01-30
 
 ### Added
