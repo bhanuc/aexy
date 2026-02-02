@@ -129,7 +129,7 @@ function DomainCard({
   onDelete,
 }: {
   domain: SendingDomain;
-  onVerify: () => void;
+  onVerify: () => Promise<unknown>;
   onPause: () => void;
   onResume: () => void;
   onStartWarming: () => void;
@@ -141,7 +141,10 @@ function DomainCard({
   const handleVerify = async () => {
     setIsVerifying(true);
     try {
-      onVerify();
+      await onVerify();
+      toast.success("DNS verification complete");
+    } catch (error) {
+      toast.error("Failed to verify DNS records");
     } finally {
       setIsVerifying(false);
     }
