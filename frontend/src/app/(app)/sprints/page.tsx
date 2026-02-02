@@ -10,6 +10,7 @@ import {
   CheckCircle,
   ChevronRight,
   Clock,
+  Globe,
   Layers,
   LayoutGrid,
   ListTodo,
@@ -22,17 +23,26 @@ import {
   Users,
   ClipboardCheck,
   Sparkles,
+  Link2,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkspace } from "@/hooks/useWorkspace";
-import { useTeams } from "@/hooks/useTeams";
+import { useProjects } from "@/hooks/useProjects";
 import { useSprints, useActiveSprint } from "@/hooks/useSprints";
 import { redirect } from "next/navigation";
-import { TeamListItem, SprintListItem } from "@/lib/api";
+import { Project, SprintListItem } from "@/lib/api";
 import { EpicsTab } from "./components/EpicsTab";
 import { cn } from "@/lib/utils";
 
-function ProjectCard({ project, workspaceId, index }: { project: TeamListItem; workspaceId: string; index: number }) {
+function ProjectCard({
+  project,
+  workspaceId,
+  index,
+}: {
+  project: Project;
+  workspaceId: string;
+  index: number;
+}) {
   const { sprints, isLoading } = useSprints(workspaceId, project.id);
   const { sprint: activeSprint } = useActiveSprint(workspaceId, project.id);
 
@@ -58,10 +68,26 @@ function ProjectCard({ project, workspaceId, index }: { project: TeamListItem; w
                 <Users className="h-6 w-6 text-primary-400" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-white group-hover:text-primary-400 transition-colors">
-                  {project.name}
-                </h3>
-                <p className="text-slate-500 text-sm">{project.member_count} members</p>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-semibold text-white group-hover:text-primary-400 transition-colors">
+                    {project.name}
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 px-2 py-0.5 bg-green-500/10 text-green-400 text-xs rounded-full border border-green-500/20 hover:bg-green-500/20 transition-colors">
+                      <Globe className="h-3 w-3" />
+                      {project.is_public ? "Public" : "Private"}
+                    </div>
+                    {project.is_public && (
+
+                    <Link href={`/p/${project.public_slug}`}>
+                    <Link2 className="h-3 w-3" />
+                    </Link>
+                    )}
+                  </div>
+                </div>
+                <p className="text-slate-500 text-sm">
+                  {project.member_count} members
+                </p>
               </div>
             </div>
           </div>
@@ -81,24 +107,39 @@ function ProjectCard({ project, workspaceId, index }: { project: TeamListItem; w
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                      <span className="text-green-400 text-xs font-medium uppercase tracking-wider">Active Sprint</span>
+                      <span className="text-green-400 text-xs font-medium uppercase tracking-wider">
+                        Active Sprint
+                      </span>
                     </div>
                     <span className="text-xs text-slate-500">
                       {activeSprint.tasks_count > 0
-                        ? Math.round((activeSprint.completed_count / activeSprint.tasks_count) * 100)
-                        : 0}% complete
+                        ? Math.round(
+                            (activeSprint.completed_count /
+                              activeSprint.tasks_count) *
+                              100,
+                          )
+                        : 0}
+                      % complete
                     </span>
                   </div>
-                  <h4 className="text-white font-medium mb-3">{activeSprint.name}</h4>
+                  <h4 className="text-white font-medium mb-3">
+                    {activeSprint.name}
+                  </h4>
 
                   {/* Progress bar */}
                   <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden mb-3">
                     <motion.div
                       initial={{ width: 0 }}
                       animate={{
-                        width: `${activeSprint.tasks_count > 0
-                          ? Math.round((activeSprint.completed_count / activeSprint.tasks_count) * 100)
-                          : 0}%`,
+                        width: `${
+                          activeSprint.tasks_count > 0
+                            ? Math.round(
+                                (activeSprint.completed_count /
+                                  activeSprint.tasks_count) *
+                                  100,
+                              )
+                            : 0
+                        }%`,
                       }}
                       transition={{ duration: 0.8, ease: "easeOut" }}
                       className="h-full bg-gradient-to-r from-green-500 to-emerald-400 rounded-full"
@@ -108,7 +149,8 @@ function ProjectCard({ project, workspaceId, index }: { project: TeamListItem; w
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-slate-400">
                       <CheckCircle className="h-3 w-3 inline mr-1" />
-                      {activeSprint.completed_count}/{activeSprint.tasks_count} tasks
+                      {activeSprint.completed_count}/{activeSprint.tasks_count}{" "}
+                      tasks
                     </span>
                     <span className="text-slate-400">
                       <Target className="h-3 w-3 inline mr-1" />
@@ -123,14 +165,20 @@ function ProjectCard({ project, workspaceId, index }: { project: TeamListItem; w
                 >
                   <div className="flex items-center gap-2 mb-2">
                     <Target className="h-4 w-4 text-blue-400" />
-                    <span className="text-blue-400 text-xs font-medium uppercase tracking-wider">Planning</span>
+                    <span className="text-blue-400 text-xs font-medium uppercase tracking-wider">
+                      Planning
+                    </span>
                   </div>
-                  <h4 className="text-white font-medium mb-2">{planningSprints[0].name}</h4>
+                  <h4 className="text-white font-medium mb-2">
+                    {planningSprints[0].name}
+                  </h4>
                   <div className="flex items-center gap-2 text-xs text-slate-400">
                     <Calendar className="h-3 w-3" />
                     <span>
                       {planningSprints[0].start_date
-                        ? new Date(planningSprints[0].start_date).toLocaleDateString("en-US", {
+                        ? new Date(
+                            planningSprints[0].start_date,
+                          ).toLocaleDateString("en-US", {
                             month: "short",
                             day: "numeric",
                           })
@@ -140,7 +188,9 @@ function ProjectCard({ project, workspaceId, index }: { project: TeamListItem; w
                 </Link>
               ) : (
                 <div className="bg-slate-800/50 rounded-xl p-4 mb-4 text-center border border-dashed border-slate-700">
-                  <p className="text-slate-500 text-sm mb-2">No active sprint</p>
+                  <p className="text-slate-500 text-sm mb-2">
+                    No active sprint
+                  </p>
                   <Link
                     href={`/sprints/${project.id}`}
                     className="text-primary-400 text-sm hover:text-primary-300 font-medium"
@@ -153,16 +203,28 @@ function ProjectCard({ project, workspaceId, index }: { project: TeamListItem; w
               {/* Stats row */}
               <div className="grid grid-cols-3 gap-3">
                 <div className="text-center p-2 bg-slate-800/30 rounded-lg">
-                  <div className="text-lg font-semibold text-white">{sprints.length}</div>
-                  <div className="text-[10px] text-slate-500 uppercase tracking-wider">Sprints</div>
+                  <div className="text-lg font-semibold text-white">
+                    {sprints.length}
+                  </div>
+                  <div className="text-[10px] text-slate-500 uppercase tracking-wider">
+                    Sprints
+                  </div>
                 </div>
                 <div className="text-center p-2 bg-slate-800/30 rounded-lg">
-                  <div className="text-lg font-semibold text-green-400">{completedCount}</div>
-                  <div className="text-[10px] text-slate-500 uppercase tracking-wider">Completed</div>
+                  <div className="text-lg font-semibold text-green-400">
+                    {completedCount}
+                  </div>
+                  <div className="text-[10px] text-slate-500 uppercase tracking-wider">
+                    Completed
+                  </div>
                 </div>
                 <div className="text-center p-2 bg-slate-800/30 rounded-lg">
-                  <div className="text-lg font-semibold text-amber-400">{totalTasks - completedTasks}</div>
-                  <div className="text-[10px] text-slate-500 uppercase tracking-wider">Open Tasks</div>
+                  <div className="text-lg font-semibold text-amber-400">
+                    {totalTasks - completedTasks}
+                  </div>
+                  <div className="text-[10px] text-slate-500 uppercase tracking-wider">
+                    Open Tasks
+                  </div>
                 </div>
               </div>
             </>
@@ -201,9 +263,14 @@ function ProjectCard({ project, workspaceId, index }: { project: TeamListItem; w
 }
 
 // Sprints content component
-function SprintsContent({ teams, teamsLoading, workspaceId, hasWorkspaces }: {
-  teams: TeamListItem[];
-  teamsLoading: boolean;
+function SprintsContent({
+  projects,
+  projectsLoading,
+  workspaceId,
+  hasWorkspaces,
+}: {
+  projects: Project[];
+  projectsLoading: boolean;
   workspaceId: string | null;
   hasWorkspaces: boolean;
 }) {
@@ -217,7 +284,9 @@ function SprintsContent({ teams, teamsLoading, workspaceId, hasWorkspaces }: {
         <div className="w-20 h-20 bg-gradient-to-br from-slate-800 to-slate-700 rounded-2xl flex items-center justify-center mx-auto mb-6">
           <Users className="h-10 w-10 text-slate-500" />
         </div>
-        <h3 className="text-xl font-semibold text-white mb-2">No Workspace Yet</h3>
+        <h3 className="text-xl font-semibold text-white mb-2">
+          No Workspace Yet
+        </h3>
         <p className="text-slate-400 mb-6 max-w-md mx-auto">
           Create a workspace and add projects to start planning sprints.
         </p>
@@ -232,7 +301,7 @@ function SprintsContent({ teams, teamsLoading, workspaceId, hasWorkspaces }: {
     );
   }
 
-  if (teamsLoading) {
+  if (projectsLoading) {
     return (
       <div className="flex justify-center py-12">
         <div className="relative">
@@ -243,7 +312,7 @@ function SprintsContent({ teams, teamsLoading, workspaceId, hasWorkspaces }: {
     );
   }
 
-  if (teams.length === 0) {
+  if (projects.length === 0) {
     return (
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -253,7 +322,9 @@ function SprintsContent({ teams, teamsLoading, workspaceId, hasWorkspaces }: {
         <div className="w-20 h-20 bg-gradient-to-br from-slate-800 to-slate-700 rounded-2xl flex items-center justify-center mx-auto mb-6">
           <Layers className="h-10 w-10 text-slate-500" />
         </div>
-        <h3 className="text-xl font-semibold text-white mb-2">No Projects Yet</h3>
+        <h3 className="text-xl font-semibold text-white mb-2">
+          No Projects Yet
+        </h3>
         <p className="text-slate-400 mb-6 max-w-md mx-auto">
           Create projects in your workspace to start planning sprints.
         </p>
@@ -270,7 +341,7 @@ function SprintsContent({ teams, teamsLoading, workspaceId, hasWorkspaces }: {
 
   return (
     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {teams.map((project, index) => (
+      {projects.map((project, index) => (
         <ProjectCard
           key={project.id}
           project={project}
@@ -294,7 +365,8 @@ function SprintsPageContent() {
   const router = useRouter();
 
   const activeTab = searchParams.get("tab") || "sprints";
-  const { teams, isLoading: teamsLoading } = useTeams(currentWorkspaceId);
+  const { projects, isLoading: projectsLoading } =
+    useProjects(currentWorkspaceId);
 
   const setActiveTab = (tab: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -326,7 +398,7 @@ function SprintsPageContent() {
 
   return (
     <div className="min-h-screen bg-slate-950">
-<main className="max-w-7xl mx-auto px-4 py-8">
+      <main className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -379,7 +451,7 @@ function SprintsPageContent() {
               "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
               activeTab === "sprints"
                 ? "bg-primary-500 text-white shadow-lg shadow-primary-500/25"
-                : "text-slate-400 hover:text-white hover:bg-slate-800"
+                : "text-slate-400 hover:text-white hover:bg-slate-800",
             )}
           >
             <Calendar className="h-4 w-4" />
@@ -391,7 +463,7 @@ function SprintsPageContent() {
               "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
               activeTab === "epics"
                 ? "bg-primary-500 text-white shadow-lg shadow-primary-500/25"
-                : "text-slate-400 hover:text-white hover:bg-slate-800"
+                : "text-slate-400 hover:text-white hover:bg-slate-800",
             )}
           >
             <Layers className="h-4 w-4" />
@@ -402,8 +474,8 @@ function SprintsPageContent() {
         {/* Tab Content */}
         {activeTab === "sprints" ? (
           <SprintsContent
-            teams={teams}
-            teamsLoading={teamsLoading}
+            projects={projects}
+            projectsLoading={projectsLoading}
             workspaceId={currentWorkspaceId}
             hasWorkspaces={hasWorkspaces}
           />
@@ -420,7 +492,13 @@ function SprintsPageContent() {
 
 export default function SprintsPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-slate-950 flex items-center justify-center"><div className="animate-spin h-8 w-8 border-2 border-primary-500 border-t-transparent rounded-full" /></div>}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+          <div className="animate-spin h-8 w-8 border-2 border-primary-500 border-t-transparent rounded-full" />
+        </div>
+      }
+    >
       <SprintsPageContent />
     </Suspense>
   );

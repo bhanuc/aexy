@@ -105,6 +105,7 @@ async def list_projects(
                 member_count=p.member_count,
                 team_count=p.team_count,
                 is_public=p.is_public,
+                public_slug=p.public_slug,
             )
             for p in projects
         ]
