@@ -139,6 +139,17 @@ export default function EditAgentPage() {
   useEffect(() => {
     if (!agent) return;
 
+    // System agents can only change LLM configuration
+    if (agent.is_system) {
+      const changed =
+        llmProvider !== (agent.llm_provider || "gemini") ||
+        llmModel !== (agent.llm_model || agent.model || "gemini-2.0-flash") ||
+        temperature !== (agent.temperature ?? 0.7);
+
+      setHasChanges(changed);
+      return;
+    }
+
     const changed =
       name !== agent.name ||
       description !== (agent.description || "") ||
@@ -193,28 +204,37 @@ export default function EditAgentPage() {
     setSaveSuccess(false);
 
     try {
-      await updateAgent({
-        name: name.trim(),
-        description: description.trim() || undefined,
-        mention_handle: mentionHandle.trim() || undefined,
-        llm_provider: llmProvider,
-        llm_model: llmModel,
-        temperature,
-        max_tokens: maxTokens,
-        tools,
-        auto_respond: autoRespond,
-        confidence_threshold: confidenceThreshold,
-        require_approval_below: requireApprovalBelow,
-        max_daily_responses: maxDailyResponses,
-        response_delay_minutes: responseDelayMinutes,
-        working_hours: workingHours,
-        system_prompt: systemPrompt.trim() || undefined,
-        custom_instructions: customInstructions.trim() || undefined,
-        escalation_email: escalationEmail.trim() || undefined,
-        escalation_slack_channel: escalationSlackChannel.trim() || undefined,
-        auto_reply_enabled: autoReplyEnabled,
-        email_signature: emailSignature.trim() || undefined,
-      });
+      // System agents can only update LLM configuration fields
+      if (agent?.is_system) {
+        await updateAgent({
+          llm_provider: llmProvider,
+          model: llmModel,
+          temperature,
+        });
+      } else {
+        await updateAgent({
+          name: name.trim(),
+          description: description.trim() || undefined,
+          mention_handle: mentionHandle.trim() || undefined,
+          llm_provider: llmProvider,
+          model: llmModel,
+          temperature,
+          max_tokens: maxTokens,
+          tools,
+          auto_respond: autoRespond,
+          confidence_threshold: confidenceThreshold,
+          require_approval_below: requireApprovalBelow,
+          max_daily_responses: maxDailyResponses,
+          response_delay_minutes: responseDelayMinutes,
+          working_hours: workingHours,
+          system_prompt: systemPrompt.trim() || undefined,
+          custom_instructions: customInstructions.trim() || undefined,
+          escalation_email: escalationEmail.trim() || undefined,
+          escalation_slack_channel: escalationSlackChannel.trim() || undefined,
+          auto_reply_enabled: autoReplyEnabled,
+          email_signature: emailSignature.trim() || undefined,
+        });
+      }
 
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
@@ -254,11 +274,19 @@ export default function EditAgentPage() {
     );
   }
 
+  // System agents can only edit LLM configuration (provider, model, temperature)
+  const isSystemAgent = agent?.is_system ?? false;
+
   const renderTabContent = () => {
     switch (activeTab) {
       case "general":
         return (
           <div className="space-y-6">
+            {isSystemAgent && (
+              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400 text-sm">
+                This is a system agent. Only LLM configuration (provider, model, temperature) can be modified.
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">
                 Agent Name
@@ -267,7 +295,11 @@ export default function EditAgentPage() {
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                disabled={isSystemAgent}
+                className={cn(
+                  "w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500",
+                  isSystemAgent && "opacity-50 cursor-not-allowed"
+                )}
               />
             </div>
 
@@ -293,7 +325,11 @@ export default function EditAgentPage() {
                   type="text"
                   value={mentionHandle}
                   onChange={(e) => setMentionHandle(e.target.value.toLowerCase())}
-                  className="w-full pl-8 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  disabled={isSystemAgent}
+                  className={cn(
+                    "w-full pl-8 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500",
+                    isSystemAgent && "opacity-50 cursor-not-allowed"
+                  )}
                 />
               </div>
             </div>
@@ -305,8 +341,12 @@ export default function EditAgentPage() {
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
+                disabled={isSystemAgent}
                 rows={3}
-                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                className={cn(
+                  "w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none",
+                  isSystemAgent && "opacity-50 cursor-not-allowed"
+                )}
               />
             </div>
           </div>
@@ -363,17 +403,24 @@ export default function EditAgentPage() {
       case "tools":
         return (
           <div>
+            {isSystemAgent && (
+              <div className="mb-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400 text-sm">
+                This is a system agent. Tools cannot be modified.
+              </div>
+            )}
             {toolsLoading ? (
               <div className="text-center py-8">
                 <Loader2 className="h-8 w-8 text-purple-400 animate-spin mx-auto mb-4" />
                 <p className="text-slate-400">Loading tools...</p>
               </div>
             ) : (
-              <ToolSelector
-                tools={availableTools}
-                selectedTools={tools}
-                onChange={setTools}
-              />
+              <div className={isSystemAgent ? "opacity-50 pointer-events-none" : ""}>
+                <ToolSelector
+                  tools={availableTools}
+                  selectedTools={tools}
+                  onChange={setTools}
+                />
+              </div>
             )}
           </div>
         );
@@ -381,11 +428,17 @@ export default function EditAgentPage() {
       case "behavior":
         return (
           <div className="space-y-8">
-            <label className="flex items-start gap-4 cursor-pointer">
+            {isSystemAgent && (
+              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400 text-sm">
+                This is a system agent. Behavior settings cannot be modified.
+              </div>
+            )}
+            <label className={cn("flex items-start gap-4", isSystemAgent ? "opacity-50 cursor-not-allowed" : "cursor-pointer")}>
               <input
                 type="checkbox"
                 checked={autoRespond}
                 onChange={(e) => setAutoRespond(e.target.checked)}
+                disabled={isSystemAgent}
                 className="w-5 h-5 mt-0.5 rounded border-slate-600 bg-slate-700 text-purple-500 focus:ring-purple-500"
               />
               <div>
@@ -396,7 +449,7 @@ export default function EditAgentPage() {
               </div>
             </label>
 
-            <div className="space-y-6">
+            <div className={cn("space-y-6", isSystemAgent && "opacity-50 pointer-events-none")}>
               <ConfidenceSlider
                 value={confidenceThreshold}
                 onChange={setConfidenceThreshold}
@@ -419,8 +472,12 @@ export default function EditAgentPage() {
                   type="number"
                   value={maxDailyResponses}
                   onChange={(e) => setMaxDailyResponses(parseInt(e.target.value) || 100)}
+                  disabled={isSystemAgent}
                   min={1}
-                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className={cn(
+                    "w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500",
+                    isSystemAgent && "opacity-50 cursor-not-allowed"
+                  )}
                 />
               </div>
               <div>
@@ -431,13 +488,17 @@ export default function EditAgentPage() {
                   type="number"
                   value={responseDelayMinutes}
                   onChange={(e) => setResponseDelayMinutes(parseInt(e.target.value) || 0)}
+                  disabled={isSystemAgent}
                   min={0}
-                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className={cn(
+                    "w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500",
+                    isSystemAgent && "opacity-50 cursor-not-allowed"
+                  )}
                 />
               </div>
             </div>
 
-            <div>
+            <div className={isSystemAgent ? "opacity-50 pointer-events-none" : ""}>
               <h3 className="text-lg font-medium text-white mb-4">Working Hours</h3>
               <WorkingHoursConfigPanel
                 value={workingHours}
@@ -450,24 +511,38 @@ export default function EditAgentPage() {
       case "prompts":
         return (
           <div className="space-y-6">
-            <PromptEditor
-              value={systemPrompt}
-              onChange={setSystemPrompt}
-              label="System Prompt"
-              rows={12}
-            />
+            {isSystemAgent && (
+              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400 text-sm">
+                This is a system agent. Prompts cannot be modified.
+              </div>
+            )}
+            <div className={isSystemAgent ? "opacity-50 pointer-events-none" : ""}>
+              <PromptEditor
+                value={systemPrompt}
+                onChange={setSystemPrompt}
+                label="System Prompt"
+                rows={12}
+              />
+            </div>
 
-            <InstructionsEditor
-              value={customInstructions}
-              onChange={setCustomInstructions}
-              rows={4}
-            />
+            <div className={isSystemAgent ? "opacity-50 pointer-events-none" : ""}>
+              <InstructionsEditor
+                value={customInstructions}
+                onChange={setCustomInstructions}
+                rows={4}
+              />
+            </div>
           </div>
         );
 
       case "escalation":
         return (
           <div className="space-y-6">
+            {isSystemAgent && (
+              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400 text-sm">
+                This is a system agent. Escalation settings cannot be modified.
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">
                 Escalation Email
@@ -476,8 +551,12 @@ export default function EditAgentPage() {
                 type="email"
                 value={escalationEmail}
                 onChange={(e) => setEscalationEmail(e.target.value)}
+                disabled={isSystemAgent}
                 placeholder="support@example.com"
-                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className={cn(
+                  "w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500",
+                  isSystemAgent && "opacity-50 cursor-not-allowed"
+                )}
               />
               <p className="mt-1 text-sm text-slate-500">
                 Email address to notify when agent escalates an issue
@@ -492,8 +571,12 @@ export default function EditAgentPage() {
                 type="text"
                 value={escalationSlackChannel}
                 onChange={(e) => setEscalationSlackChannel(e.target.value)}
+                disabled={isSystemAgent}
                 placeholder="#support-escalations"
-                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className={cn(
+                  "w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500",
+                  isSystemAgent && "opacity-50 cursor-not-allowed"
+                )}
               />
               <p className="mt-1 text-sm text-slate-500">
                 Slack channel to post escalation notifications
@@ -551,8 +634,13 @@ export default function EditAgentPage() {
 
         return (
           <div className="space-y-6">
+            {isSystemAgent && (
+              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400 text-sm">
+                This is a system agent. Email settings cannot be modified.
+              </div>
+            )}
             {/* Email Setup Modal */}
-            {showEmailSetup && !agent?.email_enabled && (
+            {showEmailSetup && !agent?.email_enabled && !isSystemAgent && (
               <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-medium text-white flex items-center gap-2">
@@ -678,37 +766,40 @@ export default function EditAgentPage() {
                     )}
                   </div>
                 </div>
-                {agent?.email_enabled ? (
-                  <button
-                    onClick={handleDisableEmail}
-                    disabled={isDisabling}
-                    className="px-4 py-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors disabled:opacity-50"
-                  >
-                    {isDisabling ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      "Disable"
-                    )}
-                  </button>
-                ) : !showEmailSetup ? (
-                  <button
-                    onClick={openEmailSetup}
-                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
-                  >
-                    Enable Email
-                  </button>
-                ) : null}
+                {!isSystemAgent && (
+                  agent?.email_enabled ? (
+                    <button
+                      onClick={handleDisableEmail}
+                      disabled={isDisabling}
+                      className="px-4 py-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors disabled:opacity-50"
+                    >
+                      {isDisabling ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        "Disable"
+                      )}
+                    </button>
+                  ) : !showEmailSetup ? (
+                    <button
+                      onClick={openEmailSetup}
+                      className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                    >
+                      Enable Email
+                    </button>
+                  ) : null
+                )}
               </div>
             </div>
 
             {agent?.email_enabled && (
               <>
                 {/* Auto Reply */}
-                <label className="flex items-start gap-4 cursor-pointer">
+                <label className={cn("flex items-start gap-4", isSystemAgent ? "opacity-50 cursor-not-allowed" : "cursor-pointer")}>
                   <input
                     type="checkbox"
                     checked={autoReplyEnabled}
                     onChange={(e) => setAutoReplyEnabled(e.target.checked)}
+                    disabled={isSystemAgent}
                     className="w-5 h-5 mt-0.5 rounded border-slate-600 bg-slate-700 text-purple-500 focus:ring-purple-500"
                   />
                   <div>
@@ -727,9 +818,13 @@ export default function EditAgentPage() {
                   <textarea
                     value={emailSignature}
                     onChange={(e) => setEmailSignature(e.target.value)}
+                    disabled={isSystemAgent}
                     rows={4}
                     placeholder="Best regards,&#10;{agent_name}"
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                    className={cn(
+                      "w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none",
+                      isSystemAgent && "opacity-50 cursor-not-allowed"
+                    )}
                   />
                   <p className="mt-1 text-sm text-slate-500">
                     Signature appended to all outgoing emails from this agent
