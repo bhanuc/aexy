@@ -36,18 +36,79 @@ function PublicProjectContent() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
 
+  // Read initial tab from URL hash and handle popstate (back/forward navigation)
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace("#", "");
+      if (hash && TAB_CONFIG.some((tab) => tab.id === hash)) {
+        setActiveTab(hash);
+      } else {
+        setActiveTab("overview");
+      }
+    };
+
+    // Set initial tab from hash
+    handleHashChange();
+
+    // Listen for hash changes (back/forward navigation)
+    window.addEventListener("popstate", handleHashChange);
+    return () => window.removeEventListener("popstate", handleHashChange);
+  }, []);
+
+  // Validate active tab against project's enabled tabs when project loads
+  useEffect(() => {
+    if (project && activeTab !== "overview") {
+      const enabledTabIds = project.public_tabs;
+      if (!enabledTabIds.includes(activeTab)) {
+        setActiveTab("overview");
+        window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      }
+    }
+  }, [project, activeTab]);
+
+  // Update URL hash when tab changes
+  const handleTabChange = (tabId: string) => {
+    setActiveTab(tabId);
+    if (tabId === "overview") {
+      // Remove hash for overview tab (default)
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    } else {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search + `#${tabId}`);
+    }
+  };
+
   // Handle token from OAuth redirect
   useEffect(() => {
-    const token = searchParams.get("token");
+    let token = searchParams.get("token");
+
+    // Also check if token is in the hash (malformed URL: #tab?token=xxx)
+    if (!token && window.location.hash.includes("token=")) {
+      const hashParams = new URLSearchParams(window.location.hash.split("?")[1] || "");
+      token = hashParams.get("token");
+    }
+
     if (token) {
       // Save token to localStorage
       localStorage.setItem("token", token);
       // Invalidate the user query to refresh auth state
       queryClient.invalidateQueries({ queryKey: ["currentUser"] });
-      // Remove token from URL for cleanliness and security
-      const url = new URL(window.location.href);
-      url.searchParams.delete("token");
-      window.history.replaceState({}, "", url.pathname);
+
+      // Restore the saved hash from before login, or keep current tab
+      const savedHash = sessionStorage.getItem("postLoginHash");
+      sessionStorage.removeItem("postLoginHash");
+
+      // Clean URL and restore hash
+      const cleanPath = window.location.pathname;
+      if (savedHash) {
+        window.history.replaceState({}, "", cleanPath + savedHash);
+        // Update active tab based on restored hash
+        const restoredTab = savedHash.replace("#", "");
+        if (TAB_CONFIG.some((tab) => tab.id === restoredTab)) {
+          setActiveTab(restoredTab);
+        }
+      } else {
+        window.history.replaceState({}, "", cleanPath);
+      }
     }
   }, [searchParams, queryClient]);
 
@@ -200,7 +261,7 @@ function PublicProjectContent() {
                 return (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
+                    onClick={() => handleTabChange(tab.id)}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition ${
                       isActive
                         ? "bg-primary-600 text-white"
