@@ -678,11 +678,12 @@ async def list_email_domains(
 ):
     """List available email domains for agent email addresses.
 
-    Returns domains from the mailagent service plus the default aexy.email domain.
+    Returns verified domains from email infrastructure settings plus the default aexy.email domain.
+    Only verified domains from /email-marketing/settings are included.
     """
     await check_workspace_permission(db, workspace_id, str(current_developer.id))
 
-    from aexy.integrations.mailagent_client import get_mailagent_client, MailagentError
+    from aexy.services.domain_service import DomainService
 
     # Get workspace for default domain
     workspace_service = WorkspaceService(db)
@@ -700,37 +701,23 @@ async def list_email_domains(
         )
     ]
 
-    # Fetch verified domains from mailagent
-    try:
-        client = get_mailagent_client()
-        mailagent_domains = await client.list_domains(status="verified")
+    # Fetch verified domains from email infrastructure (sending_domains table)
+    domain_service = DomainService(db)
+    sending_domains = await domain_service.list_domains(workspace_id)
 
-        for d in mailagent_domains:
+    existing = {d.domain for d in domains}
+    for sd in sending_domains:
+        # Only include verified, warming, or active domains
+        if sd.status in ("verified", "warming", "active") and sd.domain not in existing:
             domains.append(
                 EmailDomainResponse(
-                    domain=d.get("domain", ""),
-                    is_default=False,
-                    is_verified=d.get("status") in ("verified", "active"),
-                    display_name=d.get("domain"),
+                    domain=sd.domain,
+                    is_default=sd.is_default,
+                    is_verified=True,
+                    display_name=sd.domain,
                 )
             )
-
-        # Also include active (warmed) domains
-        active_domains = await client.list_domains(status="active")
-        existing = {d.domain for d in domains}
-        for d in active_domains:
-            if d.get("domain") not in existing:
-                domains.append(
-                    EmailDomainResponse(
-                        domain=d.get("domain", ""),
-                        is_default=False,
-                        is_verified=True,
-                        display_name=d.get("domain"),
-                    )
-                )
-    except MailagentError:
-        # If mailagent is unavailable, just return the default domain
-        pass
+            existing.add(sd.domain)
 
     return EmailDomainsListResponse(domains=domains, default_domain=default_domain)
 
