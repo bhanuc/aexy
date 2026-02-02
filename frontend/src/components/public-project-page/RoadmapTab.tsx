@@ -54,40 +54,113 @@ const STATUS_CONFIG: Record<RoadmapStatus, { label: string; icon: typeof Clock; 
 };
 
 function getLoginUrls() {
-  const redirectUrl = typeof window !== "undefined" ? window.location.href : undefined;
+  if (typeof window === "undefined") {
+    return {
+      github: authApi.getGitHubLoginUrl(undefined),
+      google: authApi.getGoogleLoginUrl(undefined),
+    };
+  }
+
+  // Store the current hash in sessionStorage so we can restore it after login
+  const currentHash = window.location.hash;
+  if (currentHash) {
+    sessionStorage.setItem("postLoginHash", currentHash);
+  }
+
+  // Use URL without hash for redirect (hash must come after query params)
+  const redirectUrl = window.location.origin + window.location.pathname + window.location.search;
+
   return {
     github: authApi.getGitHubLoginUrl(redirectUrl),
     google: authApi.getGoogleLoginUrl(redirectUrl),
   };
 }
+
+function LoginModal({ onClose }: { onClose: () => void }) {
+  const loginUrls = getLoginUrls();
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div
+        className="bg-slate-800 rounded-xl max-w-md w-full"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="p-6 text-center">
+          <div className="w-12 h-12 bg-primary-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Lightbulb className="h-6 w-6 text-primary-400" />
+          </div>
+          <h3 className="text-lg font-medium text-white mb-2">Login to Submit a Feature Request</h3>
+          <p className="text-sm text-slate-400 mb-6">
+            Sign in with your account to submit feature requests, comment and vote on ideas.
+          </p>
+
+          <div className="space-y-3">
+            <a
+              href={loginUrls.google}
+              className="group relative overflow-hidden bg-white text-black px-4 py-3 rounded-lg text-sm font-semibold transition-all hover:scale-[1.02] hover:shadow-[0_0_40px_rgba(255,255,255,0.2)] flex items-center justify-center gap-3 w-full"
+            >
+              <GoogleIcon />
+              Continue with Google
+              <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+            </a>
+            <a
+              href={loginUrls.github}
+              className="group bg-slate-700 hover:bg-slate-600 text-white px-4 py-3 rounded-lg text-sm font-semibold transition-all border border-slate-600 hover:border-slate-500 flex items-center justify-center gap-3 w-full"
+            >
+              <Github className="h-5 w-5" />
+              Continue with GitHub
+            </a>
+          </div>
+
+          <button
+            onClick={onClose}
+            className="mt-4 text-sm text-slate-500 hover:text-slate-300 transition"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RequestCard({
   request,
   isAuthenticated,
   onVote,
   onOpenComments,
+  onLoginRequired,
 }: {
   request: RoadmapRequest;
   isAuthenticated: boolean;
   onVote: () => void;
   onOpenComments: () => void;
+  onLoginRequired: () => void;
 }) {
   const category = CATEGORY_CONFIG[request.category as RoadmapCategory] || CATEGORY_CONFIG.other;
   const status = STATUS_CONFIG[request.status as RoadmapStatus] || STATUS_CONFIG.under_review;
   const CategoryIcon = category.icon;
   const StatusIcon = status.icon;
 
+  const handleVoteClick = () => {
+    if (isAuthenticated) {
+      onVote();
+    } else {
+      onLoginRequired();
+    }
+  };
+
   return (
     <div className="bg-slate-800 rounded-lg p-4">
       <div className="flex gap-4">
         {/* Vote button */}
         <button
-          onClick={onVote}
-          disabled={!isAuthenticated}
-          className={`flex flex-col items-center justify-center min-w-[60px] p-2 rounded-lg border transition ${
+          onClick={handleVoteClick}
+          className={`flex flex-col items-center justify-center min-w-[60px] p-2 rounded-lg border transition cursor-pointer ${
             request.has_voted
               ? "bg-primary-600/20 border-primary-500 text-primary-400"
               : "bg-slate-700/50 border-slate-600 text-slate-400 hover:border-slate-500"
-          } ${!isAuthenticated ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+          }`}
           title={isAuthenticated ? (request.has_voted ? "Remove vote" : "Upvote") : "Login to vote"}
         >
           <ChevronUp className={`h-5 w-5 ${request.has_voted ? "text-primary-400" : ""}`} />
@@ -168,7 +241,7 @@ function CommentsModal({
   const [newComment, setNewComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const loginUrls = getLoginUrls();
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   const loadComments = async () => {
     setIsLoading(true);
@@ -294,25 +367,20 @@ function CommentsModal({
               </div>
             </div>
           ) : (
-            <div className="flex flex-col sm:flex-row justify-center gap-4">
-              <a
-                href={loginUrls.google}
-                className="group relative overflow-hidden bg-white text-black p-2 rounded-full text-sm font-semibold transition-all hover:scale-105 hover:shadow-[0_0_40px_rgba(255,255,255,0.3)] flex items-center justify-center gap-3"
-              >
-                <GoogleIcon />
-                Continue with Google
-                <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
-              </a>
-              <a
-                href={loginUrls.github}
-                className="group bg-white/5 hover:bg-white/10 text-white p-2 rounded-full text-sm font-semibold transition-all border border-white/10 hover:border-white/20 flex items-center justify-center gap-3"
-              >
-                <Github className="h-5 w-5" />
-                Continue with GitHub
-              </a>
-            </div>
+            <button
+              onClick={() => setShowLoginModal(true)}
+              className="w-full px-4 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-medium transition flex items-center justify-center gap-2"
+            >
+              <MessageSquare className="h-4 w-4" />
+              Login to Comment
+            </button>
           )}
         </div>
+
+        {/* Login Modal */}
+        {showLoginModal && (
+          <LoginModal onClose={() => setShowLoginModal(false)} />
+        )}
       </div>
     </div>
   );
@@ -461,11 +529,11 @@ export function RoadmapTab({ publicSlug, isAuthenticated = false }: RoadmapTabPr
   const [statusFilter, setStatusFilter] = useState<RoadmapStatus | "">("");
   const [categoryFilter, setCategoryFilter] = useState<RoadmapCategory | "">("");
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<RoadmapRequest | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
-  const loginUrls = getLoginUrls();
 
   const loadRequests = async (page: number = currentPage) => {
     setIsLoading(true);
@@ -607,33 +675,13 @@ export function RoadmapTab({ publicSlug, isAuthenticated = false }: RoadmapTabPr
         </div>
 
         {/* Create button */}
-        {isAuthenticated ? (
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-medium transition"
-          >
-            <Plus className="h-4 w-4" />
-            Submit Request
-          </button>
-        ) : (
-           <div className="flex flex-col sm:flex-row justify-center gap-4">
-              <a
-                href={loginUrls.google}
-                className="group relative overflow-hidden bg-white text-black p-2 rounded-full text-sm font-semibold transition-all hover:scale-105 hover:shadow-[0_0_40px_rgba(255,255,255,0.3)] flex items-center justify-center gap-3"
-              >
-                <GoogleIcon />
-                Continue with Google
-                <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
-              </a>
-              <a
-                href={loginUrls.github}
-                className="group bg-white/5 hover:bg-white/10 text-white p-2 rounded-full text-sm font-semibold transition-all border border-white/10 hover:border-white/20 flex items-center justify-center gap-3"
-              >
-                <Github className="h-5 w-5" />
-                Continue with GitHub
-              </a>
-            </div>
-        )}
+        <button
+          onClick={() => isAuthenticated ? setShowCreateModal(true) : setShowLoginModal(true)}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-medium transition"
+        >
+          <Plus className="h-4 w-4" />
+          Submit Request
+        </button>
       </div>
 
       {/* Requests list */}
@@ -648,6 +696,7 @@ export function RoadmapTab({ publicSlug, isAuthenticated = false }: RoadmapTabPr
               isAuthenticated={isAuthenticated}
               onVote={() => handleVote(request)}
               onOpenComments={() => setSelectedRequest(request)}
+              onLoginRequired={() => setShowLoginModal(true)}
             />
           ))}
         </div>
@@ -678,6 +727,10 @@ export function RoadmapTab({ publicSlug, isAuthenticated = false }: RoadmapTabPr
       </div>
 
       {/* Modals */}
+      {showLoginModal && (
+        <LoginModal onClose={() => setShowLoginModal(false)} />
+      )}
+
       {showCreateModal && (
         <CreateRequestModal
           publicSlug={publicSlug}
