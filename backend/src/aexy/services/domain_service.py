@@ -167,11 +167,15 @@ class DomainService:
         if not domain:
             return False
 
-        await self.db.delete(domain)
-        await self.db.commit()
-
-        logger.info(f"Deleted sending domain: {domain_id}")
-        return True
+        try:
+            await self.db.delete(domain)
+            await self.db.commit()
+            logger.info(f"Deleted sending domain: {domain_id}")
+            return True
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"Failed to delete domain {domain_id}: {e}")
+            raise
 
     async def get_domain(
         self,

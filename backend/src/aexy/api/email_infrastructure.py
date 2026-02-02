@@ -335,11 +335,21 @@ async def delete_domain(
     await check_workspace_permission(db, workspace_id, current_user.id, "admin")
 
     service = DomainService(db)
-    deleted = await service.delete_domain(domain_id, workspace_id)
-    if not deleted:
+    try:
+        deleted = await service.delete_domain(domain_id, workspace_id)
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Domain not found",
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.error(f"Error deleting domain {domain_id}: {e}")
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Domain not found",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete domain: {str(e)}",
         )
 
 
