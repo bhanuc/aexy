@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
   ChevronLeft,
   Globe,
@@ -128,7 +129,7 @@ function DomainCard({
   onDelete,
 }: {
   domain: SendingDomain;
-  onVerify: () => void;
+  onVerify: () => Promise<unknown>;
   onPause: () => void;
   onResume: () => void;
   onStartWarming: () => void;
@@ -140,7 +141,10 @@ function DomainCard({
   const handleVerify = async () => {
     setIsVerifying(true);
     try {
-      onVerify();
+      await onVerify();
+      toast.success("DNS verification complete");
+    } catch (error) {
+      toast.error("Failed to verify DNS records");
     } finally {
       setIsVerifying(false);
     }
@@ -616,10 +620,14 @@ export default function EmailSettingsPage() {
     if (!newDomain) return;
     try {
       await createDomain({ domain: newDomain });
+      toast.success(`Domain ${newDomain} added successfully`);
       setNewDomain("");
       setShowAddDomain(false);
-    } catch {
-      // Error handled by mutation
+    } catch (error: unknown) {
+      // Extract error message from API response
+      const err = error as { response?: { data?: { detail?: string } }; message?: string };
+      const message = err.response?.data?.detail || err.message || "Failed to add domain";
+      toast.error(message);
     }
   };
 

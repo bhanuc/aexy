@@ -10,6 +10,7 @@ from uuid import uuid4
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from aexy.models.email_infrastructure import (
     SendingDomain,
@@ -46,12 +47,36 @@ class DomainService:
     # DOMAIN CRUD
     # -------------------------------------------------------------------------
 
+    async def check_domain_exists(
+        self,
+        workspace_id: str,
+        domain: str,
+    ) -> bool:
+        """Check if a domain already exists for this workspace."""
+        result = await self.db.execute(
+            select(SendingDomain).where(
+                and_(
+                    SendingDomain.workspace_id == workspace_id,
+                    SendingDomain.domain == domain,
+                )
+            )
+        )
+        return result.scalar_one_or_none() is not None
+
     async def create_domain(
         self,
         workspace_id: str,
         data: SendingDomainCreate,
     ) -> SendingDomain:
-        """Create a new sending domain."""
+        """Create a new sending domain.
+
+        Raises:
+            ValueError: If domain already exists for this workspace
+        """
+        # Check for duplicate domain
+        if await self.check_domain_exists(workspace_id, data.domain):
+            raise ValueError(f"Domain '{data.domain}' already exists in this workspace")
+
         # Generate verification token
         token_source = f"{workspace_id}:{data.domain}:{uuid4()}"
         verification_token = hashlib.sha256(token_source.encode()).hexdigest()[:32]
@@ -143,11 +168,15 @@ class DomainService:
         if not domain:
             return False
 
-        await self.db.delete(domain)
-        await self.db.commit()
-
-        logger.info(f"Deleted sending domain: {domain_id}")
-        return True
+        try:
+            await self.db.delete(domain)
+            await self.db.commit()
+            logger.info(f"Deleted sending domain: {domain_id}")
+            return True
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"Failed to delete domain {domain_id}: {e}")
+            raise
 
     async def get_domain(
         self,
@@ -292,6 +321,7 @@ class DomainService:
 
         # Update domain
         domain.dns_records = updated_records
+        flag_modified(domain, "dns_records")  # Ensure SQLAlchemy detects JSONB change
         domain.dns_last_checked_at = datetime.now(timezone.utc)
 
         # Determine overall status

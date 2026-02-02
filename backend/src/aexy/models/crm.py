@@ -831,6 +831,19 @@ class CRMAutomation(Base):
         index=True,
     )
 
+    # Module context (for platform-wide automations)
+    module: Mapped[str] = mapped_column(
+        String(50),
+        default="crm",
+        nullable=False,
+    )  # crm, tickets, hiring, email_marketing, uptime, sprints, forms, booking
+
+    module_config: Mapped[dict] = mapped_column(
+        JSONB,
+        default=dict,
+        nullable=False,
+    )  # Module-specific configuration
+
     # Trigger configuration
     trigger_type: Mapped[str] = mapped_column(String(50), nullable=False)
     trigger_config: Mapped[dict] = mapped_column(
@@ -944,6 +957,13 @@ class CRMAutomationRun(Base):
         ForeignKey("crm_automations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+    )
+
+    # Module context (denormalized for efficient filtering)
+    module: Mapped[str] = mapped_column(
+        String(50),
+        default="crm",
+        nullable=False,
     )
 
     # Triggering record (if applicable)

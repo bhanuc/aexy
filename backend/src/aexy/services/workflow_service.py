@@ -1279,6 +1279,7 @@ class WorkflowExecutor:
             """Execute a single branch sequentially."""
             results = []
             branch_context = WorkflowExecutionContext(
+                workspace_id=context.workspace_id,
                 record_id=context.record_id,
                 record_data=context.record_data.copy(),
                 trigger_data=context.trigger_data.copy(),
