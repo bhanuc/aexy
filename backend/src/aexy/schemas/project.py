@@ -69,6 +69,7 @@ class ProjectListResponse(BaseModel):
     member_count: int
     team_count: int
     is_public: bool
+    public_slug: str | None
 
     class Config:
         from_attributes = True
