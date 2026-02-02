@@ -132,7 +132,7 @@ export function TestResultsPanel({
   const statusCounts = getStatusCounts();
 
   return (
-    <div className="fixed inset-y-0 right-0 w-96 bg-slate-800/95 backdrop-blur-sm border-l border-slate-700 shadow-2xl z-50 flex flex-col">
+    <div className="fixed inset-y-0 right-0 w-96 bg-slate-800/95 backdrop-blur-sm border-l border-slate-700 shadow-2xl z-[100] flex flex-col">
       {/* Header */}
       <div className="p-4 border-b border-slate-700 flex items-center justify-between">
         <div className="flex items-center gap-3">

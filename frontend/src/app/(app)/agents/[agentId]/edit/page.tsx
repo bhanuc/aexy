@@ -1,0 +1,875 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import {
+  ArrowLeft,
+  Bot,
+  Save,
+  Settings,
+  Cpu,
+  Wrench,
+  SlidersHorizontal,
+  MessageSquare,
+  Bell,
+  Loader2,
+  Check,
+  Mail,
+  Copy,
+  ExternalLink,
+  Globe,
+  AtSign,
+  X,
+} from "lucide-react";
+import { useWorkspace } from "@/hooks/useWorkspace";
+import { useAgent, useAgentTools } from "@/hooks/useAgents";
+import { useAgentEmail, useEmailDomains } from "@/hooks/useAgentInbox";
+import { getAgentTypeConfig, AgentType, WorkingHoursConfig } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import {
+  AgentTypeBadge,
+  ToolSelector,
+  LLMProviderSelector,
+  ConfidenceSlider,
+  WorkingHoursConfigPanel,
+  PromptEditor,
+  InstructionsEditor,
+} from "@/components/agents/shared";
+
+type TabId = "general" | "llm" | "tools" | "behavior" | "prompts" | "escalation" | "email";
+
+interface Tab {
+  id: TabId;
+  label: string;
+  icon: typeof Settings;
+}
+
+const TABS: Tab[] = [
+  { id: "general", label: "General", icon: Settings },
+  { id: "llm", label: "LLM", icon: Cpu },
+  { id: "tools", label: "Tools", icon: Wrench },
+  { id: "behavior", label: "Behavior", icon: SlidersHorizontal },
+  { id: "prompts", label: "Prompts", icon: MessageSquare },
+  { id: "escalation", label: "Escalation", icon: Bell },
+  { id: "email", label: "Email", icon: Mail },
+];
+
+export default function EditAgentPage() {
+  const params = useParams();
+  const router = useRouter();
+  const agentId = params.agentId as string;
+  const { currentWorkspaceId, currentWorkspaceLoading } = useWorkspace();
+
+  const {
+    agent,
+    isLoading: agentLoading,
+    updateAgent,
+    isUpdating,
+  } = useAgent(currentWorkspaceId, agentId);
+
+  const { tools: availableTools, isLoading: toolsLoading } = useAgentTools(currentWorkspaceId);
+  const { enableEmail, disableEmail, isEnabling, isDisabling } = useAgentEmail(currentWorkspaceId, agentId);
+  const { domains, defaultDomain } = useEmailDomains(currentWorkspaceId);
+
+  const [activeTab, setActiveTab] = useState<TabId>("general");
+  const [hasChanges, setHasChanges] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Form state
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [mentionHandle, setMentionHandle] = useState("");
+  const [agentType, setAgentType] = useState<AgentType>("custom");
+  const [llmProvider, setLlmProvider] = useState<"claude" | "gemini" | "ollama">("gemini");
+  const [llmModel, setLlmModel] = useState("gemini-2.0-flash");
+  const [temperature, setTemperature] = useState(0.7);
+  const [maxTokens, setMaxTokens] = useState(2000);
+  const [tools, setTools] = useState<string[]>([]);
+  const [autoRespond, setAutoRespond] = useState(true);
+  const [confidenceThreshold, setConfidenceThreshold] = useState(0.7);
+  const [requireApprovalBelow, setRequireApprovalBelow] = useState(0.8);
+  const [maxDailyResponses, setMaxDailyResponses] = useState(100);
+  const [responseDelayMinutes, setResponseDelayMinutes] = useState(5);
+  const [workingHours, setWorkingHours] = useState<WorkingHoursConfig | null>(null);
+  const [systemPrompt, setSystemPrompt] = useState("");
+  const [customInstructions, setCustomInstructions] = useState("");
+  const [escalationEmail, setEscalationEmail] = useState("");
+  const [escalationSlackChannel, setEscalationSlackChannel] = useState("");
+  const [emailEnabled, setEmailEnabled] = useState(false);
+  const [autoReplyEnabled, setAutoReplyEnabled] = useState(true);
+  const [emailSignature, setEmailSignature] = useState("");
+  const [emailCopied, setEmailCopied] = useState(false);
+
+  // Email setup form state
+  const [showEmailSetup, setShowEmailSetup] = useState(false);
+  const [newEmailHandle, setNewEmailHandle] = useState("");
+  const [newEmailDomain, setNewEmailDomain] = useState("");
+
+  // Initialize form from agent
+  useEffect(() => {
+    if (agent) {
+      setName(agent.name);
+      setDescription(agent.description || "");
+      setMentionHandle(agent.mention_handle || "");
+      setAgentType(agent.agent_type);
+      setLlmProvider(agent.llm_provider || "gemini");
+      setLlmModel(agent.llm_model || agent.model || "gemini-2.0-flash");
+      setTemperature(agent.temperature ?? 0.7);
+      setMaxTokens(agent.max_tokens ?? 2000);
+      setTools(agent.tools || []);
+      setAutoRespond(agent.auto_respond ?? true);
+      setConfidenceThreshold(agent.confidence_threshold ?? 0.7);
+      setRequireApprovalBelow(agent.require_approval_below ?? 0.8);
+      setMaxDailyResponses(agent.max_daily_responses ?? 100);
+      setResponseDelayMinutes(agent.response_delay_minutes ?? 5);
+      setWorkingHours(agent.working_hours || null);
+      setSystemPrompt(agent.system_prompt || "");
+      setCustomInstructions(agent.custom_instructions || "");
+      setEscalationEmail(agent.escalation_email || "");
+      setEscalationSlackChannel(agent.escalation_slack_channel || "");
+      setEmailEnabled(agent.email_enabled || false);
+      setAutoReplyEnabled(agent.auto_reply_enabled ?? true);
+      setEmailSignature(agent.email_signature || "");
+    }
+  }, [agent]);
+
+  // Track changes
+  useEffect(() => {
+    if (!agent) return;
+
+    const changed =
+      name !== agent.name ||
+      description !== (agent.description || "") ||
+      mentionHandle !== (agent.mention_handle || "") ||
+      llmProvider !== (agent.llm_provider || "gemini") ||
+      llmModel !== (agent.llm_model || agent.model || "gemini-2.0-flash") ||
+      temperature !== (agent.temperature ?? 0.7) ||
+      maxTokens !== (agent.max_tokens ?? 2000) ||
+      JSON.stringify(tools) !== JSON.stringify(agent.tools || []) ||
+      autoRespond !== (agent.auto_respond ?? true) ||
+      confidenceThreshold !== (agent.confidence_threshold ?? 0.7) ||
+      requireApprovalBelow !== (agent.require_approval_below ?? 0.8) ||
+      maxDailyResponses !== (agent.max_daily_responses ?? 100) ||
+      responseDelayMinutes !== (agent.response_delay_minutes ?? 5) ||
+      JSON.stringify(workingHours) !== JSON.stringify(agent.working_hours || null) ||
+      systemPrompt !== (agent.system_prompt || "") ||
+      customInstructions !== (agent.custom_instructions || "") ||
+      escalationEmail !== (agent.escalation_email || "") ||
+      escalationSlackChannel !== (agent.escalation_slack_channel || "") ||
+      autoReplyEnabled !== (agent.auto_reply_enabled ?? true) ||
+      emailSignature !== (agent.email_signature || "");
+
+    setHasChanges(changed);
+  }, [
+    agent,
+    name,
+    description,
+    mentionHandle,
+    llmProvider,
+    llmModel,
+    temperature,
+    maxTokens,
+    tools,
+    autoRespond,
+    confidenceThreshold,
+    requireApprovalBelow,
+    maxDailyResponses,
+    responseDelayMinutes,
+    workingHours,
+    systemPrompt,
+    customInstructions,
+    escalationEmail,
+    escalationSlackChannel,
+    autoReplyEnabled,
+    emailSignature,
+  ]);
+
+  const handleSave = async () => {
+    if (!hasChanges) return;
+
+    setError(null);
+    setSaveSuccess(false);
+
+    try {
+      await updateAgent({
+        name: name.trim(),
+        description: description.trim() || undefined,
+        mention_handle: mentionHandle.trim() || undefined,
+        llm_provider: llmProvider,
+        llm_model: llmModel,
+        temperature,
+        max_tokens: maxTokens,
+        tools,
+        auto_respond: autoRespond,
+        confidence_threshold: confidenceThreshold,
+        require_approval_below: requireApprovalBelow,
+        max_daily_responses: maxDailyResponses,
+        response_delay_minutes: responseDelayMinutes,
+        working_hours: workingHours,
+        system_prompt: systemPrompt.trim() || undefined,
+        custom_instructions: customInstructions.trim() || undefined,
+        escalation_email: escalationEmail.trim() || undefined,
+        escalation_slack_channel: escalationSlackChannel.trim() || undefined,
+        auto_reply_enabled: autoReplyEnabled,
+        email_signature: emailSignature.trim() || undefined,
+      });
+
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2000);
+    } catch (err) {
+      console.error("Failed to save agent:", err);
+      setError(err instanceof Error ? err.message : "Failed to save changes");
+    }
+  };
+
+  const isLoading = currentWorkspaceLoading || agentLoading;
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500 mx-auto mb-4"></div>
+          <p className="text-white">Loading agent...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!agent) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <Bot className="h-16 w-16 text-slate-600 mx-auto mb-4" />
+          <h2 className="text-xl font-medium text-white mb-2">Agent Not Found</h2>
+          <Link
+            href="/agents"
+            className="text-purple-400 hover:text-purple-300"
+          >
+            Back to Agents
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case "general":
+        return (
+          <div className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Agent Name
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Agent Type
+              </label>
+              <div className="flex items-center gap-2">
+                <AgentTypeBadge type={agentType} />
+                <span className="text-sm text-slate-400">
+                  (Cannot be changed after creation)
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Mention Handle
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">@</span>
+                <input
+                  type="text"
+                  value={mentionHandle}
+                  onChange={(e) => setMentionHandle(e.target.value.toLowerCase())}
+                  className="w-full pl-8 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Description
+              </label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={3}
+                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+              />
+            </div>
+          </div>
+        );
+
+      case "llm":
+        return (
+          <div className="space-y-6">
+            <LLMProviderSelector
+              provider={llmProvider}
+              model={llmModel}
+              onChange={({ provider, model }) => {
+                setLlmProvider(provider);
+                setLlmModel(model);
+              }}
+            />
+
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Temperature
+              </label>
+              <div className="flex items-center gap-4">
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.1}
+                  value={temperature}
+                  onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                  className="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                />
+                <span className="w-12 text-right text-white font-medium">
+                  {temperature.toFixed(1)}
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Max Tokens
+              </label>
+              <input
+                type="number"
+                value={maxTokens}
+                onChange={(e) => setMaxTokens(parseInt(e.target.value) || 2000)}
+                min={100}
+                max={32000}
+                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+          </div>
+        );
+
+      case "tools":
+        return (
+          <div>
+            {toolsLoading ? (
+              <div className="text-center py-8">
+                <Loader2 className="h-8 w-8 text-purple-400 animate-spin mx-auto mb-4" />
+                <p className="text-slate-400">Loading tools...</p>
+              </div>
+            ) : (
+              <ToolSelector
+                tools={availableTools}
+                selectedTools={tools}
+                onChange={setTools}
+              />
+            )}
+          </div>
+        );
+
+      case "behavior":
+        return (
+          <div className="space-y-8">
+            <label className="flex items-start gap-4 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={autoRespond}
+                onChange={(e) => setAutoRespond(e.target.checked)}
+                className="w-5 h-5 mt-0.5 rounded border-slate-600 bg-slate-700 text-purple-500 focus:ring-purple-500"
+              />
+              <div>
+                <div className="font-medium text-white">Enable Auto-Response</div>
+                <p className="text-sm text-slate-400 mt-1">
+                  Automatically respond to messages above the confidence threshold
+                </p>
+              </div>
+            </label>
+
+            <div className="space-y-6">
+              <ConfidenceSlider
+                value={confidenceThreshold}
+                onChange={setConfidenceThreshold}
+                label="Minimum Confidence to Respond"
+              />
+
+              <ConfidenceSlider
+                value={requireApprovalBelow}
+                onChange={setRequireApprovalBelow}
+                label="Require Approval Below"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Max Daily Responses
+                </label>
+                <input
+                  type="number"
+                  value={maxDailyResponses}
+                  onChange={(e) => setMaxDailyResponses(parseInt(e.target.value) || 100)}
+                  min={1}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Response Delay (minutes)
+                </label>
+                <input
+                  type="number"
+                  value={responseDelayMinutes}
+                  onChange={(e) => setResponseDelayMinutes(parseInt(e.target.value) || 0)}
+                  min={0}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-medium text-white mb-4">Working Hours</h3>
+              <WorkingHoursConfigPanel
+                value={workingHours}
+                onChange={setWorkingHours}
+              />
+            </div>
+          </div>
+        );
+
+      case "prompts":
+        return (
+          <div className="space-y-6">
+            <PromptEditor
+              value={systemPrompt}
+              onChange={setSystemPrompt}
+              label="System Prompt"
+              rows={12}
+            />
+
+            <InstructionsEditor
+              value={customInstructions}
+              onChange={setCustomInstructions}
+              rows={4}
+            />
+          </div>
+        );
+
+      case "escalation":
+        return (
+          <div className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Escalation Email
+              </label>
+              <input
+                type="email"
+                value={escalationEmail}
+                onChange={(e) => setEscalationEmail(e.target.value)}
+                placeholder="support@example.com"
+                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+              <p className="mt-1 text-sm text-slate-500">
+                Email address to notify when agent escalates an issue
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Slack Channel
+              </label>
+              <input
+                type="text"
+                value={escalationSlackChannel}
+                onChange={(e) => setEscalationSlackChannel(e.target.value)}
+                placeholder="#support-escalations"
+                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+              <p className="mt-1 text-sm text-slate-500">
+                Slack channel to post escalation notifications
+              </p>
+            </div>
+          </div>
+        );
+
+      case "email":
+        const handleEnableEmail = async () => {
+          if (!newEmailHandle || !newEmailDomain) {
+            setError("Please enter an email handle and select a domain");
+            return;
+          }
+          try {
+            await enableEmail({
+              preferredHandle: newEmailHandle,
+              domain: newEmailDomain,
+            });
+            setEmailEnabled(true);
+            setShowEmailSetup(false);
+            setNewEmailHandle("");
+            setNewEmailDomain("");
+          } catch (err) {
+            console.error("Failed to enable email:", err);
+            setError(err instanceof Error ? err.message : "Failed to enable email");
+          }
+        };
+
+        const handleDisableEmail = async () => {
+          try {
+            await disableEmail();
+            setEmailEnabled(false);
+          } catch (err) {
+            console.error("Failed to disable email:", err);
+            setError(err instanceof Error ? err.message : "Failed to disable email");
+          }
+        };
+
+        const copyEmailAddress = async () => {
+          if (agent?.email_address) {
+            await navigator.clipboard.writeText(agent.email_address);
+            setEmailCopied(true);
+            setTimeout(() => setEmailCopied(false), 2000);
+          }
+        };
+
+        const openEmailSetup = () => {
+          // Pre-fill with mention handle or agent name
+          const suggestedHandle = mentionHandle || name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+          setNewEmailHandle(suggestedHandle);
+          setNewEmailDomain(defaultDomain);
+          setShowEmailSetup(true);
+        };
+
+        return (
+          <div className="space-y-6">
+            {/* Email Setup Modal */}
+            {showEmailSetup && !agent?.email_enabled && (
+              <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-medium text-white flex items-center gap-2">
+                    <AtSign className="h-4 w-4 text-purple-400" />
+                    Configure Email Address
+                  </h3>
+                  <button
+                    onClick={() => setShowEmailSetup(false)}
+                    className="p-1 text-slate-400 hover:text-white transition-colors"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  {/* Email Handle */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      Email Handle
+                    </label>
+                    <input
+                      type="text"
+                      value={newEmailHandle}
+                      onChange={(e) => setNewEmailHandle(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                      placeholder="support"
+                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                    <p className="mt-1 text-xs text-slate-500">
+                      Letters, numbers, and hyphens only
+                    </p>
+                  </div>
+
+                  {/* Domain Selector */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      Domain
+                    </label>
+                    <div className="relative">
+                      <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                      <select
+                        value={newEmailDomain}
+                        onChange={(e) => setNewEmailDomain(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 appearance-none"
+                      >
+                        {domains.map((d) => (
+                          <option key={d.domain} value={d.domain}>
+                            {d.domain} {d.is_default && "(Default)"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Preview */}
+                {newEmailHandle && newEmailDomain && (
+                  <div className="p-3 bg-slate-800 rounded-lg border border-slate-700 mb-4">
+                    <span className="text-sm text-slate-400">Email address: </span>
+                    <code className="text-blue-400 font-mono">{newEmailHandle}@{newEmailDomain}</code>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => setShowEmailSetup(false)}
+                    className="px-4 py-2 text-slate-400 hover:text-white transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleEnableEmail}
+                    disabled={isEnabling || !newEmailHandle || !newEmailDomain}
+                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
+                  >
+                    {isEnabling ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Enable Email"
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Email Status */}
+            <div className="p-4 bg-slate-700/50 rounded-lg border border-slate-600">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={cn(
+                    "p-2 rounded-lg",
+                    agent?.email_enabled ? "bg-green-500/20" : "bg-slate-600"
+                  )}>
+                    <Mail className={cn(
+                      "h-5 w-5",
+                      agent?.email_enabled ? "text-green-400" : "text-slate-400"
+                    )} />
+                  </div>
+                  <div>
+                    <h3 className="font-medium text-white">
+                      {agent?.email_enabled ? "Email Enabled" : "Email Disabled"}
+                    </h3>
+                    {agent?.email_address ? (
+                      <div className="flex items-center gap-2 mt-1">
+                        <code className="text-sm text-blue-400 bg-slate-800 px-2 py-0.5 rounded">
+                          {agent.email_address}
+                        </code>
+                        <button
+                          onClick={copyEmailAddress}
+                          className="p-1 text-slate-400 hover:text-white transition-colors"
+                          title="Copy email address"
+                        >
+                          {emailCopied ? (
+                            <Check className="h-4 w-4 text-green-400" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-slate-400">
+                        Enable email to get an address for this agent
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {agent?.email_enabled ? (
+                  <button
+                    onClick={handleDisableEmail}
+                    disabled={isDisabling}
+                    className="px-4 py-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors disabled:opacity-50"
+                  >
+                    {isDisabling ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Disable"
+                    )}
+                  </button>
+                ) : !showEmailSetup ? (
+                  <button
+                    onClick={openEmailSetup}
+                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                  >
+                    Enable Email
+                  </button>
+                ) : null}
+              </div>
+            </div>
+
+            {agent?.email_enabled && (
+              <>
+                {/* Auto Reply */}
+                <label className="flex items-start gap-4 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={autoReplyEnabled}
+                    onChange={(e) => setAutoReplyEnabled(e.target.checked)}
+                    className="w-5 h-5 mt-0.5 rounded border-slate-600 bg-slate-700 text-purple-500 focus:ring-purple-500"
+                  />
+                  <div>
+                    <div className="font-medium text-white">Enable Auto-Reply</div>
+                    <p className="text-sm text-slate-400 mt-1">
+                      Automatically respond to emails when AI confidence is above threshold ({Math.round(confidenceThreshold * 100)}%)
+                    </p>
+                  </div>
+                </label>
+
+                {/* Email Signature */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Email Signature
+                  </label>
+                  <textarea
+                    value={emailSignature}
+                    onChange={(e) => setEmailSignature(e.target.value)}
+                    rows={4}
+                    placeholder="Best regards,&#10;{agent_name}"
+                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                  />
+                  <p className="mt-1 text-sm text-slate-500">
+                    Signature appended to all outgoing emails from this agent
+                  </p>
+                </div>
+
+                {/* Inbox Link */}
+                <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-medium text-blue-300">Agent Inbox</h4>
+                      <p className="text-sm text-slate-400 mt-1">
+                        View and manage emails received by this agent
+                      </p>
+                    </div>
+                    <Link
+                      href={`/agents/${agentId}/inbox`}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                    >
+                      <Mail className="h-4 w-4" />
+                      View Inbox
+                      <ExternalLink className="h-4 w-4" />
+                    </Link>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-900">
+      {/* Header */}
+      <header className="border-b border-slate-700 bg-slate-800/50 sticky top-0 z-10">
+        <div className="max-w-5xl mx-auto px-4 py-4">
+          <div className="flex items-center gap-4">
+            <Link
+              href={`/agents/${agentId}`}
+              className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+            <div className="flex items-center gap-3 flex-1">
+              <div
+                className="w-10 h-10 rounded-lg flex items-center justify-center"
+                style={{
+                  backgroundColor: `${getAgentTypeConfig(agentType).color}20`,
+                }}
+              >
+                <Bot
+                  className="h-5 w-5"
+                  style={{
+                    color: getAgentTypeConfig(agentType).color,
+                  }}
+                />
+              </div>
+              <div>
+                <h1 className="text-xl font-semibold text-white">Edit {agent.name}</h1>
+                <p className="text-slate-400 text-sm">
+                  Configure your agent settings
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleSave}
+              disabled={!hasChanges || isUpdating}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-lg transition text-sm font-medium",
+                hasChanges
+                  ? "bg-purple-600 hover:bg-purple-700 text-white"
+                  : "bg-slate-700 text-slate-400 cursor-not-allowed"
+              )}
+            >
+              {isUpdating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : saveSuccess ? (
+                <>
+                  <Check className="h-4 w-4" />
+                  Saved!
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4" />
+                  Save Changes
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-5xl mx-auto px-4 py-8">
+        {error && (
+          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400">
+            {error}
+          </div>
+        )}
+
+        <div className="flex gap-6">
+          {/* Tabs sidebar */}
+          <nav className="w-48 flex-shrink-0">
+            <div className="bg-slate-800 rounded-xl border border-slate-700 p-2 sticky top-24">
+              {TABS.map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition",
+                      isActive
+                        ? "bg-purple-500/20 text-purple-400"
+                        : "text-slate-400 hover:text-white hover:bg-slate-700"
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span className="text-sm font-medium">{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
+
+          {/* Tab content */}
+          <div className="flex-1 min-w-0">
+            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
+              {renderTabContent()}
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}

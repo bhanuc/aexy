@@ -146,6 +146,7 @@ CREATE INDEX IF NOT EXISTS ix_sending_domain_provider ON sending_domains(provide
 
 CREATE TABLE IF NOT EXISTS sending_identities (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     domain_id UUID NOT NULL REFERENCES sending_domains(id) ON DELETE CASCADE,
 
     -- Identity
@@ -167,8 +168,18 @@ CREATE TABLE IF NOT EXISTS sending_identities (
     CONSTRAINT uq_sending_identity_email UNIQUE (domain_id, email)
 );
 
+CREATE INDEX IF NOT EXISTS ix_sending_identity_workspace ON sending_identities(workspace_id);
 CREATE INDEX IF NOT EXISTS ix_sending_identity_domain ON sending_identities(domain_id);
 CREATE INDEX IF NOT EXISTS ix_sending_identity_active ON sending_identities(is_active);
+
+-- Add workspace_id if table already exists (for existing deployments)
+ALTER TABLE sending_identities ADD COLUMN IF NOT EXISTS workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE;
+
+-- Populate workspace_id from related domain
+UPDATE sending_identities si
+SET workspace_id = sd.workspace_id
+FROM sending_domains sd
+WHERE si.domain_id = sd.id AND si.workspace_id IS NULL;
 
 -- =============================================================================
 -- DEDICATED IPS

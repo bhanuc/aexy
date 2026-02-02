@@ -7,7 +7,9 @@ import operator
 
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
 from langchain_core.tools import BaseTool
+from langchain_core.language_models import BaseChatModel
 from langchain_anthropic import ChatAnthropic
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 
@@ -20,7 +22,7 @@ class AgentState(TypedDict):
     record_id: str | None
     record_data: dict
     context: dict
-    steps: list[dict]
+    steps: Annotated[list[dict], operator.add]  # Accumulate steps like messages
     final_output: dict | None
     error: str | None
 
@@ -35,25 +37,35 @@ class BaseAgent(ABC):
     def __init__(
         self,
         model: str | None = None,
+        llm_provider: str = "claude",
         max_iterations: int = 10,
         timeout_seconds: int = 300,
     ):
         self.model_name = model or self.default_model
+        self.llm_provider = llm_provider
         self.max_iterations = max_iterations
         self.timeout_seconds = timeout_seconds
-        self._llm: ChatAnthropic | None = None
+        self._llm: BaseChatModel | None = None
         self._tools: list[BaseTool] = []
         self._graph: StateGraph | None = None
 
     @property
-    def llm(self) -> ChatAnthropic:
-        """Get the LLM instance."""
+    def llm(self) -> BaseChatModel:
+        """Get the LLM instance based on provider."""
         if self._llm is None:
-            self._llm = ChatAnthropic(
-                model=self.model_name,
-                anthropic_api_key=settings.anthropic_api_key,
-                max_tokens=4096,
-            )
+            if self.llm_provider == "gemini":
+                self._llm = ChatGoogleGenerativeAI(
+                    model=self.model_name if self.model_name.startswith("gemini") else "gemini-1.5-pro",
+                    google_api_key=settings.llm.gemini_api_key,
+                    max_output_tokens=4096,
+                )
+            else:
+                # Default to Claude
+                self._llm = ChatAnthropic(
+                    model=self.model_name,
+                    anthropic_api_key=settings.llm.anthropic_api_key,
+                    max_tokens=4096,
+                )
         return self._llm
 
     @property
@@ -73,7 +85,7 @@ class BaseAgent(ABC):
         """Define the agent's goal."""
         return self.description
 
-    def _get_llm_with_tools(self) -> ChatAnthropic:
+    def _get_llm_with_tools(self) -> BaseChatModel:
         """Get LLM bound with tools."""
         if self.tools:
             return self.llm.bind_tools(self.tools)
@@ -129,8 +141,8 @@ class BaseAgent(ABC):
                 }],
             }
 
-    def _process_tools(self, state: AgentState) -> dict:
-        """Process tool calls."""
+    async def _process_tools(self, state: AgentState) -> dict:
+        """Process tool calls asynchronously."""
         messages = state["messages"]
         last_message = messages[-1]
 
@@ -139,20 +151,39 @@ class BaseAgent(ABC):
 
         tool_node = ToolNode(self.tools)
         try:
-            result = tool_node.invoke({"messages": [last_message]})
+            # Use ainvoke for async tool execution
+            result = await tool_node.ainvoke({"messages": [last_message]})
+            result_messages = result.get("messages", [])
 
-            # Record tool steps
+            # Record tool steps with outputs
             steps = []
-            for tool_call in last_message.tool_calls:
+            for i, tool_call in enumerate(last_message.tool_calls):
+                tool_name = tool_call.get("name", "unknown")
+                tool_args = tool_call.get("args", {})
+                tool_call_id = tool_call.get("id", "")
+
+                # Find the corresponding tool output message
+                tool_output = None
+                for msg in result_messages:
+                    if hasattr(msg, "tool_call_id") and msg.tool_call_id == tool_call_id:
+                        tool_output = msg.content
+                        break
+
+                # If no matching output found, try by index
+                if tool_output is None and i < len(result_messages):
+                    tool_output = result_messages[i].content if hasattr(result_messages[i], "content") else str(result_messages[i])
+
                 steps.append({
                     "type": "tool_call",
-                    "tool": tool_call.get("name", "unknown"),
-                    "input": tool_call.get("args", {}),
+                    "id": tool_call_id,
+                    "tool": tool_name,
+                    "input": tool_args,
+                    "output": tool_output,
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 })
 
             return {
-                "messages": result.get("messages", []),
+                "messages": result_messages,
                 "steps": steps,
             }
         except Exception as e:
@@ -212,7 +243,7 @@ Record Data:
 
 Goal: {self.goal}
 
-Please analyze the information and take appropriate actions to achieve the goal.
+IMPORTANT: You MUST use the available tools to accomplish this task. Do not just describe what you would do - actually call the tools. Start by using a tool immediately.
 """
 
     def _format_context(self, context: dict) -> str:
@@ -233,18 +264,33 @@ Please analyze the information and take appropriate actions to achieve the goal.
         record_id: str | None = None,
         record_data: dict | None = None,
         context: dict | None = None,
+        conversation_history: list[BaseMessage] | None = None,
     ) -> dict:
-        """Execute the agent."""
+        """Execute the agent.
+
+        Args:
+            record_id: Optional CRM record ID for context
+            record_data: Optional record data dict
+            context: Additional context for the agent
+            conversation_history: Optional list of previous messages for multi-turn conversation
+        """
         record_data = record_data or {}
         context = context or {}
 
-        # Build initial state
-        initial_message = self.build_initial_message(record_data, context)
+        # Build initial messages
+        if conversation_history:
+            # For continuation of conversation, prepend system prompt and use history
+            messages = [HumanMessage(content=self.system_prompt)]
+            messages.extend(conversation_history)
+        else:
+            # Fresh conversation - build initial message
+            initial_message = self.build_initial_message(record_data, context)
+            messages = [
+                HumanMessage(content=self.system_prompt + "\n\n" + initial_message)
+            ]
 
         state: AgentState = {
-            "messages": [
-                HumanMessage(content=self.system_prompt + "\n\n" + initial_message)
-            ],
+            "messages": messages,
             "record_id": record_id,
             "record_data": record_data,
             "context": context,

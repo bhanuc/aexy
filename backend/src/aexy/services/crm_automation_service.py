@@ -55,13 +55,14 @@ class CRMAutomationService:
         is_active: bool = True,
         created_by_id: str | None = None,
     ) -> CRMAutomation:
-        """Create a new automation."""
+        """Create a new automation (always for CRM module)."""
         automation = CRMAutomation(
             id=str(uuid4()),
             workspace_id=workspace_id,
             name=name,
             description=description,
             object_id=object_id,
+            module="crm",  # CRM service always creates CRM automations
             trigger_type=trigger_type,
             trigger_config=trigger_config,
             conditions=conditions or [],
@@ -90,8 +91,11 @@ class CRMAutomationService:
         skip: int = 0,
         limit: int = 50,
     ) -> list[CRMAutomation]:
-        """List automations in a workspace."""
-        stmt = select(CRMAutomation).where(CRMAutomation.workspace_id == workspace_id)
+        """List automations in a workspace (CRM module only)."""
+        stmt = select(CRMAutomation).where(
+            CRMAutomation.workspace_id == workspace_id,
+            CRMAutomation.module == "crm",  # Filter to CRM module only
+        )
 
         if object_id:
             stmt = stmt.where(CRMAutomation.object_id == object_id)

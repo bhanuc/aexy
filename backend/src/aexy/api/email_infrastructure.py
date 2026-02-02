@@ -257,8 +257,15 @@ async def create_domain(
     await check_workspace_permission(db, workspace_id, current_user.id, "admin")
 
     service = DomainService(db)
-    domain = await service.create_domain(workspace_id, data)
-    return domain
+    try:
+        domain = await service.create_domain(workspace_id, data)
+        return domain
+    except ValueError as e:
+        # Domain already exists
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(e),
+        )
 
 
 @router.get("/domains", response_model=list[SendingDomainListResponse])
@@ -328,11 +335,21 @@ async def delete_domain(
     await check_workspace_permission(db, workspace_id, current_user.id, "admin")
 
     service = DomainService(db)
-    deleted = await service.delete_domain(domain_id, workspace_id)
-    if not deleted:
+    try:
+        deleted = await service.delete_domain(domain_id, workspace_id)
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Domain not found",
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.error(f"Error deleting domain {domain_id}: {e}")
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Domain not found",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete domain: {str(e)}",
         )
 
 

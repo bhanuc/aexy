@@ -125,7 +125,7 @@ export function TemplateSelector({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100]">
       <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-4xl max-h-[80vh] flex flex-col shadow-2xl">
         {/* Header */}
         <div className="p-6 border-b border-slate-700 flex items-center justify-between">

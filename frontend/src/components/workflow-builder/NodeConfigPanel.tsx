@@ -28,6 +28,7 @@ interface NodeConfigPanelProps {
   node: Node;
   workspaceId: string;
   automationId: string;
+  module: string;
   onUpdate: (data: Record<string, unknown>) => void;
   onDelete: () => void;
   onClose: () => void;
@@ -52,6 +53,7 @@ export function NodeConfigPanel({
   node,
   workspaceId,
   automationId,
+  module = "crm",
   onUpdate,
   onDelete,
   onClose,
@@ -70,30 +72,89 @@ export function NodeConfigPanel({
   // Field schema for condition value dropdowns
   const [fieldSchema, setFieldSchema] = useState<Record<string, SchemaCategory>>({});
 
-  // CRM objects for trigger object selector
-  const [crmObjects, setCrmObjects] = useState<Array<{ id: string; name: string; slug: string }>>([]);
+  // Module objects for trigger object selector (module-aware)
+  const [moduleObjects, setModuleObjects] = useState<Array<{ id: string; name: string; slug: string }>>([]);
   const [objectsLoading, setObjectsLoading] = useState(false);
 
   const triggerType = node.data.trigger_type as string;
 
-  // Fetch CRM objects for trigger object selector
+  // Fetch objects based on module - module-aware object loading
   useEffect(() => {
-    async function fetchCrmObjects() {
+    async function fetchModuleObjects() {
       if (!workspaceId) return;
 
       setObjectsLoading(true);
       try {
-        const response = await api.get(`/workspaces/${workspaceId}/crm/objects`);
-        setCrmObjects(response.data || []);
+        switch (module) {
+          case "crm":
+            // Fetch CRM objects from API
+            const crmResponse = await api.get(`/workspaces/${workspaceId}/crm/objects`);
+            setModuleObjects(crmResponse.data || []);
+            break;
+          case "tickets":
+            // Hardcoded for MVP - will be API endpoint later
+            setModuleObjects([
+              { id: "ticket", name: "Ticket", slug: "ticket" },
+            ]);
+            break;
+          case "hiring":
+            // Hardcoded for MVP
+            setModuleObjects([
+              { id: "candidate", name: "Candidate", slug: "candidate" },
+              { id: "job", name: "Job", slug: "job" },
+              { id: "requirement", name: "Requirement", slug: "requirement" },
+            ]);
+            break;
+          case "email_marketing":
+            // Hardcoded for MVP
+            setModuleObjects([
+              { id: "campaign", name: "Campaign", slug: "campaign" },
+              { id: "list", name: "List", slug: "list" },
+              { id: "template", name: "Template", slug: "template" },
+            ]);
+            break;
+          case "uptime":
+            // Hardcoded for MVP
+            setModuleObjects([
+              { id: "monitor", name: "Monitor", slug: "monitor" },
+              { id: "incident", name: "Incident", slug: "incident" },
+            ]);
+            break;
+          case "sprints":
+            // Hardcoded for MVP
+            setModuleObjects([
+              { id: "task", name: "Task", slug: "task" },
+              { id: "sprint", name: "Sprint", slug: "sprint" },
+              { id: "epic", name: "Epic", slug: "epic" },
+            ]);
+            break;
+          case "forms":
+            // Hardcoded for MVP
+            setModuleObjects([
+              { id: "form", name: "Form", slug: "form" },
+            ]);
+            break;
+          case "booking":
+            // Hardcoded for MVP
+            setModuleObjects([
+              { id: "event_type", name: "Event Type", slug: "event_type" },
+              { id: "booking", name: "Booking", slug: "booking" },
+            ]);
+            break;
+          default:
+            // Unknown module - return empty
+            setModuleObjects([]);
+        }
       } catch (error) {
-        console.error("Failed to fetch CRM objects:", error);
+        console.error(`Failed to fetch objects for module ${module}:`, error);
+        setModuleObjects([]);
       } finally {
         setObjectsLoading(false);
       }
     }
 
-    fetchCrmObjects();
-  }, [workspaceId]);
+    fetchModuleObjects();
+  }, [workspaceId, module]);
 
   // Fetch field schema for condition dropdowns
   // Re-fetch when object_id changes to get the correct fields
@@ -263,7 +324,22 @@ export function NodeConfigPanel({
     );
 
     // Record-based triggers need an object selector
-    const isRecordTrigger = ["record_created", "record_updated", "record_deleted", "field_changed", "status_changed"].includes(triggerType);
+    // Check if trigger is record-based (needs object selector)
+    // This includes CRM record triggers, ticket triggers, candidate triggers, etc.
+    const isRecordTrigger =
+      // CRM record triggers
+      ["record_created", "record_updated", "record_deleted", "field_changed", "status_changed"].includes(triggerType) ||
+      triggerType?.startsWith("record.") ||
+      // Ticket triggers
+      triggerType?.startsWith("ticket.") ||
+      // Hiring triggers
+      triggerType?.startsWith("candidate.") ||
+      // Sprint triggers
+      triggerType?.startsWith("task.") ||
+      // Booking triggers
+      triggerType?.startsWith("booking.") ||
+      // Form triggers
+      triggerType === "form.submitted" || triggerType === "form_submitted";
 
     return (
       <div className="space-y-4">
@@ -283,7 +359,7 @@ export function NodeConfigPanel({
                 className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm"
               >
                 <option value="">Select object type...</option>
-                {crmObjects.map((obj) => (
+                {moduleObjects.map((obj) => (
                   <option key={obj.id} value={obj.id}>
                     {obj.name}
                   </option>
@@ -291,7 +367,7 @@ export function NodeConfigPanel({
               </select>
             )}
             <p className="text-xs text-slate-500 mt-1">
-              Select the CRM object this automation applies to
+              Select the object type this automation applies to
             </p>
           </div>
         )}
@@ -713,7 +789,7 @@ export function NodeConfigPanel({
                   className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm"
                 >
                   <option value="">Select object type...</option>
-                  {crmObjects.map((obj) => (
+                  {moduleObjects.map((obj) => (
                     <option key={obj.id} value={obj.id}>
                       {obj.name}
                     </option>

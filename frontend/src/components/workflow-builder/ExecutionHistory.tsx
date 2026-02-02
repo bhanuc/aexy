@@ -174,7 +174,7 @@ export function ExecutionHistory({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-y-0 right-0 w-96 bg-slate-800 border-l border-slate-700 shadow-xl z-50 flex flex-col">
+    <div className="fixed inset-y-0 right-0 w-96 bg-slate-800 border-l border-slate-700 shadow-xl z-[100] flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">
         <h2 className="text-lg font-semibold text-white">Execution History</h2>
