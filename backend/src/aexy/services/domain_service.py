@@ -10,6 +10,7 @@ from uuid import uuid4
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from aexy.models.email_infrastructure import (
     SendingDomain,
@@ -167,11 +168,15 @@ class DomainService:
         if not domain:
             return False
 
-        await self.db.delete(domain)
-        await self.db.commit()
-
-        logger.info(f"Deleted sending domain: {domain_id}")
-        return True
+        try:
+            await self.db.delete(domain)
+            await self.db.commit()
+            logger.info(f"Deleted sending domain: {domain_id}")
+            return True
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"Failed to delete domain {domain_id}: {e}")
+            raise
 
     async def get_domain(
         self,
@@ -316,6 +321,7 @@ class DomainService:
 
         # Update domain
         domain.dns_records = updated_records
+        flag_modified(domain, "dns_records")  # Ensure SQLAlchemy detects JSONB change
         domain.dns_last_checked_at = datetime.now(timezone.utc)
 
         # Determine overall status
