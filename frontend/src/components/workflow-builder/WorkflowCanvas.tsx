@@ -345,7 +345,7 @@ function WorkflowCanvasInner({
       position: position || { x: 250, y: nodes.length * 100 + 50 },
       data: {
         label: getNodeLabel(type, subtype),
-        ...(type === "trigger" && { trigger_type: subtype || "record_created" }),
+        ...(type === "trigger" && { trigger_type: subtype || "record.created" }),
         ...(type === "action" && { action_type: subtype || "update_record" }),
         ...(type === "condition" && { conditions: [], conjunction: "and" }),
         ...(type === "wait" && { wait_type: subtype || "duration", duration_value: 1, duration_unit: "days" }),

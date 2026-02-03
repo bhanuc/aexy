@@ -4,7 +4,10 @@ This service wraps CRMAutomationService with module-aware functionality,
 enabling automations across all Aexy modules (CRM, Tickets, Hiring, etc.).
 """
 
+import logging
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 from typing import Any
 from uuid import uuid4
 
@@ -24,6 +27,67 @@ from aexy.schemas.automation import (
     get_triggers_for_module,
     get_actions_for_module,
 )
+
+
+# =============================================================================
+# COMMON DISPATCH FUNCTION
+# =============================================================================
+
+async def dispatch_automation_event(
+    db: AsyncSession,
+    workspace_id: str,
+    module: str,
+    trigger_type: str,
+    entity_id: str,
+    trigger_data: dict,
+) -> int:
+    """Dispatch an automation event to trigger matching automations.
+
+    This is a common utility function that all modules can use to dispatch
+    events and trigger automations.
+
+    Args:
+        db: Database session.
+        workspace_id: Workspace ID.
+        module: Module name (e.g., 'sprints', 'tickets', 'uptime').
+        trigger_type: Type of trigger (e.g., 'task.created', 'ticket.assigned').
+        entity_id: ID of the entity that triggered the event.
+        trigger_data: Additional data to pass to the automation (available as {{trigger.field}}).
+
+    Returns:
+        Number of automations triggered.
+
+    Example:
+        await dispatch_automation_event(
+            db=db,
+            workspace_id="...",
+            module="sprints",
+            trigger_type="task.created",
+            entity_id=task.id,
+            trigger_data={
+                "task_id": task.id,
+                "task_title": task.title,
+                "assignee_email": task.assignee.email,
+            },
+        )
+    """
+    logger.info(f"[DISPATCH] Dispatching {module}.{trigger_type} for entity {entity_id}")
+    try:
+        automation_service = AutomationService(db)
+        runs = await automation_service.process_module_trigger(
+            workspace_id=workspace_id,
+            module=module,
+            trigger_type=trigger_type,
+            entity_id=entity_id,
+            trigger_data=trigger_data,
+        )
+        num_runs = len(runs)
+        if num_runs > 0:
+            logger.info(f"[DISPATCH] {module}.{trigger_type} triggered {num_runs} automation(s)")
+        return num_runs
+    except Exception as e:
+        logger.error(f"[DISPATCH ERROR] Failed to dispatch {module}.{trigger_type}: {e}")
+        return 0
 
 
 class AutomationService:
@@ -213,6 +277,8 @@ class AutomationService:
         This is the main entry point for module-specific events
         (e.g., ticket.created, candidate.stage_changed).
         """
+        print(f"Processing module trigger: module={module}, trigger_type={trigger_type}, workspace_id={workspace_id}")
+
         # Find all active automations matching this module and trigger
         stmt = select(CRMAutomation).where(
             CRMAutomation.workspace_id == workspace_id,
@@ -222,6 +288,8 @@ class AutomationService:
         )
         result = await self.db.execute(stmt)
         automations = list(result.scalars().all())
+
+        print(f"Found {len(automations)} matching automation(s) for {module}.{trigger_type}")
 
         runs = []
         for automation in automations:

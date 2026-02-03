@@ -242,10 +242,16 @@ class CRMAutomationService:
                 raise ValueError("Automation run limit exceeded for this month")
 
         # Create run record
+        # Only set record_id for CRM module (has foreign key constraint to crm_records)
+        # For other modules, entity_id is stored in trigger_data
+        module = automation.module or "crm"
+        effective_record_id = record_id if module == "crm" else None
+
         run = CRMAutomationRun(
             id=str(uuid4()),
             automation_id=automation_id,
-            record_id=record_id,
+            module=module,
+            record_id=effective_record_id,
             trigger_data=trigger_data or {},
             status="pending",
             steps_executed=[],
@@ -418,6 +424,8 @@ class CRMAutomationService:
             return await self._action_create_task(config, record, workspace_id)
         elif action_type == "send_slack":
             return await self._action_send_slack(config, record, workspace_id)
+        elif action_type == "send_email":
+            return await self._action_send_email(config, record, workspace_id)
         else:
             return {"message": f"Action type {action_type} not implemented"}
 
@@ -714,6 +722,67 @@ class CRMAutomationService:
                 return slack_user_id
 
         return None
+
+    async def _action_send_email(
+        self,
+        config: dict,
+        record: CRMRecord | None,
+        workspace_id: str,
+    ) -> dict:
+        """Send an email notification.
+
+        Config options:
+        - to: Direct email address to send to
+        - email_field: Record field containing the email address
+        - email_subject: Subject line (supports {field_name} placeholders)
+        - email_body: Email body (supports {field_name} placeholders)
+        """
+        email_to = config.get("to")
+
+        # If no direct email, try to get from record field
+        if not email_to and record:
+            email_field = config.get("email_field", "email")
+            email_to = record.values.get(email_field)
+
+        if not email_to:
+            return {"error": "No recipient email address specified"}
+
+        subject = config.get("email_subject", "")
+        body = config.get("email_body", "")
+
+        # Replace placeholders in subject and body with record values
+        if record:
+            for key, value in record.values.items():
+                subject = subject.replace(f"{{{key}}}", str(value or ""))
+                body = body.replace(f"{{{key}}}", str(value or ""))
+            # Also support record metadata placeholders
+            subject = subject.replace("{record_id}", record.id)
+            body = body.replace("{record_id}", record.id)
+            if hasattr(record, "name") and record.name:
+                subject = subject.replace("{record_name}", record.name)
+                body = body.replace("{record_name}", record.name)
+
+        # Queue the email via Celery
+        from aexy.processing.celery_app import celery_app
+
+        celery_app.send_task(
+            "aexy.processing.email_marketing_tasks.send_workflow_email",
+            kwargs={
+                "workspace_id": workspace_id,
+                "to": email_to,
+                "subject": subject,
+                "body": body,
+                "record_id": record.id if record else None,
+            },
+            queue="email_campaigns",
+        )
+
+        return {
+            "success": True,
+            "to": email_to,
+            "subject": subject,
+            "queued": True,
+        }
 
     # =========================================================================
     # TRIGGER MATCHING

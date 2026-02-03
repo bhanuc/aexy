@@ -26,6 +26,7 @@ from aexy.schemas.email_marketing import (
     FilterCondition,
 )
 from aexy.services.template_service import TemplateService
+from aexy.services.automation_service import dispatch_automation_event
 
 logger = logging.getLogger(__name__)
 
@@ -264,6 +265,22 @@ class CampaignService:
 
         await self.db.commit()
         await self.db.refresh(campaign)
+
+        # Dispatch campaign.scheduled event for automations
+        await dispatch_automation_event(
+            db=self.db,
+            workspace_id=workspace_id,
+            module="email_marketing",
+            trigger_type="campaign.scheduled",
+            entity_id=campaign.id,
+            trigger_data={
+                "campaign_id": campaign.id,
+                "campaign_name": campaign.name,
+                "scheduled_at": scheduled_at.isoformat(),
+                "total_recipients": recipient_count,
+                "workspace_id": workspace_id,
+            },
+        )
 
         logger.info(f"Scheduled campaign {campaign_id} for {scheduled_at}")
         return campaign

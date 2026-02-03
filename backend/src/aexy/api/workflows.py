@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
 from sqlalchemy import select, and_, desc
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -109,16 +110,22 @@ async def update_workflow(
     current_user: Developer = Depends(get_current_developer),
 ):
     """Update the workflow definition for an automation."""
-    await check_workspace_permission(db, workspace_id, current_user.id, "admin")
+    # Capture values before any potential rollback (ORM objects become detached after rollback)
+    user_id = current_user.id
+
+    await check_workspace_permission(db, workspace_id, user_id, "admin")
     await check_automation_exists(db, automation_id, workspace_id)
 
     service = WorkflowService(db)
 
+    # Pre-process data to avoid accessing Pydantic models after potential rollback
+    nodes_data = [n.model_dump() for n in data.nodes] if data.nodes else None
+    edges_data = [e.model_dump(by_alias=True) for e in data.edges] if data.edges else None
+    viewport_data = data.viewport.model_dump() if data.viewport else None
+
     # Validate if nodes and edges are provided
-    if data.nodes is not None and data.edges is not None:
-        nodes = [n.model_dump() for n in data.nodes]
-        edges = [e.model_dump(by_alias=True) for e in data.edges]
-        validation = service.validate_workflow(nodes, edges)
+    if nodes_data is not None and edges_data is not None:
+        validation = service.validate_workflow(nodes_data, edges_data)
         if not validation.is_valid:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -133,24 +140,78 @@ async def update_workflow(
     if workflow:
         workflow = await service.update_workflow(
             workflow_id=workflow.id,
-            nodes=[n.model_dump() for n in data.nodes] if data.nodes else None,
-            edges=[e.model_dump(by_alias=True) for e in data.edges] if data.edges else None,
-            viewport=data.viewport.model_dump() if data.viewport else None,
-            created_by=current_user.id,
+            nodes=nodes_data,
+            edges=edges_data,
+            viewport=viewport_data,
+            created_by=user_id,
         )
     else:
-        workflow = await service.create_workflow(
-            automation_id=automation_id,
-            nodes=[n.model_dump() for n in data.nodes] if data.nodes else None,
-            edges=[e.model_dump(by_alias=True) for e in data.edges] if data.edges else None,
-            viewport=data.viewport.model_dump() if data.viewport else None,
-        )
+        try:
+            workflow = await service.create_workflow(
+                automation_id=automation_id,
+                nodes=nodes_data,
+                edges=edges_data,
+                viewport=viewport_data,
+            )
+        except IntegrityError:
+            # Race condition: workflow was created between our check and insert
+            # Rollback the failed transaction and retry as update
+            await db.rollback()
+            # Expire all cached objects to ensure we see fresh data
+            db.expire_all()
+            workflow = await service.get_workflow_by_automation(automation_id)
+            if workflow:
+                workflow = await service.update_workflow(
+                    workflow_id=workflow.id,
+                    nodes=nodes_data,
+                    edges=edges_data,
+                    viewport=viewport_data,
+                    created_by=user_id,
+                )
 
     if not workflow:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update workflow",
         )
+
+    # Sync workflow nodes to automation's actions array on save
+    # This ensures the automation executor can run the workflow actions
+    automation_service = CRMAutomationService(db)
+    automation = await automation_service.get_automation(automation_id)
+    if automation and workflow.nodes:
+        # Extract trigger config from trigger node
+        trigger_config = {}
+        for node in workflow.nodes:
+            if node.get("type") == "trigger":
+                node_data = node.get("data", {})
+                trigger_config = {
+                    k: v for k, v in node_data.items()
+                    if k not in ("label", "trigger_type")
+                }
+                break
+
+        # Convert action nodes to automation actions format
+        actions = []
+        for node in workflow.nodes:
+            if node.get("type") == "action":
+                node_data = node.get("data", {})
+                action_type = node_data.get("action_type")
+                if action_type:
+                    # Extract config (all fields except label and action_type)
+                    config = {
+                        k: v for k, v in node_data.items()
+                        if k not in ("label", "action_type")
+                    }
+                    actions.append({
+                        "type": action_type,
+                        "config": config,
+                    })
+
+        # Update automation with synced actions and trigger_config
+        automation.trigger_config = trigger_config
+        automation.actions = actions
+        await db.flush()
 
     return workflow
 
@@ -202,6 +263,44 @@ async def publish_workflow(
                 "errors": [e.model_dump() for e in validation.errors],
             },
         )
+
+    # Sync workflow nodes to automation's actions array
+    # This ensures the automation executor can run the workflow actions
+    automation_service = CRMAutomationService(db)
+    automation = await automation_service.get_automation(automation_id)
+    if automation:
+        # Extract trigger config from trigger node
+        trigger_config = {}
+        for node in workflow.nodes:
+            if node.get("type") == "trigger":
+                node_data = node.get("data", {})
+                trigger_config = {
+                    k: v for k, v in node_data.items()
+                    if k not in ("label", "trigger_type")
+                }
+                break
+
+        # Convert action nodes to automation actions format
+        actions = []
+        for node in workflow.nodes:
+            if node.get("type") == "action":
+                node_data = node.get("data", {})
+                action_type = node_data.get("action_type")
+                if action_type:
+                    # Extract config (all fields except label and action_type)
+                    config = {
+                        k: v for k, v in node_data.items()
+                        if k not in ("label", "action_type")
+                    }
+                    actions.append({
+                        "type": action_type,
+                        "config": config,
+                    })
+
+        # Update automation with synced actions and trigger_config
+        automation.trigger_config = trigger_config
+        automation.actions = actions
+        await db.flush()
 
     workflow = await service.publish_workflow(workflow.id)
     return workflow

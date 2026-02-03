@@ -512,7 +512,26 @@ export function NodeConfigPanel({
         {(actionType === "send_email") && (
           <>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Subject</label>
+              <label className="block text-sm text-slate-400 mb-1">
+                To (Recipient)
+                <span className="text-red-400 ml-1">*</span>
+              </label>
+              <input
+                type="text"
+                value={(node.data.to as string) || ""}
+                onChange={(e) => onUpdate({ to: e.target.value })}
+                placeholder="recipient@example.com or {{record.values.email}}"
+                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm"
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Enter an email address or use a field variable like {"{{record.values.email}}"}
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm text-slate-400 mb-1">
+                Subject
+                <span className="text-red-400 ml-1">*</span>
+              </label>
               <input
                 type="text"
                 value={(node.data.email_subject as string) || ""}

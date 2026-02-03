@@ -7,7 +7,7 @@ from uuid import uuid4
 from celery import shared_task
 from sqlalchemy import select, and_, func
 
-from aexy.core.database import get_sync_session
+from aexy.core.database import get_sync_session, async_session_maker
 
 from aexy.models.email_marketing import (
     EmailCampaign,
@@ -375,22 +375,21 @@ def send_campaign_email_task(self, campaign_id: str, recipient_id: str) -> dict:
             # Fallback to default email service if no domain configured or multi-domain failed
             if not send_success:
                 from aexy.services.email_service import email_service
-                import asyncio
+                from aexy.processing.tasks import run_async
 
-                # Create event loop for async email service
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-
-                try:
-                    log = loop.run_until_complete(
-                        email_service.send_templated_email(
-                            db=db,
+                async def _send_email_async():
+                    """Send email with proper async session."""
+                    async with async_session_maker() as async_db:
+                        return await email_service.send_templated_email(
+                            db=async_db,
                             recipient_email=recipient.email,
                             subject=subject,
                             body_text=text_body or "",
                             body_html=html_body,
                         )
-                    )
+
+                try:
+                    log = run_async(_send_email_async())
                     if log.status == "sent":
                         send_success = True
                         message_id = log.ses_message_id
@@ -399,8 +398,12 @@ def send_campaign_email_task(self, campaign_id: str, recipient_id: str) -> dict:
                         recipient.error_message = log.error_message
                         db.commit()
                         return {"status": "failed", "error": log.error_message}
-                finally:
-                    loop.close()
+                except Exception as e:
+                    logger.error(f"Default email service failed: {e}")
+                    recipient.status = RecipientStatus.FAILED.value
+                    recipient.error_message = str(e)
+                    db.commit()
+                    return {"status": "failed", "error": str(e)}
 
             # Update recipient status
             if send_success:
@@ -723,21 +726,21 @@ def send_workflow_email(
         # Fallback to default email service
         if not send_success:
             from aexy.services.email_service import email_service
-            import asyncio
+            from aexy.processing.tasks import run_async
 
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-            try:
-                log = loop.run_until_complete(
-                    email_service.send_templated_email(
-                        db=db,
+            async def _send_email_async():
+                """Send email with proper async session."""
+                async with async_session_maker() as async_db:
+                    return await email_service.send_templated_email(
+                        db=async_db,
                         recipient_email=to,
                         subject=subject,
                         body_text="",
                         body_html=body,
                     )
-                )
+
+            try:
+                log = run_async(_send_email_async())
                 if log.status == "sent":
                     send_success = True
                     message_id = log.ses_message_id
@@ -745,8 +748,9 @@ def send_workflow_email(
                 else:
                     logger.error(f"Workflow email failed: {log.error_message}")
                     return {"status": "failed", "error": log.error_message}
-            finally:
-                loop.close()
+            except Exception as e:
+                logger.error(f"Failed to send workflow email: {e}")
+                return {"status": "failed", "error": str(e)}
 
         if send_success:
             return {

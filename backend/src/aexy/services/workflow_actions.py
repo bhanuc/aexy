@@ -205,14 +205,16 @@ class WorkflowActionHandler:
     async def _send_email(
         self, data: dict, context: WorkflowExecutionContext
     ) -> NodeExecutionResult:
-        """Send an email via Gmail integration."""
-        from aexy.services.gmail_service import GmailService
-
+        """Send an email via the email service."""
         email_to = data.get("to")
         if not email_to:
             # Get from record
             email_field = data.get("email_field", "email")
             email_to = context.record_data.get("values", {}).get(email_field)
+
+        # Also try to render template variables in the email address
+        if email_to:
+            email_to = self._render_template(email_to, context)
 
         if not email_to:
             return NodeExecutionResult(
@@ -239,14 +241,15 @@ class WorkflowActionHandler:
         from aexy.processing.celery_app import celery_app
 
         celery_app.send_task(
-            "aexy.processing.tasks.gmail_tasks.send_email",
+            "aexy.processing.email_marketing_tasks.send_workflow_email",
             kwargs={
-                "record_id": context.record_id,
+                "workspace_id": context.workspace_id,
                 "to": email_to,
                 "subject": subject,
                 "body": body,
+                "record_id": context.record_id,
             },
-            queue="google_sync",
+            queue="email_campaigns",
         )
 
         return NodeExecutionResult(
@@ -1324,12 +1327,16 @@ class SyncWorkflowActionHandler:
         return {"status": "success", "output": {"record_id": record_id, "archived": True}}
 
     def _send_email(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
-        """Send an email via Gmail integration."""
+        """Send an email via the email service."""
         email_to = data.get("to")
         if not email_to:
             record_data = context.get("record_data", {})
             email_field = data.get("email_field", "email")
             email_to = record_data.get("values", {}).get(email_field)
+
+        # Also try to render template variables in the email address
+        if email_to:
+            email_to = self._render_template(email_to, context)
 
         if not email_to:
             return {"status": "failed", "error": "No recipient email address"}
@@ -1344,15 +1351,15 @@ class SyncWorkflowActionHandler:
         from aexy.processing.celery_app import celery_app
 
         celery_app.send_task(
-            "aexy.processing.google_sync_tasks.send_email",
+            "aexy.processing.email_marketing_tasks.send_workflow_email",
             kwargs={
                 "workspace_id": execution.workspace_id,
-                "record_id": execution.record_id,
                 "to": email_to,
                 "subject": subject,
                 "body": body,
+                "record_id": execution.record_id,
             },
-            queue="google_sync",
+            queue="email_campaigns",
         )
 
         return {
