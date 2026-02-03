@@ -12,6 +12,7 @@ from aexy.services.task_sources.base import TaskItem, TaskSourceConfig, TaskStat
 from aexy.services.task_sources.github_issues import GitHubIssuesSource
 from aexy.services.task_sources.jira import JiraSource
 from aexy.services.task_sources.linear import LinearSource
+from aexy.services.automation_service import dispatch_automation_event
 
 
 class SprintTaskService:
@@ -97,7 +98,31 @@ class SprintTaskService:
             )
         )
         result = await self.db.execute(stmt)
-        return result.scalar_one()
+        created_task = result.scalar_one()
+
+        # Dispatch task.created event for automations
+        if workspace_id:
+            await dispatch_automation_event(
+                db=self.db,
+                workspace_id=workspace_id,
+                module="sprints",
+                trigger_type="task.created",
+                entity_id=created_task.id,
+                trigger_data={
+                    "task_id": created_task.id,
+                    "task_title": created_task.title,
+                    "sprint_id": sprint_id,
+                    "status": created_task.status,
+                    "priority": created_task.priority,
+                    "assignee_id": created_task.assignee_id,
+                    "assignee_email": created_task.assignee.email if created_task.assignee else None,
+                    "epic_id": created_task.epic_id,
+                    "story_points": created_task.story_points,
+                    "workspace_id": workspace_id,
+                },
+            )
+
+        return created_task
 
     async def get_task(self, task_id: str) -> SprintTask | None:
         """Get a task by ID."""
@@ -267,7 +292,29 @@ class SprintTaskService:
         await self.db.flush()
 
         # Re-fetch with relationships loaded
-        return await self.get_task(task_id)
+        updated_task = await self.get_task(task_id)
+
+        # Dispatch task.assigned event for automations
+        if updated_task and updated_task.workspace_id:
+            await dispatch_automation_event(
+                db=self.db,
+                workspace_id=updated_task.workspace_id,
+                module="sprints",
+                trigger_type="task.assigned",
+                entity_id=updated_task.id,
+                trigger_data={
+                    "task_id": updated_task.id,
+                    "task_title": updated_task.title,
+                    "sprint_id": updated_task.sprint_id,
+                    "assignee_id": developer_id,
+                    "assignee_email": updated_task.assignee.email if updated_task.assignee else None,
+                    "assignment_reason": reason,
+                    "status": updated_task.status,
+                    "workspace_id": updated_task.workspace_id,
+                },
+            )
+
+        return updated_task
 
     async def unassign_task(self, task_id: str) -> SprintTask | None:
         """Remove assignment from a task."""
@@ -401,7 +448,43 @@ class SprintTaskService:
         await self.db.flush()
 
         # Re-fetch with relationships loaded
-        return await self.get_task(task_id)
+        updated_task = await self.get_task(task_id)
+
+        # Dispatch automation events for status changes
+        if updated_task and updated_task.workspace_id and old_status != new_status:
+            trigger_data = {
+                "task_id": updated_task.id,
+                "task_title": updated_task.title,
+                "sprint_id": updated_task.sprint_id,
+                "old_status": old_status,
+                "new_status": new_status,
+                "assignee_id": updated_task.assignee_id,
+                "assignee_email": updated_task.assignee.email if updated_task.assignee else None,
+                "workspace_id": updated_task.workspace_id,
+            }
+
+            # Dispatch task.status_changed
+            await dispatch_automation_event(
+                db=self.db,
+                workspace_id=updated_task.workspace_id,
+                module="sprints",
+                trigger_type="task.status_changed",
+                entity_id=updated_task.id,
+                trigger_data=trigger_data,
+            )
+
+            # Also dispatch task.completed if status is done
+            if new_status == "done":
+                await dispatch_automation_event(
+                    db=self.db,
+                    workspace_id=updated_task.workspace_id,
+                    module="sprints",
+                    trigger_type="task.completed",
+                    entity_id=updated_task.id,
+                    trigger_data=trigger_data,
+                )
+
+        return updated_task
 
     # Activity Logging
     async def log_activity(

@@ -35,6 +35,7 @@ from aexy.schemas.career import (
     TeamGapAnalysis,
     TeamSkillGapDetail,
 )
+from aexy.services.automation_service import dispatch_automation_event
 from aexy.services.hiring_intelligence import HiringIntelligenceService
 
 router = APIRouter(prefix="/hiring")
@@ -1040,6 +1041,26 @@ async def create_hiring_candidate(
     await db.commit()
     await db.refresh(candidate)
 
+    # Dispatch automation event
+    await dispatch_automation_event(
+        db=db,
+        workspace_id=workspace_id,
+        module="hiring",
+        trigger_type="hiring.candidate_created",
+        entity_id=str(candidate.id),
+        trigger_data={
+            "email": candidate.email,
+            "name": candidate.name,
+            "role": candidate.role,
+            "stage": candidate.stage,
+            "source": candidate.source,
+            "score": candidate.score,
+            "location": candidate.location,
+            "experience_years": candidate.experience_years,
+            "current_company": candidate.current_company,
+        },
+    )
+
     return candidate_to_response(candidate)
 
 
@@ -1137,6 +1158,25 @@ async def update_hiring_candidate(
     await db.commit()
     await db.refresh(candidate)
 
+    # Dispatch automation event
+    await dispatch_automation_event(
+        db=db,
+        workspace_id=str(candidate.workspace_id),
+        module="hiring",
+        trigger_type="hiring.candidate_updated",
+        entity_id=str(candidate.id),
+        trigger_data={
+            "email": candidate.email,
+            "name": candidate.name,
+            "role": candidate.role,
+            "stage": candidate.stage,
+            "source": candidate.source,
+            "score": candidate.score,
+            "location": candidate.location,
+            "updated_fields": list(update_data.keys()),
+        },
+    )
+
     return candidate_to_response(candidate)
 
 
@@ -1185,9 +1225,27 @@ async def update_candidate_stage(
             detail="Member permission required to update candidate stage",
         )
 
+    old_stage = candidate.stage
     candidate.stage = data.stage
     await db.commit()
     await db.refresh(candidate)
+
+    # Dispatch automation event
+    await dispatch_automation_event(
+        db=db,
+        workspace_id=str(candidate.workspace_id),
+        module="hiring",
+        trigger_type="hiring.candidate_stage_changed",
+        entity_id=str(candidate.id),
+        trigger_data={
+            "email": candidate.email,
+            "name": candidate.name,
+            "role": candidate.role,
+            "old_stage": old_stage,
+            "new_stage": data.stage,
+            "score": candidate.score,
+        },
+    )
 
     return candidate_to_response(candidate)
 
