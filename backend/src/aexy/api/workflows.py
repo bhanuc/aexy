@@ -175,6 +175,44 @@ async def update_workflow(
             detail="Failed to update workflow",
         )
 
+    # Sync workflow nodes to automation's actions array on save
+    # This ensures the automation executor can run the workflow actions
+    automation_service = CRMAutomationService(db)
+    automation = await automation_service.get_automation(automation_id)
+    if automation and workflow.nodes:
+        # Extract trigger config from trigger node
+        trigger_config = {}
+        for node in workflow.nodes:
+            if node.get("type") == "trigger":
+                node_data = node.get("data", {})
+                trigger_config = {
+                    k: v for k, v in node_data.items()
+                    if k not in ("label", "trigger_type")
+                }
+                break
+
+        # Convert action nodes to automation actions format
+        actions = []
+        for node in workflow.nodes:
+            if node.get("type") == "action":
+                node_data = node.get("data", {})
+                action_type = node_data.get("action_type")
+                if action_type:
+                    # Extract config (all fields except label and action_type)
+                    config = {
+                        k: v for k, v in node_data.items()
+                        if k not in ("label", "action_type")
+                    }
+                    actions.append({
+                        "type": action_type,
+                        "config": config,
+                    })
+
+        # Update automation with synced actions and trigger_config
+        automation.trigger_config = trigger_config
+        automation.actions = actions
+        await db.flush()
+
     return workflow
 
 

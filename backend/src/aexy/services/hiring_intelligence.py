@@ -21,6 +21,7 @@ from aexy.llm.prompts import (
 )
 from aexy.models.career import HiringRequirement
 from aexy.models.developer import Developer
+from aexy.services.automation_service import dispatch_automation_event
 from aexy.services.peer_benchmarking import PeerBenchmarkingService
 
 logger = logging.getLogger(__name__)
@@ -1087,6 +1088,24 @@ We are seeking a talented {level} {role_title} to join our engineering team. In 
         await self.db.commit()
         await self.db.refresh(requirement)
 
+        # Dispatch automation event
+        await dispatch_automation_event(
+            db=self.db,
+            workspace_id=organization_id,
+            module="hiring",
+            trigger_type="hiring.requirement_created",
+            entity_id=str(requirement.id),
+            trigger_data={
+                "role_title": requirement.role_title,
+                "priority": requirement.priority,
+                "status": requirement.status,
+                "timeline": requirement.timeline,
+                "team_id": team_id,
+                "must_have_skills": [s.get("skill", "") for s in requirement.must_have_skills or []],
+                "nice_to_have_skills": [s.get("skill", "") for s in requirement.nice_to_have_skills or []],
+            },
+        )
+
         return requirement
 
     async def get_hiring_requirement(self, requirement_id: str) -> HiringRequirement | None:
@@ -1143,6 +1162,23 @@ We are seeking a talented {level} {role_title} to join our engineering team. In 
         if not requirement:
             return False
 
+        old_status = requirement.status
         requirement.status = status
         await self.db.commit()
+
+        # Dispatch automation event
+        await dispatch_automation_event(
+            db=self.db,
+            workspace_id=str(requirement.organization_id),
+            module="hiring",
+            trigger_type="hiring.requirement_status_changed",
+            entity_id=requirement_id,
+            trigger_data={
+                "role_title": requirement.role_title,
+                "old_status": old_status,
+                "new_status": status,
+                "priority": requirement.priority,
+            },
+        )
+
         return True
