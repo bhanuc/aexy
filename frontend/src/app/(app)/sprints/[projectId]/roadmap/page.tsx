@@ -510,7 +510,7 @@ export default function RoadmapPage({
 
       if (response.ok) {
         const data = await response.json();
-        setRequests(data);
+        setRequests(Array.isArray(data.items) ? data.items : []);
       }
     } catch (error) {
       console.error("Failed to load requests:", error);
