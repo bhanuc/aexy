@@ -4,7 +4,10 @@ This service wraps CRMAutomationService with module-aware functionality,
 enabling automations across all Aexy modules (CRM, Tickets, Hiring, etc.).
 """
 
+import logging
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 from typing import Any
 from uuid import uuid4
 
@@ -213,6 +216,8 @@ class AutomationService:
         This is the main entry point for module-specific events
         (e.g., ticket.created, candidate.stage_changed).
         """
+        print(f"Processing module trigger: module={module}, trigger_type={trigger_type}, workspace_id={workspace_id}")
+
         # Find all active automations matching this module and trigger
         stmt = select(CRMAutomation).where(
             CRMAutomation.workspace_id == workspace_id,
@@ -222,6 +227,8 @@ class AutomationService:
         )
         result = await self.db.execute(stmt)
         automations = list(result.scalars().all())
+
+        print(f"Found {len(automations)} matching automation(s) for {module}.{trigger_type}")
 
         runs = []
         for automation in automations:

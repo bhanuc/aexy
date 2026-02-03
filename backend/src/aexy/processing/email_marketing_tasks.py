@@ -7,7 +7,7 @@ from uuid import uuid4
 from celery import shared_task
 from sqlalchemy import select, and_, func
 
-from aexy.core.database import get_sync_session
+from aexy.core.database import get_sync_session, async_session_maker
 
 from aexy.models.email_marketing import (
     EmailCampaign,
@@ -725,19 +725,22 @@ def send_workflow_email(
             from aexy.services.email_service import email_service
             import asyncio
 
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-            try:
-                log = loop.run_until_complete(
-                    email_service.send_templated_email(
-                        db=db,
+            async def _send_email_async():
+                """Send email with proper async session."""
+                async with async_session_maker() as async_db:
+                    return await email_service.send_templated_email(
+                        db=async_db,
                         recipient_email=to,
                         subject=subject,
                         body_text="",
                         body_html=body,
                     )
-                )
+
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            try:
+                log = loop.run_until_complete(_send_email_async())
                 if log.status == "sent":
                     send_success = True
                     message_id = log.ses_message_id

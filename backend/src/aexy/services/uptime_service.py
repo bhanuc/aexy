@@ -40,6 +40,38 @@ from aexy.services.uptime_checker import CheckResult
 logger = logging.getLogger(__name__)
 
 
+async def _dispatch_uptime_event(
+    db: AsyncSession,
+    workspace_id: str,
+    trigger_type: str,
+    entity_id: str,
+    trigger_data: dict,
+) -> None:
+    """Dispatch an uptime event to trigger automations.
+
+    This is a helper function to avoid circular imports.
+    """
+    print(f"[DISPATCH] Dispatching uptime event: {trigger_type} for entity {entity_id}")
+    logger.info(f"Dispatching uptime event: {trigger_type} for entity {entity_id} in workspace {workspace_id}")
+    try:
+        from aexy.services.automation_service import AutomationService
+
+        automation_service = AutomationService(db)
+        print(f"[DISPATCH] Calling process_module_trigger for uptime.{trigger_type}")
+        runs = await automation_service.process_module_trigger(
+            workspace_id=workspace_id,
+            module="uptime",
+            trigger_type=trigger_type,
+            entity_id=entity_id,
+            trigger_data=trigger_data,
+        )
+        print(f"[DISPATCH] Triggered {len(runs)} automation(s)")
+        print(f"Uptime event {trigger_type} triggered {len(runs)} automation(s)")
+    except Exception as e:
+        print(f"[DISPATCH ERROR] Failed: {e}")
+        print(f"Failed to dispatch uptime event {trigger_type}: {e}", exc_info=True)
+
+
 class UptimeServiceError(Exception):
     """Base exception for uptime service errors."""
     pass
@@ -92,7 +124,8 @@ class UptimeService:
             if has_slack_channel:
                 notification_channels.append(NOTIFICATION_CHANNEL_SLACK)
                 logger.info(f"Auto-added '{NOTIFICATION_CHANNEL_SLACK}' to notification_channels for new monitor in workspace {workspace_id}")
-
+        print("DATA ______ ",data)
+        print("WORKSPACE ID",workspace_id)
         monitor = UptimeMonitor(
             id=str(uuid4()),
             workspace_id=workspace_id,
@@ -127,6 +160,23 @@ class UptimeService:
         self.db.add(monitor)
         await self.db.flush()
         await self.db.refresh(monitor)
+
+        # Dispatch monitor.created event for automations
+        await _dispatch_uptime_event(
+            db=self.db,
+            workspace_id=workspace_id,
+            trigger_type="monitor.created",
+            entity_id=monitor.id,
+            trigger_data={
+                "monitor_id": monitor.id,
+                "monitor_name": monitor.name,
+                "check_type": monitor.check_type,
+                "url": monitor.url,
+                "host": monitor.host,
+                "workspace_id": workspace_id,
+            },
+        )
+
         return monitor
 
     async def get_monitor(self, monitor_id: str) -> UptimeMonitor | None:
@@ -431,6 +481,75 @@ class UptimeService:
         await self.db.refresh(check)
         if incident:
             await self.db.refresh(incident)
+
+        # Dispatch automation events based on status changes
+        base_trigger_data = {
+            "monitor_id": monitor.id,
+            "monitor_name": monitor.name,
+            "check_type": monitor.check_type,
+            "url": monitor.url,
+            "host": monitor.host,
+            "workspace_id": monitor.workspace_id,
+            "response_time_ms": check_result.response_time_ms,
+            "error_message": check_result.error_message,
+        }
+
+        if recovery_occurred:
+            # Monitor recovered - dispatch monitor.up event
+            await _dispatch_uptime_event(
+                db=self.db,
+                workspace_id=monitor.workspace_id,
+                trigger_type="monitor.up",
+                entity_id=monitor.id,
+                trigger_data={**base_trigger_data, "status": "up"},
+            )
+            # Also dispatch incident.resolved if there was an incident
+            if incident:
+                await _dispatch_uptime_event(
+                    db=self.db,
+                    workspace_id=monitor.workspace_id,
+                    trigger_type="incident.resolved",
+                    entity_id=incident.id,
+                    trigger_data={
+                        **base_trigger_data,
+                        "incident_id": incident.id,
+                        "resolved_at": incident.resolved_at.isoformat() if incident.resolved_at else None,
+                    },
+                )
+        elif is_new_incident:
+            # New incident created - dispatch both monitor.down and incident.created
+            await _dispatch_uptime_event(
+                db=self.db,
+                workspace_id=monitor.workspace_id,
+                trigger_type="monitor.down",
+                entity_id=monitor.id,
+                trigger_data={**base_trigger_data, "status": "down"},
+            )
+            if incident:
+                await _dispatch_uptime_event(
+                    db=self.db,
+                    workspace_id=monitor.workspace_id,
+                    trigger_type="incident.created",
+                    entity_id=incident.id,
+                    trigger_data={
+                        **base_trigger_data,
+                        "incident_id": incident.id,
+                        "started_at": incident.started_at.isoformat() if incident.started_at else None,
+                    },
+                )
+        elif monitor.current_status == UptimeMonitorStatus.DEGRADED.value:
+            # Monitor degraded (failures but not at threshold yet)
+            await _dispatch_uptime_event(
+                db=self.db,
+                workspace_id=monitor.workspace_id,
+                trigger_type="monitor.degraded",
+                entity_id=monitor.id,
+                trigger_data={
+                    **base_trigger_data,
+                    "status": "degraded",
+                    "consecutive_failures": monitor.consecutive_failures,
+                },
+            )
 
         return check, incident, is_new_incident
 
@@ -907,6 +1026,25 @@ This ticket was automatically closed by the uptime monitoring system.
 
         await self.db.flush()
         await self.db.refresh(incident)
+
+        # Dispatch incident.acknowledged event for automations
+        monitor = await self.get_monitor(incident.monitor_id)
+        if monitor:
+            await _dispatch_uptime_event(
+                db=self.db,
+                workspace_id=monitor.workspace_id,
+                trigger_type="incident.acknowledged",
+                entity_id=incident.id,
+                trigger_data={
+                    "incident_id": incident.id,
+                    "monitor_id": monitor.id,
+                    "monitor_name": monitor.name,
+                    "acknowledged_by_id": acknowledged_by_id,
+                    "acknowledged_at": incident.acknowledged_at.isoformat(),
+                    "workspace_id": monitor.workspace_id,
+                },
+            )
+
         return incident
 
     # ==========================================================================
