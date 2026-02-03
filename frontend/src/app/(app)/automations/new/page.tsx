@@ -20,17 +20,32 @@ const moduleLabels: Record<AutomationModule, string> = {
   booking: "Booking",
 };
 
-const defaultNodes: Node[] = [
-  {
-    id: "trigger-1",
-    type: "trigger",
-    position: { x: 250, y: 50 },
-    data: {
-      label: "Record Created",
-      trigger_type: "record_created",
+// Default trigger types per module
+const defaultTriggerTypes: Record<string, { type: string; label: string }> = {
+  crm: { type: "record.created", label: "Record Created" },
+  tickets: { type: "ticket.created", label: "Ticket Created" },
+  hiring: { type: "candidate.created", label: "Candidate Created" },
+  email_marketing: { type: "campaign.sent", label: "Campaign Sent" },
+  uptime: { type: "monitor.created", label: "Monitor Created" },
+  sprints: { type: "task.created", label: "Task Created" },
+  forms: { type: "form.submitted", label: "Form Submitted" },
+  booking: { type: "booking.created", label: "Booking Created" },
+};
+
+const getDefaultNodes = (module: string): Node[] => {
+  const trigger = defaultTriggerTypes[module] || defaultTriggerTypes.crm;
+  return [
+    {
+      id: "trigger-1",
+      type: "trigger",
+      position: { x: 250, y: 50 },
+      data: {
+        label: trigger.label,
+        trigger_type: trigger.type,
+      },
     },
-  },
-];
+  ];
+};
 
 const defaultEdges: Edge[] = [];
 
@@ -57,13 +72,15 @@ export default function NewAutomationPage() {
     setError(null);
 
     try {
+      // Use the correct default trigger type for the module
+      const defaultTrigger = defaultTriggerTypes[module] || defaultTriggerTypes.crm;
       const response = await api.post(`/workspaces/${workspaceId}/automations`, {
         name,
         description,
         module,
-        trigger_type: "record.created",
+        trigger_type: defaultTrigger.type,
         trigger_config: {},
-        actions: [{ type: "update_record", config: {}, order: 0 }],
+        actions: [], // Start with empty actions, user will add via workflow canvas
       });
       setAutomationId(response.data.id);
       return response.data.id;
@@ -82,6 +99,10 @@ export default function NewAutomationPage() {
 
       let currentAutomationId = automationId;
 
+      // Extract trigger type from the trigger node
+      const triggerNode = nodes.find((n) => n.type === "trigger");
+      const triggerType = (triggerNode?.data?.trigger_type as string) || "record.created";
+      
       // Create automation if not exists
       if (!currentAutomationId) {
         currentAutomationId = await handleCreateAutomation();
@@ -96,6 +117,14 @@ export default function NewAutomationPage() {
             nodes,
             edges,
             viewport,
+          }
+        );
+
+        // Also update the automation's trigger_type to match the trigger node
+        await api.patch(
+          `/workspaces/${workspaceId}/automations/${currentAutomationId}`,
+          {
+            trigger_type: triggerType,
           }
         );
       } catch (err: unknown) {
@@ -227,7 +256,7 @@ export default function NewAutomationPage() {
             automationId={automationId || "new"}
             workspaceId={workspaceId}
             module={module}
-            initialNodes={defaultNodes}
+            initialNodes={getDefaultNodes(module)}
             initialEdges={defaultEdges}
             onSave={handleSave}
             onPublish={handlePublish}

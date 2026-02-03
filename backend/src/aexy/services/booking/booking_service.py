@@ -18,6 +18,7 @@ from aexy.models.booking import (
     BookingAttendee,
     AttendeeStatus,
 )
+from aexy.services.automation_service import dispatch_automation_event
 
 
 class BookingServiceError(Exception):
@@ -173,6 +174,28 @@ class BookingService:
                 self.db.add(attendee)
             await self.db.flush()
 
+        # Dispatch automation event
+        await dispatch_automation_event(
+            db=self.db,
+            workspace_id=workspace_id,
+            module="booking",
+            trigger_type="booking.created",
+            entity_id=booking.id,
+            trigger_data={
+                "email": invitee_email,
+                "name": invitee_name,
+                "phone": invitee_phone,
+                "start_time": start_time.isoformat(),
+                "end_time": booking.end_time.isoformat(),
+                "timezone": timezone,
+                "status": booking.status,
+                "location": booking.location,
+                "answers": answers or {},
+                "event_type_id": event_type_id,
+                "host_id": host_id,
+            },
+        )
+
         return booking
 
     async def get_booking(self, booking_id: str) -> Booking | None:
@@ -284,6 +307,25 @@ class BookingService:
 
         await self.db.flush()
         await self.db.refresh(booking)
+
+        # Dispatch automation event
+        await dispatch_automation_event(
+            db=self.db,
+            workspace_id=booking.workspace_id,
+            module="booking",
+            trigger_type="booking.cancelled",
+            entity_id=booking.id,
+            trigger_data={
+                "email": booking.invitee_email,
+                "name": booking.invitee_name,
+                "start_time": booking.start_time.isoformat(),
+                "end_time": booking.end_time.isoformat(),
+                "status": booking.status,
+                "cancellation_reason": reason,
+                "cancelled_by": cancelled_by,
+            },
+        )
+
         return booking
 
     async def reschedule_booking(
@@ -320,6 +362,24 @@ class BookingService:
 
         await self.db.flush()
         await self.db.refresh(booking)
+
+        # Dispatch automation event
+        await dispatch_automation_event(
+            db=self.db,
+            workspace_id=booking.workspace_id,
+            module="booking",
+            trigger_type="booking.rescheduled",
+            entity_id=booking.id,
+            trigger_data={
+                "email": booking.invitee_email,
+                "name": booking.invitee_name,
+                "start_time": new_start_time.isoformat(),
+                "end_time": booking.end_time.isoformat(),
+                "timezone": timezone,
+                "status": booking.status,
+            },
+        )
+
         return booking
 
     async def mark_no_show(self, booking_id: str) -> Booking:
@@ -337,6 +397,23 @@ class BookingService:
 
         await self.db.flush()
         await self.db.refresh(booking)
+
+        # Dispatch automation event
+        await dispatch_automation_event(
+            db=self.db,
+            workspace_id=booking.workspace_id,
+            module="booking",
+            trigger_type="booking.no_show",
+            entity_id=booking.id,
+            trigger_data={
+                "email": booking.invitee_email,
+                "name": booking.invitee_name,
+                "start_time": booking.start_time.isoformat(),
+                "end_time": booking.end_time.isoformat(),
+                "status": booking.status,
+            },
+        )
+
         return booking
 
     async def complete_booking(self, booking_id: str) -> Booking:
@@ -354,6 +431,23 @@ class BookingService:
 
         await self.db.flush()
         await self.db.refresh(booking)
+
+        # Dispatch automation event
+        await dispatch_automation_event(
+            db=self.db,
+            workspace_id=booking.workspace_id,
+            module="booking",
+            trigger_type="booking.completed",
+            entity_id=booking.id,
+            trigger_data={
+                "email": booking.invitee_email,
+                "name": booking.invitee_name,
+                "start_time": booking.start_time.isoformat(),
+                "end_time": booking.end_time.isoformat(),
+                "status": booking.status,
+            },
+        )
+
         return booking
 
     async def confirm_booking(self, booking_id: str) -> Booking:
@@ -371,6 +465,24 @@ class BookingService:
 
         await self.db.flush()
         await self.db.refresh(booking)
+
+        # Dispatch automation event
+        await dispatch_automation_event(
+            db=self.db,
+            workspace_id=booking.workspace_id,
+            module="booking",
+            trigger_type="booking.confirmed",
+            entity_id=booking.id,
+            trigger_data={
+                "email": booking.invitee_email,
+                "name": booking.invitee_name,
+                "start_time": booking.start_time.isoformat(),
+                "end_time": booking.end_time.isoformat(),
+                "timezone": booking.timezone,
+                "status": booking.status,
+            },
+        )
+
         return booking
 
     async def update_meeting_link(

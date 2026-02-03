@@ -28,6 +28,7 @@ from aexy.models.crm import (
     CRMRecordRelation,
 )
 from aexy.schemas.forms import PublicFormSubmission
+from aexy.services.automation_service import dispatch_automation_event
 
 
 class FormSubmissionHandler:
@@ -174,6 +175,28 @@ class FormSubmissionHandler:
 
         await self.db.flush()
         await self.db.refresh(submission)
+
+        # Dispatch form.submitted event for automations
+        await dispatch_automation_event(
+            db=self.db,
+            workspace_id=form.workspace_id,
+            module="forms",
+            trigger_type="form.submitted",
+            entity_id=submission.id,
+            trigger_data={
+                "submission_id": submission.id,
+                "form_id": form.id,
+                "form_name": form.name,
+                "email": submission.email,
+                "name": submission.name,
+                "data": submission.data,
+                "status": submission.status,
+                "ticket_id": submission.ticket_id,
+                "crm_record_id": submission.crm_record_id,
+                "deal_id": submission.deal_id,
+                "workspace_id": form.workspace_id,
+            },
+        )
 
         return submission
 

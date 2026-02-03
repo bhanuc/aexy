@@ -27,6 +27,7 @@ from aexy.schemas.ticketing import (
     EscalationMatrixCreate,
     EscalationMatrixUpdate,
 )
+from aexy.services.automation_service import dispatch_automation_event
 
 
 class TicketService:
@@ -89,6 +90,27 @@ class TicketService:
 
         await self.db.flush()
         await self.db.refresh(ticket)
+
+        # Dispatch ticket.created event for automations
+        await dispatch_automation_event(
+            db=self.db,
+            workspace_id=workspace_id,
+            module="tickets",
+            trigger_type="ticket.created",
+            entity_id=ticket.id,
+            trigger_data={
+                "ticket_id": ticket.id,
+                "ticket_number": ticket.ticket_number,
+                "form_id": form_id,
+                "submitter_email": ticket.submitter_email,
+                "submitter_name": ticket.submitter_name,
+                "status": ticket.status,
+                "priority": ticket.priority,
+                "field_values": ticket.field_values,
+                "workspace_id": workspace_id,
+            },
+        )
+
         return ticket
 
     async def _get_next_ticket_number(self, workspace_id: str) -> int:
@@ -290,6 +312,45 @@ class TicketService:
 
         await self.db.flush()
         await self.db.refresh(ticket)
+
+        # Dispatch automation events
+        if "status" in data and data["status"] != old_status:
+            # Dispatch ticket.status_changed
+            await dispatch_automation_event(
+                db=self.db,
+                workspace_id=ticket.workspace_id,
+                module="tickets",
+                trigger_type="ticket.status_changed",
+                entity_id=ticket.id,
+                trigger_data={
+                    "ticket_id": ticket.id,
+                    "ticket_number": ticket.ticket_number,
+                    "old_status": old_status,
+                    "new_status": data["status"],
+                    "submitter_email": ticket.submitter_email,
+                    "assignee_id": ticket.assignee_id,
+                    "workspace_id": ticket.workspace_id,
+                },
+            )
+        else:
+            # Dispatch ticket.updated for other changes
+            await dispatch_automation_event(
+                db=self.db,
+                workspace_id=ticket.workspace_id,
+                module="tickets",
+                trigger_type="ticket.updated",
+                entity_id=ticket.id,
+                trigger_data={
+                    "ticket_id": ticket.id,
+                    "ticket_number": ticket.ticket_number,
+                    "status": ticket.status,
+                    "priority": ticket.priority,
+                    "submitter_email": ticket.submitter_email,
+                    "updated_fields": list(data.keys()),
+                    "workspace_id": ticket.workspace_id,
+                },
+            )
+
         return ticket
 
     async def assign_ticket(
@@ -336,6 +397,28 @@ class TicketService:
 
         await self.db.flush()
         await self.db.refresh(ticket)
+
+        # Dispatch ticket.assigned event if assignee changed
+        if assignee_id != old_assignee:
+            await dispatch_automation_event(
+                db=self.db,
+                workspace_id=ticket.workspace_id,
+                module="tickets",
+                trigger_type="ticket.assigned",
+                entity_id=ticket.id,
+                trigger_data={
+                    "ticket_id": ticket.id,
+                    "ticket_number": ticket.ticket_number,
+                    "assignee_id": assignee_id,
+                    "old_assignee_id": old_assignee,
+                    "team_id": team_id,
+                    "assigned_by_id": assigned_by_id,
+                    "submitter_email": ticket.submitter_email,
+                    "status": ticket.status,
+                    "workspace_id": ticket.workspace_id,
+                },
+            )
+
         return ticket
 
     async def delete_ticket(self, ticket_id: str) -> bool:

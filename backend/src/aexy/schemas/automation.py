@@ -246,7 +246,7 @@ class AutomationCreate(BaseModel):
     trigger_type: str  # Module-specific trigger type
     trigger_config: dict = Field(default_factory=dict)
     conditions: list[AutomationCondition] | None = None
-    actions: list[AutomationAction] = Field(..., min_length=1)
+    actions: list[AutomationAction] = Field(default_factory=list)
     error_handling: Literal["stop", "continue", "retry"] = "stop"
     run_limit_per_month: int | None = None
     is_active: bool = True
