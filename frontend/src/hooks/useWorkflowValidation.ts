@@ -75,10 +75,10 @@ const validateActionNode = (node: Node): ValidationError[] => {
         severity: "error",
       });
     }
-    if (!data.subject && !data.email_template_id) {
+    if (!data.email_subject && !data.email_template_id) {
       errors.push({
         nodeId: node.id,
-        field: "subject",
+        field: "email_subject",
         message: "Subject is required",
         severity: "error",
       });

@@ -685,22 +685,35 @@ async def _send_crm_email(
     record_id: str | None = None,
     thread_id: str | None = None,
 ) -> dict[str, Any]:
-    """Async implementation of CRM email sending."""
+    """Async implementation of CRM email sending"""
     from aexy.core.database import async_session_maker
-    from aexy.services.gmail_service import GmailService
+    from aexy.services.gmail_sync_service import GmailSyncService
+    from aexy.models.google_integration import GoogleIntegration
+    from sqlalchemy import select
 
     async with async_session_maker() as db:
-        service = GmailService(db)
+        # Get the Google integration for this workspace
+        stmt = select(GoogleIntegration).where(
+            GoogleIntegration.workspace_id == workspace_id,
+            GoogleIntegration.is_active == True,
+        )
+        result = await db.execute(stmt)
+        integration = result.scalar_one_or_none()
+
+        if not integration:
+            return {"status": "failed", "error": "No active Google integration found"}
+
+        service = GmailSyncService(db)
         result = await service.send_email(
-            developer_id=user_id,
-            to_email=to_email,
+            integration=integration,
+            to=to_email,
             subject=subject,
-            body=body,
-            thread_id=thread_id,
+            body_html=body,
+            reply_to_message_id=thread_id,
         )
 
         # Log to CRM activity if record_id provided
-        if record_id and result.get("id"):
+        if record_id and result.get("message_id"):
             from datetime import datetime, timezone
             from uuid import uuid4
             from aexy.models.crm import CRMActivity
@@ -715,8 +728,8 @@ async def _send_crm_email(
                 metadata={
                     "to": to_email,
                     "subject": subject,
-                    "gmail_message_id": result.get("id"),
-                    "thread_id": result.get("threadId"),
+                    "gmail_message_id": result.get("message_id"),
+                    "thread_id": result.get("thread_id"),
                 },
                 occurred_at=datetime.now(timezone.utc),
             )
