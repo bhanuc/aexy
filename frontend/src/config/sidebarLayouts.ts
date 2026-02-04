@@ -41,6 +41,10 @@ import {
     AlertTriangle,
     History,
     Bot,
+    ShieldCheck,
+    Bell,
+    CalendarDays,
+    UserCheck,
 } from "lucide-react";
 
 export type SidebarLayoutType = "grouped" | "flat";
@@ -129,6 +133,12 @@ const automationsItems: SidebarItemConfig[] = [
     { href: "/automations/new", label: "Create Automation", icon: UserPlus },
 ];
 
+const remindersItems: SidebarItemConfig[] = [
+    { href: "/reminders", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/reminders/calendar", label: "Calendar", icon: CalendarDays },
+    { href: "/reminders/my-reminders", label: "My Reminders", icon: UserCheck },
+];
+
 /**
  * Version 1: Grouped Layout (Role-Based)
  * Items organized by functional areas: Engineering, People, Business, Knowledge
@@ -185,6 +195,18 @@ export const GROUPED_LAYOUT: SidebarLayoutConfig = {
                     label: "Uptime",
                     icon: MonitorCheck,
                     items: uptimeItems,
+                },
+            ],
+        },
+        {
+            id: "compliance",
+            label: "Compliance",
+            items: [
+                {
+                    href: "/reminders",
+                    label: "Reminders",
+                    icon: Bell,
+                    items: remindersItems,
                 },
             ],
         },
@@ -274,6 +296,12 @@ export const FLAT_LAYOUT: SidebarLayoutConfig = {
                     label: "Uptime",
                     icon: MonitorCheck,
                     items: uptimeItems,
+                },
+                {
+                    href: "/reminders",
+                    label: "Reminders",
+                    icon: Bell,
+                    items: remindersItems,
                 },
                 {
                     href: "/reviews",

@@ -135,6 +135,8 @@ from aexy.api.booking import calendar_callback_booking_router
 from aexy.api.uptime import router as uptime_router
 # GitHub Intelligence
 from aexy.api.intelligence import router as intelligence_router
+# Recurring Reminders
+from aexy.api.reminders import router as reminders_router
 
 api_router = APIRouter()
 
@@ -276,3 +278,5 @@ api_router.include_router(calendar_callback_booking_router, tags=["booking-calen
 api_router.include_router(uptime_router, tags=["uptime"])
 # GitHub Intelligence
 api_router.include_router(intelligence_router, tags=["intelligence"])
+# Recurring Reminders
+api_router.include_router(reminders_router, tags=["reminders"])
