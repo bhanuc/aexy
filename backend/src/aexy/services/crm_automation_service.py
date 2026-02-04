@@ -313,6 +313,7 @@ class CRMAutomationService:
                         action_config,
                         record,
                         automation.workspace_id,
+                        trigger_data=run.trigger_data,
                     )
                     step_result["status"] = "success"
                     step_result["result"] = result
@@ -406,6 +407,7 @@ class CRMAutomationService:
         config: dict,
         record: CRMRecord | None,
         workspace_id: str,
+        trigger_data: dict | None = None,
     ) -> dict:
         """Execute a single automation action."""
         if action_type == "update_record":
@@ -419,13 +421,13 @@ class CRMAutomationService:
         elif action_type == "enroll_in_sequence":
             return await self._action_enroll_in_sequence(config, record)
         elif action_type == "webhook_call":
-            return await self._action_webhook_call(config, record)
+            return await self._action_webhook_call(config, record, trigger_data)
         elif action_type == "create_task":
             return await self._action_create_task(config, record, workspace_id)
         elif action_type == "send_slack":
-            return await self._action_send_slack(config, record, workspace_id)
+            return await self._action_send_slack(config, record, workspace_id, trigger_data)
         elif action_type == "send_email":
-            return await self._action_send_email(config, record, workspace_id)
+            return await self._action_send_email(config, record, workspace_id, trigger_data)
         else:
             return {"message": f"Action type {action_type} not implemented"}
 
@@ -546,6 +548,7 @@ class CRMAutomationService:
         self,
         config: dict,
         record: CRMRecord | None,
+        trigger_data: dict | None = None,
     ) -> dict:
         """Make a webhook HTTP call."""
         url = config.get("url")
@@ -560,6 +563,7 @@ class CRMAutomationService:
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "record": record.values if record else None,
             "record_id": record.id if record else None,
+            "trigger_data": trigger_data,
         }
 
         try:
@@ -599,19 +603,21 @@ class CRMAutomationService:
         config: dict,
         record: CRMRecord | None,
         workspace_id: str,
+        trigger_data: dict | None = None,
     ) -> dict:
         """Send Slack notification to a channel or DM to a user.
 
         Config options:
-        - channel: Slack channel ID (e.g., "C1234567890") for channel messages
+        - channel/channel_id: Slack channel ID (e.g., "C1234567890") for channel messages
         - user_email: Email address to send DM to (e.g., "john@company.com")
         - user_email_field: Record field containing email to send DM to (e.g., "owner_email")
-        - message: Message template with {field_name} placeholders
+        - message/message_template: Message template with {field_name} or {{trigger.field}} placeholders
         """
-        channel = config.get("channel")
+        # Support both naming conventions (workflow uses channel_id/message_template)
+        channel = config.get("channel") or config.get("channel_id")
         user_email = config.get("user_email")
         user_email_field = config.get("user_email_field")
-        message_template = config.get("message", "")
+        message_template = config.get("message") or config.get("message_template", "")
 
         # Get Slack integration for workspace
         slack_service = SlackIntegrationService()
@@ -670,8 +676,34 @@ class CRMAutomationService:
         if not target_id:
             return {"error": "No channel, user_email, or user_email_field specified for Slack notification"}
 
-        # Replace placeholders in message with record values
+        # Replace placeholders in message with values from trigger_data and record
         message = message_template
+
+        # First, replace {{trigger.field}} placeholders from trigger_data
+        if trigger_data:
+            import re
+            # Match {{trigger.field}} or {{trigger.nested.field}} patterns
+            trigger_pattern = re.compile(r"\{\{trigger\.([a-zA-Z0-9_.]+)\}\}")
+            for match in trigger_pattern.finditer(message_template):
+                field_path = match.group(1)
+                # Support nested fields like "entity.name"
+                value = trigger_data
+                for part in field_path.split("."):
+                    if isinstance(value, dict):
+                        value = value.get(part)
+                    else:
+                        value = None
+                        break
+                if value is not None:
+                    message = message.replace(match.group(0), str(value))
+
+        # Also support simple {field} placeholders from trigger_data (for backwards compatibility)
+        if trigger_data:
+            for key, value in trigger_data.items():
+                if isinstance(value, (str, int, float, bool)):
+                    message = message.replace(f"{{{key}}}", str(value))
+
+        # Replace {field} placeholders from record values
         if record:
             for key, value in record.values.items():
                 message = message.replace(f"{{{key}}}", str(value or ""))
@@ -728,14 +760,15 @@ class CRMAutomationService:
         config: dict,
         record: CRMRecord | None,
         workspace_id: str,
+        trigger_data: dict | None = None,
     ) -> dict:
         """Send an email notification.
 
         Config options:
         - to: Direct email address to send to
         - email_field: Record field containing the email address
-        - email_subject: Subject line (supports {field_name} placeholders)
-        - email_body: Email body (supports {field_name} placeholders)
+        - email_subject: Subject line (supports {field_name} and {{trigger.field}} placeholders)
+        - email_body: Email body (supports {field_name} and {{trigger.field}} placeholders)
         """
         email_to = config.get("to")
 
@@ -749,6 +782,30 @@ class CRMAutomationService:
 
         subject = config.get("email_subject", "")
         body = config.get("email_body", "")
+
+        # Replace {{trigger.field}} placeholders from trigger_data
+        if trigger_data:
+            import re
+            trigger_pattern = re.compile(r"\{\{trigger\.([a-zA-Z0-9_.]+)\}\}")
+            for template in [subject, body]:
+                for match in trigger_pattern.finditer(template):
+                    field_path = match.group(1)
+                    value = trigger_data
+                    for part in field_path.split("."):
+                        if isinstance(value, dict):
+                            value = value.get(part)
+                        else:
+                            value = None
+                            break
+                    if value is not None:
+                        subject = subject.replace(match.group(0), str(value))
+                        body = body.replace(match.group(0), str(value))
+
+            # Also support simple {field} from trigger_data
+            for key, value in trigger_data.items():
+                if isinstance(value, (str, int, float, bool)):
+                    subject = subject.replace(f"{{{key}}}", str(value))
+                    body = body.replace(f"{{{key}}}", str(value))
 
         # Replace placeholders in subject and body with record values
         if record:

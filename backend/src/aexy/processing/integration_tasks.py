@@ -230,10 +230,14 @@ async def _send_slack_workflow_message(
 
     async with async_session_maker() as db:
         # Get Slack integration for workspace
+        # Note: get_integration_by_workspace checks both workspace_id and organization_id fields
         slack_service = SlackIntegrationService()
+        logger.info(f"Looking up Slack integration for workspace: {workspace_id}")
+
         integration = await slack_service.get_integration_by_workspace(workspace_id, db)
 
         if not integration:
+            logger.warning(f"No Slack integration found for workspace {workspace_id}")
             return {"success": False, "error": "No Slack integration found for workspace"}
 
         # Determine the channel/user ID to send to

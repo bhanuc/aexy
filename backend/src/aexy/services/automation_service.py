@@ -277,7 +277,7 @@ class AutomationService:
         This is the main entry point for module-specific events
         (e.g., ticket.created, candidate.stage_changed).
         """
-        print(f"Processing module trigger: module={module}, trigger_type={trigger_type}, workspace_id={workspace_id}")
+        print(f"[TRIGGER] Processing: module={module}, trigger_type={trigger_type}, workspace={workspace_id}")
 
         # Find all active automations matching this module and trigger
         stmt = select(CRMAutomation).where(
@@ -289,7 +289,9 @@ class AutomationService:
         result = await self.db.execute(stmt)
         automations = list(result.scalars().all())
 
-        print(f"Found {len(automations)} matching automation(s) for {module}.{trigger_type}")
+        print(f"[TRIGGER] Found {len(automations)} automation(s) for {module}.{trigger_type}")
+        for auto in automations:
+            print(f"[TRIGGER]   - {auto.id}: '{auto.name}' (actions={len(auto.actions or [])})")
 
         runs = []
         for automation in automations:
@@ -300,18 +302,26 @@ class AutomationService:
                     # For tickets, might be ticket form ID
                     # For hiring, might be requirement ID
                     if automation.object_id != entity_id:
+                        print(f"[TRIGGER] Skipping {automation.id}: object_id mismatch ({automation.object_id} != {entity_id})")
                         continue
 
+                print(f"[TRIGGER] Triggering automation: {automation.id} '{automation.name}'")
                 run = await self.trigger_automation(
                     automation_id=automation.id,
                     record_id=entity_id,
                     trigger_data=trigger_data,
                 )
                 runs.append(run)
-            except ValueError:
+                print(f"[TRIGGER] Successfully triggered: {automation.id}, run_id={run.id}")
+            except ValueError as e:
                 # Skip if automation can't run (limit exceeded, etc.)
+                print(f"[TRIGGER] Skipping {automation.id}: {e}")
+                continue
+            except Exception as e:
+                print(f"[TRIGGER] Error triggering {automation.id}: {e}")
                 continue
 
+        print(f"[TRIGGER] Total runs created: {len(runs)}")
         return runs
 
     # =========================================================================
