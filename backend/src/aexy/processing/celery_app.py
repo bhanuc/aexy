@@ -23,6 +23,7 @@ celery_app = Celery(
         "aexy.processing.reputation_tasks",
         "aexy.processing.booking_tasks",
         "aexy.processing.uptime_tasks",
+        "aexy.processing.reminder_tasks",
     ],
 )
 
@@ -74,6 +75,7 @@ celery_app.conf.update(
         "aexy.processing.reputation_tasks.*": {"queue": "email_reputation"},
         "aexy.processing.booking_tasks.*": {"queue": "booking"},
         "aexy.processing.uptime_tasks.*": {"queue": "uptime"},
+        "aexy.processing.reminder_tasks.*": {"queue": "reminders"},
     },
 
     # Retry settings
@@ -208,6 +210,31 @@ celery_app.conf.update(
         "check-gmail-auto-sync": {
             "task": "aexy.processing.google_sync_tasks.check_auto_sync_integrations",
             "schedule": 60,  # Every minute - checks which integrations need syncing
+        },
+        # Recurring Reminders
+        "reminder-generate-instances": {
+            "task": "aexy.processing.reminder_tasks.generate_reminder_instances",
+            "schedule": 3600 * 24,  # Daily at midnight
+        },
+        "reminder-process-escalations": {
+            "task": "aexy.processing.reminder_tasks.process_escalations",
+            "schedule": 7200,  # Every 2 hours
+        },
+        "reminder-send-daily-digest": {
+            "task": "aexy.processing.reminder_tasks.send_daily_digest",
+            "schedule": 3600 * 24,  # Daily (8 AM handled in task)
+        },
+        "reminder-flag-overdue": {
+            "task": "aexy.processing.reminder_tasks.flag_overdue_reminders",
+            "schedule": 3600,  # Hourly
+        },
+        "reminder-check-evidence-freshness": {
+            "task": "aexy.processing.reminder_tasks.check_evidence_freshness",
+            "schedule": 3600 * 24,  # Daily at 2 AM (handled in task)
+        },
+        "reminder-weekly-slack-summary": {
+            "task": "aexy.processing.reminder_tasks.send_weekly_slack_summary",
+            "schedule": 3600 * 24 * 7,  # Weekly (Monday 9 AM handled in task)
         },
     },
 )

@@ -382,6 +382,22 @@ from aexy.models.roadmap_voting import (
     RoadmapVote,
     RoadmapComment,
 )
+from aexy.models.reminder import (
+    Reminder,
+    ReminderInstance,
+    ReminderEscalation,
+    ControlOwner,
+    DomainTeamMapping,
+    AssignmentRule,
+    ReminderSuggestion,
+    ReminderStatus,
+    ReminderPriority,
+    ReminderFrequency,
+    InstanceStatus,
+    ReminderEscalationLevel,
+    AssignmentStrategy,
+    ReminderCategory,
+)
 
 __all__ = [
     # Plan
@@ -757,4 +773,19 @@ __all__ = [
     "RoadmapRequest",
     "RoadmapVote",
     "RoadmapComment",
+    # Reminders
+    "Reminder",
+    "ReminderInstance",
+    "ReminderEscalation",
+    "ControlOwner",
+    "DomainTeamMapping",
+    "AssignmentRule",
+    "ReminderSuggestion",
+    "ReminderStatus",
+    "ReminderPriority",
+    "ReminderFrequency",
+    "InstanceStatus",
+    "ReminderEscalationLevel",
+    "AssignmentStrategy",
+    "ReminderCategory",
 ]

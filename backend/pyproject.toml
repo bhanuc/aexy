@@ -43,6 +43,7 @@ dependencies = [
     "flower>=2.0.0",
     # Scheduling
     "apscheduler>=3.10.0",
+    "croniter>=2.0.0",
     # Payments
     "stripe>=7.0.0",
     # JWT for GitHub App
