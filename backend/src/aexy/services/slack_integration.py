@@ -9,7 +9,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import select, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aexy.core.config import settings
@@ -178,11 +178,16 @@ class SlackIntegrationService:
     async def get_integration_by_workspace(
         self, workspace_id: str, db: AsyncSession
     ) -> SlackIntegration | None:
-        """Get integration by workspace ID."""
+        """Get integration by workspace ID or organization ID."""
         result = await db.execute(
             select(SlackIntegration).where(
-                SlackIntegration.workspace_id == workspace_id,
-                SlackIntegration.is_active == True,
+                and_(
+                    or_(
+                        SlackIntegration.workspace_id == workspace_id,
+                        SlackIntegration.organization_id == workspace_id,
+                    ),
+                    SlackIntegration.is_active == True,
+                )
             )
         )
         return result.scalar_one_or_none()

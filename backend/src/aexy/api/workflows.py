@@ -180,11 +180,13 @@ async def update_workflow(
     automation_service = CRMAutomationService(db)
     automation = await automation_service.get_automation(automation_id)
     if automation and workflow.nodes:
-        # Extract trigger config from trigger node
+        # Extract trigger type and config from trigger node
+        trigger_type = None
         trigger_config = {}
         for node in workflow.nodes:
             if node.get("type") == "trigger":
                 node_data = node.get("data", {})
+                trigger_type = node_data.get("trigger_type")
                 trigger_config = {
                     k: v for k, v in node_data.items()
                     if k not in ("label", "trigger_type")
@@ -208,7 +210,9 @@ async def update_workflow(
                         "config": config,
                     })
 
-        # Update automation with synced actions and trigger_config
+        # Update automation with synced trigger_type, trigger_config, and actions
+        if trigger_type:
+            automation.trigger_type = trigger_type
         automation.trigger_config = trigger_config
         automation.actions = actions
         await db.flush()
