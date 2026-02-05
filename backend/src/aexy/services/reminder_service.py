@@ -592,6 +592,17 @@ class ReminderService:
         """
         now = after or datetime.now(timezone.utc)
 
+        # Ensure start_date is timezone-aware for comparison
+        if start_date.tzinfo is None:
+            # If start_date is naive, localize it to the specified timezone
+            try:
+                import pytz
+                tz = pytz.timezone(timezone_str) if timezone_str else pytz.UTC
+                start_date = tz.localize(start_date)
+            except Exception:
+                # Fallback: assume UTC if timezone parsing fails
+                start_date = start_date.replace(tzinfo=timezone.utc)
+
         # If start date is in the future, that's the first occurrence
         if start_date > now:
             return start_date
