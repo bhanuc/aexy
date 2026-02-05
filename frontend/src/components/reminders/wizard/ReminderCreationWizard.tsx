@@ -15,6 +15,7 @@ import {
   ReminderCreate,
 } from "@/lib/api";
 import { format } from "date-fns";
+import { useWorkspaceMembers } from "@/hooks/useWorkspace";
 
 const WIZARD_STEPS: WizardStep[] = [
   { id: "basic", title: "Basic Info", description: "Title & category" },
@@ -36,7 +37,8 @@ export function ReminderCreationWizard({
 }: ReminderCreationWizardProps) {
   const router = useRouter();
   const { createReminder, isCreating } = useReminders(workspaceId);
-  const { teams, members } = useTeams(workspaceId);
+  const { teams } = useTeams(workspaceId);
+  const {members} = useWorkspaceMembers(workspaceId)
   const [currentStep, setCurrentStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
@@ -188,10 +190,10 @@ export function ReminderCreationWizard({
             setDefaultTeamId={setDefaultTeamId}
             requiresAcknowledgment={requiresAcknowledgment}
             setRequiresAcknowledgment={setRequiresAcknowledgment}
-            teamMembers={(members || []).map((m: any) => ({
+            teamMembers={(members || []).map((m) => ({
               id: m.developer_id,
-              name: m.developer?.name || m.developer?.email || "Unknown",
-              email: m.developer?.email || "",
+              name: m.developer_name || m.developer_email || "Unknown",
+              email: m.developer_email || "",
             }))}
             teams={(teams || []).map((t: any) => ({
               id: t.id,
@@ -212,7 +214,7 @@ export function ReminderCreationWizard({
             endDate={endDate}
             timezone={timezone}
             assignmentStrategy={assignmentStrategy}
-            defaultOwnerName={defaultOwner?.developer?.name || defaultOwner?.developer?.email || ""}
+            defaultOwnerName={defaultOwner?.developer_name || defaultOwner?.developer_email || ""}
             defaultTeamName={defaultTeam?.name || ""}
             requiresAcknowledgment={requiresAcknowledgment}
             onEdit={handleGoToStep}
