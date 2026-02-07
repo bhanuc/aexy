@@ -134,7 +134,7 @@ export function ReminderCreationWizard({
       if (onSuccess) {
         onSuccess(newReminder.id);
       } else {
-        router.push(`/reminders/${newReminder.id}`);
+        router.push(`/compliance/reminders/${newReminder.id}`);
       }
     } catch (err: any) {
       setError(err.response?.data?.detail || "Failed to create reminder");
@@ -145,7 +145,7 @@ export function ReminderCreationWizard({
     if (onClose) {
       onClose();
     } else {
-      router.push("/reminders");
+      router.push("/compliance/reminders");
     }
   };
 

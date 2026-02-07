@@ -19,8 +19,8 @@ export default function NewReminderPage() {
   return (
     <ReminderCreationWizard
       workspaceId={currentWorkspace.id}
-      onClose={() => router.push("/reminders")}
-      onSuccess={(reminderId) => router.push(`/reminders/${reminderId}`)}
+      onClose={() => router.push("/compliance/reminders")}
+      onSuccess={(reminderId) => router.push(`/compliance/reminders/${reminderId}`)}
     />
   );
 }

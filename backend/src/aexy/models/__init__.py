@@ -388,6 +388,15 @@ from aexy.models.questionnaire import (
     QuestionnaireStatus,
     ResponseType,
 )
+from aexy.models.compliance_document import (
+    ComplianceFolder,
+    ComplianceDocument,
+    ComplianceDocumentTag,
+    ComplianceDocumentLink,
+    ComplianceDocumentStatus,
+    ComplianceEntityType,
+    ComplianceDocumentLinkType,
+)
 from aexy.models.reminder import (
     Reminder,
     ReminderInstance,
@@ -784,6 +793,14 @@ __all__ = [
     "QuestionnaireQuestion",
     "QuestionnaireStatus",
     "ResponseType",
+    # Compliance Documents
+    "ComplianceFolder",
+    "ComplianceDocument",
+    "ComplianceDocumentTag",
+    "ComplianceDocumentLink",
+    "ComplianceDocumentStatus",
+    "ComplianceEntityType",
+    "ComplianceDocumentLinkType",
     # Reminders
     "Reminder",
     "ReminderInstance",

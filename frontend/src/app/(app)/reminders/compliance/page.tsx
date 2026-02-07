@@ -145,7 +145,7 @@ function QuestionnaireListView({
           </p>
         </div>
         <Link
-          href="/reminders/import"
+          href="/compliance/reminders/import"
           className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 flex items-center gap-2"
         >
           <Upload className="h-4 w-4" />
@@ -208,7 +208,7 @@ function QuestionnaireListView({
             Import a compliance questionnaire to get started with automated tracking
           </p>
           <Link
-            href="/reminders/import"
+            href="/compliance/reminders/import"
             className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
           >
             <Upload className="h-4 w-4" />
@@ -721,7 +721,7 @@ function SuggestionsList({
                 </div>
                 {s.reminder_id && (
                   <Link
-                    href={`/reminders/${s.reminder_id}`}
+                    href={`/compliance/reminders/${s.reminder_id}`}
                     className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 flex-shrink-0 ml-3"
                   >
                     View Reminder

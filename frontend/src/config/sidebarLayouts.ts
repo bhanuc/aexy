@@ -134,11 +134,14 @@ const automationsItems: SidebarItemConfig[] = [
     { href: "/automations/new", label: "Create Automation", icon: UserPlus },
 ];
 
-const remindersItems: SidebarItemConfig[] = [
-    { href: "/reminders", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/reminders/compliance", label: "Compliance Center", icon: FileSearch },
-    { href: "/reminders/calendar", label: "Calendar", icon: CalendarDays },
-    { href: "/reminders/my-reminders", label: "My Reminders", icon: UserCheck },
+const complianceItems: SidebarItemConfig[] = [
+    { href: "/compliance", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/compliance/reminders", label: "Reminders", icon: Bell },
+    { href: "/compliance/documents", label: "Documents", icon: FileStack },
+    { href: "/compliance/reminders/compliance", label: "Questionnaires", icon: FileSearch },
+    { href: "/compliance/training", label: "Training", icon: GraduationCap },
+    { href: "/compliance/certifications", label: "Certifications", icon: ShieldCheck },
+    { href: "/compliance/calendar", label: "Calendar", icon: CalendarDays },
 ];
 
 /**
@@ -205,10 +208,10 @@ export const GROUPED_LAYOUT: SidebarLayoutConfig = {
             label: "Compliance",
             items: [
                 {
-                    href: "/reminders",
-                    label: "Reminders",
-                    icon: Bell,
-                    items: remindersItems,
+                    href: "/compliance",
+                    label: "Compliance",
+                    icon: ShieldCheck,
+                    items: complianceItems,
                 },
             ],
         },
@@ -300,10 +303,10 @@ export const FLAT_LAYOUT: SidebarLayoutConfig = {
                     items: uptimeItems,
                 },
                 {
-                    href: "/reminders",
-                    label: "Reminders",
-                    icon: Bell,
-                    items: remindersItems,
+                    href: "/compliance",
+                    label: "Compliance",
+                    icon: ShieldCheck,
+                    items: complianceItems,
                 },
                 {
                     href: "/reviews",

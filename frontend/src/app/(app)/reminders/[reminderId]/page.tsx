@@ -91,7 +91,7 @@ export default function ReminderDetailPage() {
     return (
       <div className="p-6 max-w-4xl mx-auto">
         <Link
-          href="/reminders"
+          href="/compliance/reminders"
           className="inline-flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 mb-4"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -117,14 +117,14 @@ export default function ReminderDetailPage() {
 
   const handleDelete = async () => {
     await deleteReminder();
-    router.push("/reminders");
+    router.push("/compliance/reminders");
   };
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
       {/* Back link */}
       <Link
-        href="/reminders"
+        href="/compliance/reminders"
         className="inline-flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 mb-4"
       >
         <ArrowLeft className="h-4 w-4" />

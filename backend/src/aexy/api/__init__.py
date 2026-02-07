@@ -139,6 +139,9 @@ from aexy.api.intelligence import router as intelligence_router
 from aexy.api.reminders import router as reminders_router
 # Questionnaire Import
 from aexy.api.questionnaires import router as questionnaires_router
+# Compliance Document Center
+from aexy.api.compliance_documents import router as compliance_documents_router
+from aexy.api.compliance_documents import folder_router as compliance_folders_router
 
 api_router = APIRouter()
 
@@ -284,3 +287,6 @@ api_router.include_router(intelligence_router, tags=["intelligence"])
 api_router.include_router(reminders_router, tags=["reminders"])
 # Questionnaire Import
 api_router.include_router(questionnaires_router, tags=["questionnaires"])
+# Compliance Document Center
+api_router.include_router(compliance_documents_router, tags=["compliance-documents"])
+api_router.include_router(compliance_folders_router, tags=["compliance-folders"])
