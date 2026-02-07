@@ -313,7 +313,7 @@ function EmptyState() {
         Create your first reminder to see it on the calendar.
       </p>
       <Link
-        href="/reminders/new"
+        href="/compliance/reminders/new"
         className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
       >
         <Plus className="h-4 w-4" />
@@ -367,7 +367,7 @@ export default function RemindersCalendarPage() {
   };
 
   const handleEventClick = (event: ReminderCalendarEvent) => {
-    router.push(`/reminders/${event.reminder_id}`);
+    router.push(`/compliance/reminders/${event.reminder_id}`);
   };
 
   const monthName = currentDate.toLocaleDateString("en-US", {
@@ -402,7 +402,7 @@ export default function RemindersCalendarPage() {
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link
-              href="/reminders"
+              href="/compliance/reminders"
               className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -415,7 +415,7 @@ export default function RemindersCalendarPage() {
           </div>
           <div className="flex items-center gap-3">
             <Link
-              href="/reminders/new"
+              href="/compliance/reminders/new"
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
             >
               <Plus className="w-4 h-4" />

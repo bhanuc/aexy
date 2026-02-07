@@ -16054,3 +16054,349 @@ export const questionnairesApi = {
     );
   },
 };
+
+// ==========================================
+// Compliance Document Center
+// ==========================================
+
+export type ComplianceDocumentStatus = "active" | "archived" | "deleted";
+export type ComplianceEntityType = "reminder" | "reminder_instance" | "certification" | "training" | "control";
+export type ComplianceLinkType = "evidence" | "reference" | "attachment";
+
+export interface ComplianceFolder {
+  id: string;
+  workspace_id: string;
+  parent_id: string | null;
+  name: string;
+  description: string | null;
+  path: string;
+  depth: number;
+  sort_order: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ComplianceFolderTreeNode {
+  id: string;
+  name: string;
+  description: string | null;
+  parent_id: string | null;
+  depth: number;
+  sort_order: number;
+  children: ComplianceFolderTreeNode[];
+  document_count: number;
+}
+
+export interface ComplianceDocument {
+  id: string;
+  workspace_id: string;
+  folder_id: string | null;
+  name: string;
+  description: string | null;
+  file_key: string;
+  file_size: number;
+  mime_type: string;
+  status: ComplianceDocumentStatus;
+  version: number;
+  uploaded_by: string | null;
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+  tags: string[];
+  download_url: string | null;
+}
+
+export interface ComplianceDocumentListResponse {
+  items: ComplianceDocument[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface ComplianceDocumentLink {
+  id: string;
+  document_id: string;
+  entity_type: string;
+  entity_id: string;
+  link_type: string;
+  notes: string | null;
+  linked_by: string | null;
+  created_at: string;
+}
+
+export interface ComplianceEntityDocumentsResponse {
+  documents: ComplianceDocument[];
+  links: ComplianceDocumentLink[];
+}
+
+export interface ComplianceUploadUrlResponse {
+  presigned_url: string;
+  file_key: string;
+  expires_in: number;
+}
+
+export interface ComplianceDocumentCreate {
+  name: string;
+  description?: string;
+  folder_id?: string;
+  file_key: string;
+  file_size: number;
+  mime_type: string;
+  tags?: string[];
+}
+
+export interface ComplianceDocumentUpdate {
+  name?: string;
+  description?: string;
+  folder_id?: string;
+}
+
+export interface ComplianceFolderCreate {
+  name: string;
+  description?: string;
+  parent_id?: string;
+}
+
+export interface ComplianceFolderUpdate {
+  name?: string;
+  description?: string;
+  sort_order?: number;
+}
+
+export const complianceDocumentsApi = {
+  // Upload URL
+  getUploadUrl: async (
+    workspaceId: string,
+    data: { filename: string; content_type: string; file_size: number }
+  ): Promise<ComplianceUploadUrlResponse> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/compliance/documents/upload-url`,
+      data
+    );
+    return response.data;
+  },
+
+  // Direct upload (file goes through backend, no presigned URL needed)
+  uploadDirect: async (
+    workspaceId: string,
+    file: File,
+    metadata: { name?: string; description?: string; folder_id?: string; tags?: string[] }
+  ): Promise<ComplianceDocument> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    if (metadata.name) formData.append("name", metadata.name);
+    if (metadata.description) formData.append("description", metadata.description);
+    if (metadata.folder_id) formData.append("folder_id", metadata.folder_id);
+    if (metadata.tags && metadata.tags.length > 0) formData.append("tags", metadata.tags.join(","));
+    const response = await api.post(
+      `/workspaces/${workspaceId}/compliance/documents/upload`,
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } }
+    );
+    return response.data;
+  },
+
+  // Document CRUD
+  list: async (
+    workspaceId: string,
+    params?: {
+      folder_id?: string;
+      status?: ComplianceDocumentStatus;
+      mime_type?: string;
+      tags?: string;
+      search?: string;
+      uploaded_by?: string;
+      page?: number;
+      page_size?: number;
+      sort_by?: string;
+      sort_order?: string;
+    }
+  ): Promise<ComplianceDocumentListResponse> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/compliance/documents`,
+      { params }
+    );
+    return response.data;
+  },
+
+  get: async (workspaceId: string, documentId: string): Promise<ComplianceDocument> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/compliance/documents/${documentId}`
+    );
+    return response.data;
+  },
+
+  create: async (workspaceId: string, data: ComplianceDocumentCreate): Promise<ComplianceDocument> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/compliance/documents`,
+      data
+    );
+    return response.data;
+  },
+
+  update: async (
+    workspaceId: string,
+    documentId: string,
+    data: ComplianceDocumentUpdate
+  ): Promise<ComplianceDocument> => {
+    const response = await api.patch(
+      `/workspaces/${workspaceId}/compliance/documents/${documentId}`,
+      data
+    );
+    return response.data;
+  },
+
+  move: async (
+    workspaceId: string,
+    documentId: string,
+    folderId: string | null
+  ): Promise<ComplianceDocument> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/compliance/documents/${documentId}/move`,
+      { folder_id: folderId }
+    );
+    return response.data;
+  },
+
+  archive: async (workspaceId: string, documentId: string): Promise<ComplianceDocument> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/compliance/documents/${documentId}/archive`
+    );
+    return response.data;
+  },
+
+  delete: async (workspaceId: string, documentId: string): Promise<void> => {
+    await api.delete(
+      `/workspaces/${workspaceId}/compliance/documents/${documentId}`
+    );
+  },
+
+  // Tags
+  addTags: async (
+    workspaceId: string,
+    documentId: string,
+    tags: string[]
+  ): Promise<{ tags: string[] }> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/compliance/documents/${documentId}/tags`,
+      { tags }
+    );
+    return response.data;
+  },
+
+  removeTag: async (
+    workspaceId: string,
+    documentId: string,
+    tag: string
+  ): Promise<void> => {
+    await api.delete(
+      `/workspaces/${workspaceId}/compliance/documents/${documentId}/tags/${encodeURIComponent(tag)}`
+    );
+  },
+
+  listWorkspaceTags: async (workspaceId: string): Promise<{ tags: string[] }> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/compliance/documents/tags/all`
+    );
+    return response.data;
+  },
+
+  // Links
+  linkDocument: async (
+    workspaceId: string,
+    documentId: string,
+    data: {
+      entity_type: ComplianceEntityType;
+      entity_id: string;
+      link_type?: ComplianceLinkType;
+      notes?: string;
+    }
+  ): Promise<ComplianceDocumentLink> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/compliance/documents/${documentId}/links`,
+      data
+    );
+    return response.data;
+  },
+
+  getDocumentLinks: async (
+    workspaceId: string,
+    documentId: string
+  ): Promise<ComplianceDocumentLink[]> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/compliance/documents/${documentId}/links`
+    );
+    return response.data;
+  },
+
+  unlinkDocument: async (
+    workspaceId: string,
+    documentId: string,
+    linkId: string
+  ): Promise<void> => {
+    await api.delete(
+      `/workspaces/${workspaceId}/compliance/documents/${documentId}/links/${linkId}`
+    );
+  },
+
+  getEntityDocuments: async (
+    workspaceId: string,
+    entityType: ComplianceEntityType,
+    entityId: string
+  ): Promise<ComplianceEntityDocumentsResponse> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/compliance/documents/by-entity/${entityType}/${entityId}`
+    );
+    return response.data;
+  },
+};
+
+export const complianceFoldersApi = {
+  list: async (workspaceId: string): Promise<ComplianceFolder[]> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/compliance/folders`
+    );
+    return response.data;
+  },
+
+  get: async (workspaceId: string, folderId: string): Promise<ComplianceFolder> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/compliance/folders/${folderId}`
+    );
+    return response.data;
+  },
+
+  getTree: async (workspaceId: string): Promise<ComplianceFolderTreeNode[]> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/compliance/folders/tree`
+    );
+    return response.data;
+  },
+
+  create: async (workspaceId: string, data: ComplianceFolderCreate): Promise<ComplianceFolder> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/compliance/folders`,
+      data
+    );
+    return response.data;
+  },
+
+  update: async (
+    workspaceId: string,
+    folderId: string,
+    data: ComplianceFolderUpdate
+  ): Promise<ComplianceFolder> => {
+    const response = await api.patch(
+      `/workspaces/${workspaceId}/compliance/folders/${folderId}`,
+      data
+    );
+    return response.data;
+  },
+
+  delete: async (workspaceId: string, folderId: string): Promise<void> => {
+    await api.delete(
+      `/workspaces/${workspaceId}/compliance/folders/${folderId}`
+    );
+  },
+};

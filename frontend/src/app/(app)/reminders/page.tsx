@@ -62,28 +62,28 @@ export default function RemindersPage() {
         </div>
         <div className="flex gap-3">
           <Link
-            href="/reminders/calendar"
+            href="/compliance/reminders/calendar"
             className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
           >
             <Calendar className="h-4 w-4" />
             Calendar
           </Link>
           <Link
-            href="/reminders/compliance"
+            href="/compliance/reminders/compliance"
             className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
           >
             <FileSearch className="h-4 w-4" />
             Compliance Center
           </Link>
           <Link
-            href="/reminders/import"
+            href="/compliance/reminders/import"
             className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
           >
             <Upload className="h-4 w-4" />
             Import Questionnaire
           </Link>
           <Link
-            href="/reminders/new"
+            href="/compliance/reminders/new"
             className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 flex items-center gap-2"
           >
             <Plus className="h-4 w-4" />
@@ -109,7 +109,7 @@ export default function RemindersPage() {
             <span>Pending</span>
           </div>
           <div className="text-2xl font-bold text-amber-600 mt-1">
-            {stats?.total_pending_instances || 0}
+            {stats?.pending_instances || 0}
           </div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-red-200 dark:border-red-900/50 p-4">
@@ -118,7 +118,7 @@ export default function RemindersPage() {
             <span>Overdue</span>
           </div>
           <div className="text-2xl font-bold text-red-600 mt-1">
-            {stats?.total_overdue_instances || 0}
+            {stats?.overdue_instances || 0}
           </div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
@@ -157,7 +157,7 @@ export default function RemindersPage() {
                 ))}
                 {overdue.length > 3 && (
                   <Link
-                    href="/reminders?filter=overdue"
+                    href="/compliance/reminders?filter=overdue"
                     className="block text-center text-sm text-red-600 hover:text-red-700 py-2"
                   >
                     View all {overdue.length} overdue items
@@ -174,7 +174,7 @@ export default function RemindersPage() {
                 Assigned to Me
               </h2>
               <Link
-                href="/reminders/my-reminders"
+                href="/compliance/reminders/my-reminders"
                 className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1"
               >
                 View all <ChevronRight className="h-4 w-4" />
@@ -212,7 +212,7 @@ export default function RemindersPage() {
                 Active Reminders
               </h2>
               <Link
-                href="/reminders/all"
+                href="/compliance/reminders/all"
                 className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1"
               >
                 View all <ChevronRight className="h-4 w-4" />
@@ -229,7 +229,7 @@ export default function RemindersPage() {
                   Create your first reminder to start tracking compliance tasks
                 </p>
                 <Link
-                  href="/reminders/new"
+                  href="/compliance/reminders/new"
                   className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
                 >
                   <Plus className="h-4 w-4" />
@@ -244,7 +244,7 @@ export default function RemindersPage() {
                     reminder={reminder}
                     showActions={false}
                     onClick={() => {
-                      window.location.href = `/reminders/${reminder.id}`;
+                      window.location.href = `/compliance/reminders/${reminder.id}`;
                     }}
                   />
                 ))}
@@ -325,7 +325,7 @@ export default function RemindersPage() {
             </h3>
             <div className="space-y-2">
               <Link
-                href="/reminders/calendar"
+                href="/compliance/reminders/calendar"
                 className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
               >
                 <Calendar className="h-4 w-4" />

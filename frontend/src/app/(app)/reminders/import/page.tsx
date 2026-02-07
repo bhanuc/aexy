@@ -133,7 +133,7 @@ export default function ImportQuestionnairePage() {
       {/* Header */}
       <div className="mb-8">
         <Link
-          href="/reminders"
+          href="/compliance/reminders"
           className="inline-flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 mb-4"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -392,7 +392,7 @@ export default function ImportQuestionnairePage() {
                 {suggestions.filter((s) => s.status === "rejected").length} rejected
               </p>
               <Link
-                href="/reminders"
+                href="/compliance/reminders"
                 className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
               >
                 View Reminders
@@ -425,7 +425,7 @@ export default function ImportQuestionnairePage() {
           {/* Back link */}
           <div className="pt-4">
             <Link
-              href="/reminders"
+              href="/compliance/reminders"
               className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
             >
               &larr; Back to Reminders
@@ -437,7 +437,7 @@ export default function ImportQuestionnairePage() {
       {questionnaires.length > 0 && (
         <div className="mt-8 text-center">
           <Link
-            href="/reminders/compliance"
+            href="/compliance/reminders/compliance"
             className="inline-flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
           >
             <FileSpreadsheet className="h-4 w-4" />
@@ -595,7 +595,7 @@ function DuplicatesSection({ duplicates }: { duplicates: SkippedDuplicate[] }) {
                     <div className="flex-shrink-0">
                       {item.duplicate_of_type === "reminder" && item.duplicate_of_id ? (
                         <Link
-                          href={`/reminders/${item.duplicate_of_id}`}
+                          href={`/compliance/reminders/${item.duplicate_of_id}`}
                           className="text-xs text-blue-600 dark:text-blue-400 hover:underline whitespace-nowrap"
                         >
                           View Reminder
