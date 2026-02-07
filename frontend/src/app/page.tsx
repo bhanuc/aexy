@@ -1502,7 +1502,7 @@ function LinearIcon({ large }: { large?: boolean }) {
   );
 }
 
-export function GoogleIcon() {
+function GoogleIcon() {
   return (
     <svg className="h-5 w-5" viewBox="0 0 24 24">
       <path
