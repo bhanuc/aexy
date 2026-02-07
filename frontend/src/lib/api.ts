@@ -15884,7 +15884,7 @@ export const remindersApi = {
     const response = await api.get(`/workspaces/${workspaceId}/reminders/suggestions`, {
       params: questionnaireResponseId ? { questionnaire_response_id: questionnaireResponseId } : undefined,
     });
-    return response.data;
+    return response.data.suggestions;
   },
 
   acceptSuggestion: async (
@@ -15892,7 +15892,7 @@ export const remindersApi = {
     suggestionId: string,
     overrides?: Partial<ReminderCreate>
   ): Promise<Reminder> => {
-    const response = await api.post(`/workspaces/${workspaceId}/reminders/suggestions/${suggestionId}/accept`, overrides);
+    const response = await api.post(`/workspaces/${workspaceId}/reminders/suggestions/${suggestionId}/accept`, overrides || {});
     return response.data;
   },
 
@@ -15915,5 +15915,142 @@ export const remindersApi = {
   ): Promise<{ updated_count: number }> => {
     const response = await api.post(`/workspaces/${workspaceId}/reminders/bulk/complete`, data);
     return response.data;
+  },
+};
+
+// ============================================================================
+// Questionnaire Import Types
+// ============================================================================
+
+export interface QuestionnaireResponse {
+  id: string;
+  workspace_id: string;
+  title: string;
+  partner_name?: string;
+  assessment_year?: string;
+  source_filename: string;
+  total_questions: number;
+  total_suggestions_generated: number;
+  status: "uploaded" | "analyzed" | "reviewed";
+  extra_metadata: Record<string, unknown>;
+  uploaded_by_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QuestionnaireQuestion {
+  id: string;
+  questionnaire_response_id: string;
+  serial_number?: string;
+  domain?: string;
+  question_text: string;
+  response_text?: string;
+  possible_responses?: string;
+  explanation?: string;
+  is_section_header: boolean;
+  response_type: "yes_no" | "frequency" | "text" | "multi_choice";
+  source_row?: number;
+  created_at: string;
+}
+
+export interface QuestionnaireImportResult {
+  questionnaire: QuestionnaireResponse;
+  questions_count: number;
+  domains: string[];
+  domain_counts: Record<string, number>;
+}
+
+export interface SkipSummary {
+  duplicates: number;
+  negatives: number;
+  blanks: number;
+  headers: number;
+  other: number;
+}
+
+export interface SkippedDuplicate {
+  question_text: string;
+  domain?: string;
+  reason: string;
+  duplicate_of_id?: string;
+  duplicate_of_type?: string; // "suggestion" | "reminder" | "question"
+  duplicate_of_title?: string;
+}
+
+export interface QuestionnaireAnalyzeResult {
+  questionnaire_id: string;
+  suggestions_generated: number;
+  skipped_questions: number;
+  domains_covered: string[];
+  skip_summary?: SkipSummary;
+  skipped_duplicates?: SkippedDuplicate[];
+}
+
+export interface QuestionnaireListResponse {
+  questionnaires: QuestionnaireResponse[];
+  total: number;
+}
+
+// ============================================================================
+// Questionnaire Import API
+// ============================================================================
+
+export const questionnairesApi = {
+  upload: async (
+    workspaceId: string,
+    file: File
+  ): Promise<QuestionnaireImportResult> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await api.post(
+      `/workspaces/${workspaceId}/questionnaires/upload`,
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } }
+    );
+    return response.data;
+  },
+
+  analyze: async (
+    workspaceId: string,
+    questionnaireId: string
+  ): Promise<QuestionnaireAnalyzeResult> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/questionnaires/${questionnaireId}/analyze`
+    );
+    return response.data;
+  },
+
+  list: async (workspaceId: string): Promise<QuestionnaireListResponse> => {
+    const response = await api.get(`/workspaces/${workspaceId}/questionnaires/`);
+    return response.data;
+  },
+
+  get: async (
+    workspaceId: string,
+    questionnaireId: string
+  ): Promise<QuestionnaireResponse> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/questionnaires/${questionnaireId}`
+    );
+    return response.data;
+  },
+
+  getQuestions: async (
+    workspaceId: string,
+    questionnaireId: string
+  ): Promise<QuestionnaireQuestion[]> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/questionnaires/${questionnaireId}/questions`
+    );
+    return response.data;
+  },
+
+  delete: async (
+    workspaceId: string,
+    questionnaireId: string
+  ): Promise<void> => {
+    await api.delete(
+      `/workspaces/${workspaceId}/questionnaires/${questionnaireId}`
+    );
   },
 };

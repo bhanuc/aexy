@@ -382,6 +382,12 @@ from aexy.models.roadmap_voting import (
     RoadmapVote,
     RoadmapComment,
 )
+from aexy.models.questionnaire import (
+    QuestionnaireResponse,
+    QuestionnaireQuestion,
+    QuestionnaireStatus,
+    ResponseType,
+)
 from aexy.models.reminder import (
     Reminder,
     ReminderInstance,
@@ -773,6 +779,11 @@ __all__ = [
     "RoadmapRequest",
     "RoadmapVote",
     "RoadmapComment",
+    # Questionnaire Import
+    "QuestionnaireResponse",
+    "QuestionnaireQuestion",
+    "QuestionnaireStatus",
+    "ResponseType",
     # Reminders
     "Reminder",
     "ReminderInstance",

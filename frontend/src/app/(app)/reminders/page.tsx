@@ -24,6 +24,8 @@ import {
   Clock,
   TrendingUp,
   BarChart3,
+  Upload,
+  FileSearch,
 } from "lucide-react";
 import { ReminderCategory, ReminderPriority } from "@/lib/api";
 
@@ -65,6 +67,20 @@ export default function RemindersPage() {
           >
             <Calendar className="h-4 w-4" />
             Calendar
+          </Link>
+          <Link
+            href="/reminders/compliance"
+            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
+          >
+            <FileSearch className="h-4 w-4" />
+            Compliance Center
+          </Link>
+          <Link
+            href="/reminders/import"
+            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
+          >
+            <Upload className="h-4 w-4" />
+            Import Questionnaire
           </Link>
           <Link
             href="/reminders/new"
