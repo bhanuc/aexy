@@ -42,6 +42,7 @@ import {
     History,
     Bot,
     ShieldCheck,
+    FileSearch,
     Bell,
     CalendarDays,
     UserCheck,
@@ -135,6 +136,7 @@ const automationsItems: SidebarItemConfig[] = [
 
 const remindersItems: SidebarItemConfig[] = [
     { href: "/reminders", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/reminders/compliance", label: "Compliance Center", icon: FileSearch },
     { href: "/reminders/calendar", label: "Calendar", icon: CalendarDays },
     { href: "/reminders/my-reminders", label: "My Reminders", icon: UserCheck },
 ];
