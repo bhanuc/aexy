@@ -1831,6 +1831,7 @@ export interface Workspace {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  members?: Array<{ developer_id: string; role: string }>;
 }
 
 export interface WorkspaceListItem {
@@ -9793,6 +9794,8 @@ export interface AgentCreateData {
   working_hours?: WorkingHoursConfig | null;
   escalation_email?: string;
   escalation_slack_channel?: string;
+  auto_reply_enabled?: boolean;
+  email_signature?: string;
   crm_sync?: boolean;
   calendar_sync?: boolean;
   calendar_id?: string;
@@ -11467,6 +11470,8 @@ export interface OKRGoal {
   period_type: OKRPeriodType;
   period_start?: string;
   period_end?: string;
+  start_date?: string;
+  end_date?: string;
   metric_type: OKRMetricType;
   target_value: number;
   current_value: number;
@@ -11498,6 +11503,7 @@ export interface OKRGoalUpdate {
   title?: string;
   description?: string;
   owner_id?: string;
+  period_type?: OKRPeriodType;
   start_date?: string;
   end_date?: string;
   target_value?: number;
@@ -12209,6 +12215,7 @@ export interface EmailCampaign {
   workspace_id: string;
   name: string;
   subject?: string;
+  preview_text?: string;
   template_id?: string | null;
   template_name?: string;
   html_content?: string | null;
@@ -12297,6 +12304,8 @@ export interface CampaignAnalytics {
   click_to_open_rate: number;
   bounce_rate: number;
   unsubscribe_rate: number;
+  device_stats?: Record<string, number>;
+  link_stats?: Array<{ url: string; clicks: number }>;
 }
 
 export interface AnalyticsOverview {
@@ -15671,6 +15680,7 @@ export interface ReminderCalendarEvent {
   id: string;
   title: string;
   date: string;
+  due_date: string;
   status: ReminderInstanceStatus;
   priority: ReminderPriority;
   category: ReminderCategory;
