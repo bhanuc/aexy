@@ -16215,4 +16215,107 @@ export const insightsApi = {
     );
     return response.data;
   },
+
+  // AI-Powered Insights
+  getTeamNarrative: async (
+    workspaceId: string,
+    params?: { team_id?: string; period_type?: InsightsPeriodType }
+  ): Promise<{ narrative: string; generated: boolean; tokens_used?: number }> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/insights/ai/team/narrative`,
+      { params }
+    );
+    return response.data;
+  },
+
+  getDeveloperNarrative: async (
+    workspaceId: string,
+    developerId: string,
+    params?: { period_type?: InsightsPeriodType }
+  ): Promise<{ narrative: string; generated: boolean; tokens_used?: number }> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/insights/ai/developers/${developerId}/narrative`,
+      { params }
+    );
+    return response.data;
+  },
+
+  getDeveloperAnomalies: async (
+    workspaceId: string,
+    developerId: string,
+    params?: { period_type?: InsightsPeriodType; threshold?: number }
+  ): Promise<{ anomalies: Array<{ metric: string; current_value: number; historical_mean: number; z_score: number; direction: string }>; explanation: string; generated: boolean }> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/insights/ai/developers/${developerId}/anomalies`,
+      { params }
+    );
+    return response.data;
+  },
+
+  getRootCauseAnalysis: async (
+    workspaceId: string,
+    params?: { team_id?: string; period_type?: InsightsPeriodType }
+  ): Promise<{ analysis: string; metrics_summary?: Record<string, unknown>; generated: boolean }> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/insights/ai/team/root-cause-analysis`,
+      { params }
+    );
+    return response.data;
+  },
+
+  getOneOnOnePrep: async (
+    workspaceId: string,
+    developerId: string,
+    params?: { period_type?: InsightsPeriodType }
+  ): Promise<{ notes: string; health_score?: number; generated: boolean }> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/insights/ai/developers/${developerId}/one-on-one-prep`,
+      { params }
+    );
+    return response.data;
+  },
+
+  getSprintRetro: async (
+    workspaceId: string,
+    params?: { team_id?: string; period_type?: InsightsPeriodType }
+  ): Promise<{ retro: string; metrics_summary?: Record<string, unknown>; generated: boolean }> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/insights/ai/team/sprint-retro`,
+      { params }
+    );
+    return response.data;
+  },
+
+  getTeamTrajectory: async (
+    workspaceId: string,
+    params?: { team_id?: string; period_type?: InsightsPeriodType }
+  ): Promise<{ trajectory: string; trends?: Record<string, unknown>; generated: boolean }> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/insights/ai/team/trajectory`,
+      { params }
+    );
+    return response.data;
+  },
+
+  getCompositionRecommendations: async (
+    workspaceId: string,
+    params?: { team_id?: string; period_type?: InsightsPeriodType }
+  ): Promise<{ recommendations: string; team_health?: Record<string, unknown>; generated: boolean }> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/insights/ai/team/composition-recommendations`,
+      { params }
+    );
+    return response.data;
+  },
+
+  getHiringForecast: async (
+    workspaceId: string,
+    params?: { team_id?: string; period_type?: InsightsPeriodType }
+  ): Promise<{ forecast: string; indicators?: Record<string, unknown>; generated: boolean }> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/insights/ai/team/hiring-forecast`,
+      { params }
+    );
+    return response.data;
+  },
 };

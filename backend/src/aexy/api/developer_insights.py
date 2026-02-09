@@ -1484,3 +1484,308 @@ async def acknowledge_alert(
 
     await db.commit()
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# AI-Powered Insights (Phase 5)
+# ---------------------------------------------------------------------------
+
+@router.get("/ai/team/narrative")
+async def get_team_narrative(
+    workspace_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    team_id: str | None = Query(default=None),
+    period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
+    start_date: datetime | None = Query(default=None),
+    end_date: datetime | None = Query(default=None),
+):
+    """Generate an LLM-powered narrative summary of team metrics."""
+    from aexy.services.insights_ai_service import InsightsAIService
+
+    if not start_date or not end_date:
+        start_date, end_date = _default_range(period_type)
+
+    if team_id:
+        dev_ids = await _get_team_developer_ids(db, team_id)
+    else:
+        dev_ids = await _get_workspace_developer_ids(db, workspace_id)
+
+    if not dev_ids:
+        raise HTTPException(status_code=404, detail="No team members found")
+
+    ai_service = InsightsAIService(db)
+    result = await ai_service.generate_team_narrative(workspace_id, dev_ids, start_date, end_date)
+
+    return {
+        "workspace_id": workspace_id,
+        "team_id": team_id,
+        "period_start": start_date.isoformat(),
+        "period_end": end_date.isoformat(),
+        **result,
+    }
+
+
+@router.get("/ai/developers/{dev_id}/narrative")
+async def get_developer_narrative(
+    workspace_id: str,
+    dev_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
+    start_date: datetime | None = Query(default=None),
+    end_date: datetime | None = Query(default=None),
+):
+    """Generate an LLM-powered narrative summary for a developer."""
+    from aexy.services.insights_ai_service import InsightsAIService
+
+    if not start_date or not end_date:
+        start_date, end_date = _default_range(period_type)
+
+    ai_service = InsightsAIService(db)
+    result = await ai_service.generate_developer_narrative(workspace_id, dev_id, start_date, end_date)
+
+    return {
+        "workspace_id": workspace_id,
+        "developer_id": dev_id,
+        "period_start": start_date.isoformat(),
+        "period_end": end_date.isoformat(),
+        **result,
+    }
+
+
+@router.get("/ai/developers/{dev_id}/anomalies")
+async def get_developer_anomalies(
+    workspace_id: str,
+    dev_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
+    start_date: datetime | None = Query(default=None),
+    end_date: datetime | None = Query(default=None),
+    threshold: float = Query(default=2.0, ge=1.0, le=4.0, description="Standard deviation threshold"),
+):
+    """Detect statistical anomalies with LLM-generated explanations."""
+    from aexy.services.insights_ai_service import InsightsAIService
+
+    if not start_date or not end_date:
+        start_date, end_date = _default_range(period_type)
+
+    ai_service = InsightsAIService(db)
+    result = await ai_service.detect_anomalies(workspace_id, dev_id, start_date, end_date, threshold)
+
+    return {
+        "workspace_id": workspace_id,
+        "developer_id": dev_id,
+        "period_start": start_date.isoformat(),
+        "period_end": end_date.isoformat(),
+        **result,
+    }
+
+
+@router.get("/ai/team/root-cause-analysis")
+async def get_root_cause_analysis(
+    workspace_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    team_id: str | None = Query(default=None),
+    period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
+    start_date: datetime | None = Query(default=None),
+    end_date: datetime | None = Query(default=None),
+):
+    """Analyze root causes for metric changes using LLM."""
+    from aexy.services.insights_ai_service import InsightsAIService
+
+    if not start_date or not end_date:
+        start_date, end_date = _default_range(period_type)
+
+    if team_id:
+        dev_ids = await _get_team_developer_ids(db, team_id)
+    else:
+        dev_ids = await _get_workspace_developer_ids(db, workspace_id)
+
+    if not dev_ids:
+        raise HTTPException(status_code=404, detail="No team members found")
+
+    ai_service = InsightsAIService(db)
+    result = await ai_service.analyze_root_causes(workspace_id, dev_ids, start_date, end_date)
+
+    return {
+        "workspace_id": workspace_id,
+        "team_id": team_id,
+        "period_start": start_date.isoformat(),
+        "period_end": end_date.isoformat(),
+        **result,
+    }
+
+
+@router.get("/ai/developers/{dev_id}/one-on-one-prep")
+async def get_one_on_one_prep(
+    workspace_id: str,
+    dev_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
+    start_date: datetime | None = Query(default=None),
+    end_date: datetime | None = Query(default=None),
+):
+    """Generate AI-powered 1:1 preparation notes for a manager."""
+    from aexy.services.insights_ai_service import InsightsAIService
+
+    if not start_date or not end_date:
+        start_date, end_date = _default_range(period_type)
+
+    ai_service = InsightsAIService(db)
+    result = await ai_service.generate_one_on_one_prep(workspace_id, dev_id, start_date, end_date)
+
+    return {
+        "workspace_id": workspace_id,
+        "developer_id": dev_id,
+        "period_start": start_date.isoformat(),
+        "period_end": end_date.isoformat(),
+        **result,
+    }
+
+
+@router.get("/ai/team/sprint-retro")
+async def get_sprint_retro(
+    workspace_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    team_id: str | None = Query(default=None),
+    period_type: PeriodTypeParam = Query(default=PeriodTypeParam.sprint),
+    start_date: datetime | None = Query(default=None),
+    end_date: datetime | None = Query(default=None),
+):
+    """Generate AI-powered sprint retrospective insights."""
+    from aexy.services.insights_ai_service import InsightsAIService
+
+    if not start_date or not end_date:
+        start_date, end_date = _default_range(period_type)
+
+    if team_id:
+        dev_ids = await _get_team_developer_ids(db, team_id)
+    else:
+        dev_ids = await _get_workspace_developer_ids(db, workspace_id)
+
+    if not dev_ids:
+        raise HTTPException(status_code=404, detail="No team members found")
+
+    ai_service = InsightsAIService(db)
+    result = await ai_service.generate_sprint_retro(workspace_id, dev_ids, start_date, end_date)
+
+    return {
+        "workspace_id": workspace_id,
+        "team_id": team_id,
+        "period_start": start_date.isoformat(),
+        "period_end": end_date.isoformat(),
+        **result,
+    }
+
+
+@router.get("/ai/team/trajectory")
+async def get_team_trajectory(
+    workspace_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    team_id: str | None = Query(default=None),
+    period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
+    start_date: datetime | None = Query(default=None),
+    end_date: datetime | None = Query(default=None),
+):
+    """Generate LLM-enhanced team trajectory forecast."""
+    from aexy.services.insights_ai_service import InsightsAIService
+
+    if not start_date or not end_date:
+        start_date, end_date = _default_range(period_type)
+
+    if team_id:
+        dev_ids = await _get_team_developer_ids(db, team_id)
+    else:
+        dev_ids = await _get_workspace_developer_ids(db, workspace_id)
+
+    if not dev_ids:
+        raise HTTPException(status_code=404, detail="No team members found")
+
+    ai_service = InsightsAIService(db)
+    result = await ai_service.generate_team_trajectory(workspace_id, dev_ids, start_date, end_date)
+
+    return {
+        "workspace_id": workspace_id,
+        "team_id": team_id,
+        "period_start": start_date.isoformat(),
+        "period_end": end_date.isoformat(),
+        **result,
+    }
+
+
+@router.get("/ai/team/composition-recommendations")
+async def get_composition_recommendations(
+    workspace_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    team_id: str | None = Query(default=None),
+    period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
+    start_date: datetime | None = Query(default=None),
+    end_date: datetime | None = Query(default=None),
+):
+    """Get AI-powered team composition recommendations."""
+    from aexy.services.insights_ai_service import InsightsAIService
+
+    if not start_date or not end_date:
+        start_date, end_date = _default_range(period_type)
+
+    if team_id:
+        dev_ids = await _get_team_developer_ids(db, team_id)
+    else:
+        dev_ids = await _get_workspace_developer_ids(db, workspace_id)
+
+    if not dev_ids:
+        raise HTTPException(status_code=404, detail="No team members found")
+
+    ai_service = InsightsAIService(db)
+    result = await ai_service.recommend_team_composition(workspace_id, dev_ids, start_date, end_date)
+
+    return {
+        "workspace_id": workspace_id,
+        "team_id": team_id,
+        "period_start": start_date.isoformat(),
+        "period_end": end_date.isoformat(),
+        **result,
+    }
+
+
+@router.get("/ai/team/hiring-forecast")
+async def get_hiring_forecast(
+    workspace_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    team_id: str | None = Query(default=None),
+    period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
+    start_date: datetime | None = Query(default=None),
+    end_date: datetime | None = Query(default=None),
+):
+    """Estimate when the team will need additional headcount."""
+    from aexy.services.insights_ai_service import InsightsAIService
+
+    if not start_date or not end_date:
+        start_date, end_date = _default_range(period_type)
+
+    if team_id:
+        dev_ids = await _get_team_developer_ids(db, team_id)
+    else:
+        dev_ids = await _get_workspace_developer_ids(db, workspace_id)
+
+    if not dev_ids:
+        raise HTTPException(status_code=404, detail="No team members found")
+
+    ai_service = InsightsAIService(db)
+    result = await ai_service.estimate_hiring_timeline(workspace_id, dev_ids, start_date, end_date)
+
+    return {
+        "workspace_id": workspace_id,
+        "team_id": team_id,
+        "period_start": start_date.isoformat(),
+        "period_end": end_date.isoformat(),
+        **result,
+    }

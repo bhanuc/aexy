@@ -22,6 +22,7 @@ import {
   Building2,
   Gauge,
   User,
+  Brain,
 } from "lucide-react";
 import {
   useTeamInsights,
@@ -205,6 +206,13 @@ export default function InsightsPage() {
           >
             <Gauge className="h-4 w-4" />
             Capacity
+          </Link>
+          <Link
+            href="/insights/ai"
+            className="flex items-center gap-2 px-3 py-1.5 bg-purple-700 hover:bg-purple-600 text-white text-sm rounded-lg transition"
+          >
+            <Brain className="h-4 w-4" />
+            AI Insights
           </Link>
           <Link
             href="/insights/me"
