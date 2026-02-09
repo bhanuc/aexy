@@ -1,18 +1,20 @@
-"""Celery tasks for recurring reminders.
+"""Recurring reminder task logic.
 
-These tasks handle:
+These functions handle:
 - Generating reminder instances
 - Processing escalations
 - Sending daily digests
 - Flagging overdue reminders
 - Checking evidence freshness
 - Weekly Slack summaries
+
+Temporal activities in aexy.temporal.activities.reminders call the
+_*_async() functions defined here.
 """
 
 import logging
 from datetime import datetime, timezone, timedelta
 
-from aexy.processing.celery_app import celery_app
 from aexy.core.database import async_session_maker
 from aexy.services.reminder_service import ReminderService
 from aexy.services.notification_service import NotificationService
@@ -25,19 +27,6 @@ from aexy.models.reminder import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-@celery_app.task(name="aexy.processing.reminder_tasks.generate_reminder_instances")
-def generate_reminder_instances():
-    """Generate reminder instances for due reminders.
-
-    This task runs daily at 00:00 and:
-    1. Finds all active reminders with next_occurrence in the past or within the next 90 days
-    2. Creates instances for each due reminder
-    3. Advances the reminder schedule to the next occurrence
-    """
-    from aexy.processing.tasks import run_async
-    run_async(_generate_reminder_instances_async())
 
 
 async def _generate_reminder_instances_async():
@@ -94,19 +83,6 @@ async def _generate_reminder_instances_async():
             await db.rollback()
             logger.error(f"Error generating reminder instances: {e}")
             raise
-
-
-@celery_app.task(name="aexy.processing.reminder_tasks.process_escalations")
-def process_escalations():
-    """Process escalations for overdue reminder instances.
-
-    This task runs every 2 hours and:
-    1. Finds instances that need escalation based on their config
-    2. Creates escalation records
-    3. Sends escalation notifications
-    """
-    from aexy.processing.tasks import run_async
-    run_async(_process_escalations_async())
 
 
 async def _process_escalations_async():
@@ -201,18 +177,6 @@ async def _process_escalations_async():
             raise
 
 
-@celery_app.task(name="aexy.processing.reminder_tasks.send_daily_digest")
-def send_daily_digest():
-    """Send daily reminder digest to owners.
-
-    This task runs daily at 08:00 and:
-    1. Aggregates reminders due today and overdue for each user
-    2. Sends a digest notification with summary
-    """
-    from aexy.processing.tasks import run_async
-    run_async(_send_daily_digest_async())
-
-
 async def _send_daily_digest_async():
     """Async implementation of daily digest sending."""
     from sqlalchemy import select, func
@@ -296,19 +260,6 @@ async def _send_daily_digest_async():
             raise
 
 
-@celery_app.task(name="aexy.processing.reminder_tasks.flag_overdue_reminders")
-def flag_overdue_reminders():
-    """Flag reminder instances as overdue.
-
-    This task runs hourly and:
-    1. Finds pending/notified instances past their due date
-    2. Updates their status to overdue
-    3. Sends overdue notifications
-    """
-    from aexy.processing.tasks import run_async
-    run_async(_flag_overdue_reminders_async())
-
-
 async def _flag_overdue_reminders_async():
     """Async implementation of overdue flagging."""
     from sqlalchemy import select, update
@@ -372,18 +323,6 @@ async def _flag_overdue_reminders_async():
             raise
 
 
-@celery_app.task(name="aexy.processing.reminder_tasks.check_evidence_freshness")
-def check_evidence_freshness():
-    """Check for stale evidence on completed reminders.
-
-    This task runs daily at 02:00 and:
-    1. Finds completed instances with evidence that may be stale
-    2. Generates notifications for review if evidence is old
-    """
-    from aexy.processing.tasks import run_async
-    run_async(_check_evidence_freshness_async())
-
-
 async def _check_evidence_freshness_async():
     """Async implementation of evidence freshness checking."""
     from sqlalchemy import select
@@ -423,21 +362,6 @@ async def _check_evidence_freshness_async():
             raise
 
 
-@celery_app.task(name="aexy.processing.reminder_tasks.process_auto_assignment")
-def process_auto_assignment(workspace_id: str, reminder_id: str):
-    """Process automatic assignment for a reminder.
-
-    This is triggered when a reminder is created or updated with
-    an assignment strategy that requires dynamic resolution.
-
-    Args:
-        workspace_id: The workspace ID.
-        reminder_id: The reminder ID to process.
-    """
-    from aexy.processing.tasks import run_async
-    run_async(_process_auto_assignment_async(workspace_id, reminder_id))
-
-
 async def _process_auto_assignment_async(workspace_id: str, reminder_id: str):
     """Async implementation of auto-assignment processing."""
     async with async_session_maker() as db:
@@ -459,18 +383,6 @@ async def _process_auto_assignment_async(workspace_id: str, reminder_id: str):
             await db.rollback()
             logger.error(f"Error processing auto-assignment for reminder {reminder_id}: {e}")
             raise
-
-
-@celery_app.task(name="aexy.processing.reminder_tasks.send_weekly_slack_summary")
-def send_weekly_slack_summary():
-    """Send weekly reminder summary to configured Slack channels.
-
-    This task runs every Monday at 09:00 and:
-    1. Aggregates reminder stats per workspace
-    2. Posts summary to configured Slack channels
-    """
-    from aexy.processing.tasks import run_async
-    run_async(_send_weekly_slack_summary_async())
 
 
 async def _send_weekly_slack_summary_async():
@@ -540,18 +452,6 @@ async def _send_weekly_slack_summary_async():
             await db.rollback()
             logger.error(f"Error sending weekly Slack summaries: {e}")
             raise
-
-
-@celery_app.task(name="aexy.processing.reminder_tasks.send_reminder_notification")
-def send_reminder_notification(instance_id: str, notification_type: str):
-    """Send a notification for a reminder instance.
-
-    Args:
-        instance_id: The instance ID.
-        notification_type: One of 'due', 'acknowledged', 'completed', 'escalated', 'overdue'.
-    """
-    from aexy.processing.tasks import run_async
-    run_async(_send_reminder_notification_async(instance_id, notification_type))
 
 
 async def _send_reminder_notification_async(instance_id: str, notification_type: str):

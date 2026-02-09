@@ -311,8 +311,8 @@ export default function ComplianceTrainingPage() {
       setTrainings(trainingsRes.items || []);
       setMyAssignments(assignmentsRes.items || []);
       setMembers(membersRes || []);
-    } catch {
-      // Silently handle errors
+    } catch (err) {
+      console.error("Failed to load training data:", err);
     } finally {
       setLoading(false);
     }
@@ -330,8 +330,9 @@ export default function ComplianceTrainingPage() {
     try {
       await complianceApi.training.delete(trainingId, currentWorkspaceId, user.id);
       fetchData();
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error("Failed to delete training:", err);
+      alert("Failed to delete training. Please try again.");
     }
   };
 
@@ -340,8 +341,8 @@ export default function ComplianceTrainingPage() {
     try {
       await complianceApi.assignments.acknowledge(assignmentId, currentWorkspaceId, user.id);
       fetchData();
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error("Failed to acknowledge assignment:", err);
     }
   };
 
@@ -350,8 +351,8 @@ export default function ComplianceTrainingPage() {
     try {
       await complianceApi.assignments.start(assignmentId, currentWorkspaceId, user.id);
       fetchData();
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error("Failed to start assignment:", err);
     }
   };
 
@@ -360,8 +361,8 @@ export default function ComplianceTrainingPage() {
     try {
       await complianceApi.assignments.complete(assignmentId, currentWorkspaceId, user.id);
       fetchData();
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error("Failed to complete assignment:", err);
     }
   };
 
@@ -374,7 +375,7 @@ export default function ComplianceTrainingPage() {
   }
 
   if (!isAuthenticated) {
-    redirect("/login");
+    return null;
   }
 
   return (

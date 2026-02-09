@@ -41,7 +41,10 @@ FREQUENCY_MAP = {
     "weekly": "weekly",
     "monthly": "monthly",
     "quarterly": "quarterly",
-    "half yearly": "biweekly",  # closest match: every 6 months
+    "half yearly": "semi_annual",
+    "semi-annual": "semi_annual",
+    "semi-annually": "semi_annual",
+    "biannual": "semi_annual",
     "annually": "yearly",
     "yearly": "yearly",
 }

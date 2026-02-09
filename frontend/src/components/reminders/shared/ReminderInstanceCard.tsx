@@ -43,6 +43,18 @@ export function ReminderInstanceCard({
   className,
 }: ReminderInstanceCardProps) {
   const [showMenu, setShowMenu] = React.useState(false);
+  const menuRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!showMenu) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowMenu(false);
+      }
+    }
+    window.addEventListener("mousedown", handleClickOutside);
+    return () => window.removeEventListener("mousedown", handleClickOutside);
+  }, [showMenu]);
 
   const dueDate = parseISO(instance.due_date);
   const isOverdue = isPast(dueDate) && !["completed", "skipped"].includes(instance.status);
@@ -198,6 +210,7 @@ export function ReminderInstanceCard({
       {/* Dropdown Menu */}
       {showMenu && (
         <div
+          ref={menuRef}
           className="absolute right-2 top-10 z-10 bg-slate-800 border border-slate-700 rounded-lg shadow-lg py-1 min-w-[160px]"
           onClick={(e) => e.stopPropagation()}
         >

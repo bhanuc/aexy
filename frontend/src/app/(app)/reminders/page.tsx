@@ -13,6 +13,7 @@ import {
   ReminderPriorityBadge,
 } from "@/components/reminders/shared";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Bell,
   Plus,
@@ -30,6 +31,7 @@ import {
 import { ReminderCategory, ReminderPriority } from "@/lib/api";
 
 export default function RemindersPage() {
+  const router = useRouter();
   const { currentWorkspace } = useWorkspace();
   const workspaceId = currentWorkspace?.id || null;
 
@@ -244,7 +246,7 @@ export default function RemindersPage() {
                     reminder={reminder}
                     showActions={false}
                     onClick={() => {
-                      window.location.href = `/compliance/reminders/${reminder.id}`;
+                      router.push(`/compliance/reminders/${reminder.id}`);
                     }}
                   />
                 ))}
@@ -295,7 +297,7 @@ export default function RemindersPage() {
           </div>
 
           {/* Category Breakdown */}
-          {stats?.by_category && Array.isArray(stats.by_category) && stats.by_category.length > 0 && (
+          {stats?.by_category && Object.keys(stats.by_category).length > 0 && (
             <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
               <div className="p-4 border-b border-gray-200 dark:border-gray-700">
                 <div className="flex items-center gap-2">
@@ -306,11 +308,11 @@ export default function RemindersPage() {
                 </div>
               </div>
               <div className="p-4 space-y-3">
-                {stats.by_category.map((item: { category: string; total: number }) => (
-                  <div key={item.category} className="flex items-center justify-between">
-                    <ReminderCategoryBadge category={item.category as ReminderCategory} />
+                {Object.entries(stats.by_category).map(([category, total]) => (
+                  <div key={category} className="flex items-center justify-between">
+                    <ReminderCategoryBadge category={category as ReminderCategory} />
                     <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
-                      {item.total}
+                      {total}
                     </span>
                   </div>
                 ))}

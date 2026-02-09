@@ -49,6 +49,7 @@ class ReminderFrequency(str, Enum):
     BIWEEKLY = "biweekly"
     MONTHLY = "monthly"
     QUARTERLY = "quarterly"
+    SEMI_ANNUAL = "semi_annual"
     YEARLY = "yearly"
     CUSTOM = "custom"  # Uses cron_expression
 
@@ -365,12 +366,7 @@ class Reminder(Base):
         "ReminderInstance",
         back_populates="reminder",
         cascade="all, delete-orphan",
-        lazy="selectin",
-    )
-
-    __table_args__ = (
-        # Composite index for active reminders with next occurrence
-        # Used by the scheduler to find due reminders
+        lazy="select",
     )
 
 
@@ -490,7 +486,7 @@ class ReminderInstance(Base):
     )
 
     # Evidence tracking
-    evidence_links: Mapped[dict] = mapped_column(
+    evidence_links: Mapped[list] = mapped_column(
         JSONB,
         default=list,
         nullable=False,

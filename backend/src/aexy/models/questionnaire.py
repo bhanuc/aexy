@@ -112,7 +112,7 @@ class QuestionnaireResponse(Base):
         "QuestionnaireQuestion",
         back_populates="questionnaire_response",
         cascade="all, delete-orphan",
-        lazy="selectin",
+        lazy="select",
     )
 
 

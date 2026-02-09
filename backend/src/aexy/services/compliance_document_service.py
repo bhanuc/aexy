@@ -266,7 +266,8 @@ class ComplianceDocumentService:
             count_query = count_query.where(ComplianceDocument.uploaded_by == filters.uploaded_by)
 
         if filters.search:
-            search_term = f"%{filters.search}%"
+            escaped = filters.search.replace("%", r"\%").replace("_", r"\_")
+            search_term = f"%{escaped}%"
             search_filter = or_(
                 ComplianceDocument.name.ilike(search_term),
                 ComplianceDocument.description.ilike(search_term),
@@ -296,7 +297,9 @@ class ComplianceDocumentService:
         total = total_result.scalar()
 
         # Sorting
-        sort_col = getattr(ComplianceDocument, filters.sort_by, ComplianceDocument.created_at)
+        allowed_sort_fields = {"created_at", "updated_at", "name", "file_size", "mime_type"}
+        sort_field = filters.sort_by if filters.sort_by in allowed_sort_fields else "created_at"
+        sort_col = getattr(ComplianceDocument, sort_field)
         if filters.sort_order == "asc":
             query = query.order_by(sort_col.asc())
         else:

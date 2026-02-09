@@ -414,8 +414,8 @@ export default function ComplianceCertificationsPage() {
       ]);
       setCertifications(certsRes.items || []);
       setMyCertifications(myCertsRes.items || []);
-    } catch {
-      // Silently handle errors
+    } catch (err) {
+      console.error("Failed to load certifications:", err);
     } finally {
       setLoading(false);
     }
@@ -436,7 +436,7 @@ export default function ComplianceCertificationsPage() {
   }
 
   if (!isAuthenticated) {
-    redirect("/login");
+    return null;
   }
 
   return (
