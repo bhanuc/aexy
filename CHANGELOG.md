@@ -5,6 +5,96 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.4] - 2026-02-09
+
+### Added
+
+#### Developer Insights (Enterprise Analytics)
+
+Comprehensive developer productivity analytics platform with AI-powered insights, alerting, and forecasting.
+
+**Backend:**
+- New models: `DeveloperMetricsSnapshot`, `TeamMetricsSnapshot`, `InsightSettings`, `DeveloperWorkingSchedule`, `InsightAlertRule`, `InsightAlertHistory`, `InsightReportSchedule`, `SavedInsightDashboard`
+- New API: `api/developer_insights.py` - 25+ endpoints for individual developer metrics, team insights, leaderboard, executive summary, sprint capacity, bus factor, rotation impact, project insights, alert rules, and AI narratives
+- New service: `services/developer_insights_service.py` - Metric computation across 6 dimensions (velocity, efficiency, quality, sustainability, collaboration, sprint productivity), forecasting, gaming detection, health scoring, percentile rankings, role benchmarking, and executive summaries
+- New service: `services/insights_ai_service.py` - LLM-powered narrative generation for team/developer performance, anomaly detection, root cause analysis, 1:1 prep notes, sprint retro insights, trajectory forecasting, team composition recommendations, and hiring timeline estimation
+- New cache: `cache/insights_cache.py` - Redis caching with 5-min TTL, deterministic key generation, and pattern-based invalidation
+- New schemas: `schemas/developer_insights.py` - Complete Pydantic schemas for all metrics, responses, settings, and alerts
+- Migrations: `migrate_developer_insights.sql`, `migrate_developer_insights_v2.sql`, `migrate_developer_insights_v3.sql`
+- Integration tests: `tests/integration/test_developer_insights_api.py`
+- Unit tests: `tests/unit/test_developer_insights_service.py`
+
+**Metrics Computed:**
+- Velocity: commits, PRs merged, lines added/removed, commit frequency, PR throughput, average commit size
+- Efficiency: PR cycle time, time to first review, PR merge rate, rework ratio
+- Quality: review participation rate, review depth, review turnaround, self-merge rate
+- Sustainability: weekend/late-night commit ratios, work streaks, active hours, focus score
+- Collaboration: unique collaborators, cross-team PR ratio, knowledge sharing score
+- Sprint: task completion rate, story points, cycle/lead time, carry-over tasks
+
+**Advanced Features:**
+- Velocity forecasting via weighted moving average
+- Metric gaming detection (suspicious patterns)
+- Code churn/rework analysis
+- PR size distribution analysis
+- Composite health scores with configurable weights
+- Percentile rankings within peer group
+- Role-based benchmarking (by engineering level)
+- Gini coefficient for workload distribution analysis
+- Bus factor per repository
+- Rotation impact simulation (velocity loss prediction)
+- Sprint capacity estimation
+- GDPR-compliant data export
+
+**Alert System:**
+- Configurable alert rules with conditions (gt, lt, gte, lte, eq, change_pct)
+- Scope: workspace, team, or individual developer
+- Severity levels: info, warning, critical
+- Multi-channel notifications (in-app, email, Slack)
+- Alert history with acknowledge/resolve workflow
+- Seed templates for common alerts
+- New notification event types: `INSIGHT_ALERT_WARNING`, `INSIGHT_ALERT_CRITICAL`
+
+**Frontend:**
+- New routes:
+  - `/insights` - Team overview with stat cards and workload distribution chart
+  - `/insights/leaderboard` - Ranked developer metrics
+  - `/insights/developers/[developerId]` - Individual developer drill-down
+  - `/insights/compare` - Side-by-side developer comparison
+  - `/insights/allocations` - Resource allocation view
+  - `/insights/alerts` - Alert management
+  - `/insights/executive` - Executive dashboard
+  - `/insights/sprint-capacity` - Sprint planning with capacity estimation
+  - `/insights/ai` - AI-powered insights (narratives, anomalies, recommendations)
+  - `/insights/me` - Personal insights
+  - `/settings/insights` - Insights configuration (working hours, metric weights, snapshot frequency)
+- `useInsights` hook - React Query integration with 10+ hooks for metrics, trends, leaderboard, alerts, and AI narratives
+- Components: `ActivityHeatmap`, `MetricsRadar`
+
+#### Permissions & Navigation
+
+- New permission category: `INSIGHTS` with `can_view_insights` and `can_manage_insights`
+- New app definition: `insights` in app catalog with `team_overview`, `leaderboard`, and `developer_drilldown` modules
+- Insights enabled in `full_access` bundle
+- Insights section added to sidebar in both grouped and flat layouts
+- New widget permissions: `teamInsights`, `developerInsights`, `insightsLeaderboard`, `workloadDistribution`
+
+### Changed
+
+- Deprecated Celery app configuration (`celery_app.py`) - all background processing now uses Temporal; `celery_app` set to `None` with deprecation warning
+- Updated admin API references from Celery to Temporal (renamed `get_celery_stats` to `get_temporal_stats`)
+- Updated repository sync API parameter from `use_celery` to `use_background`
+- Renamed `developer` to `user` in auth hook (`useAuth`) - updated `AppAccessGuard` and `Sidebar`
+- Changed `GoogleIcon` export from named to local function in landing page (moved to dedicated `components/icons/GoogleIcon.tsx`)
+- Added `formatRelativeTime` utility function to `lib/utils.ts`
+- Bumped frontend version from `0.5.3` to `0.5.4`
+
+### Fixed
+
+- Fixed mock implementations and minor bugs across test suite
+
+---
+
 ## [0.5.3] - 2026-02-09
 
 ### Added

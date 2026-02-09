@@ -96,7 +96,7 @@ class InsightsAIService:
             }
         except Exception as e:
             logger.warning("Failed to generate team narrative: %s", e)
-            return {"narrative": f"Unable to generate narrative: {e}", "generated": False}
+            return {"narrative": "Unable to generate narrative at this time", "generated": False}
 
     async def generate_developer_narrative(
         self,
@@ -148,7 +148,7 @@ class InsightsAIService:
             }
         except Exception as e:
             logger.warning("Failed to generate developer narrative: %s", e)
-            return {"narrative": f"Unable to generate narrative: {e}", "generated": False}
+            return {"narrative": "Unable to generate narrative at this time", "generated": False}
 
     # ------------------------------------------------------------------
     # 2. Anomaly Detection (Task 81)
@@ -262,7 +262,7 @@ class InsightsAIService:
             logger.warning("Failed to generate anomaly explanation: %s", e)
             return {
                 "anomalies": anomalies,
-                "explanation": f"Anomalies detected but explanation unavailable: {e}",
+                "explanation": "Anomalies detected but explanation unavailable at this time",
                 "generated": False,
             }
 
@@ -347,7 +347,7 @@ class InsightsAIService:
             }
         except Exception as e:
             logger.warning("Failed to generate root cause analysis: %s", e)
-            return {"analysis": f"Unable to generate analysis: {e}", "generated": False}
+            return {"analysis": "Unable to generate analysis at this time", "generated": False}
 
     # ------------------------------------------------------------------
     # 4. 1:1 Preparation Notes (Task 83)
@@ -417,7 +417,7 @@ class InsightsAIService:
             }
         except Exception as e:
             logger.warning("Failed to generate 1:1 prep notes: %s", e)
-            return {"notes": f"Unable to generate notes: {e}", "generated": False}
+            return {"notes": "Unable to generate notes at this time", "generated": False}
 
     # ------------------------------------------------------------------
     # 5. Sprint Retro Insights (Task 84)
@@ -502,7 +502,7 @@ class InsightsAIService:
             }
         except Exception as e:
             logger.warning("Failed to generate sprint retro: %s", e)
-            return {"retro": f"Unable to generate retro insights: {e}", "generated": False}
+            return {"retro": "Unable to generate retro insights at this time", "generated": False}
 
     # ------------------------------------------------------------------
     # 6. Team Trajectory Forecasting (Task 86)
@@ -585,7 +585,7 @@ class InsightsAIService:
             }
         except Exception as e:
             logger.warning("Failed to generate trajectory: %s", e)
-            return {"trajectory": f"Unable to generate trajectory: {e}", "generated": False}
+            return {"trajectory": "Unable to generate trajectory at this time", "generated": False}
 
     # ------------------------------------------------------------------
     # 7. Team Composition Recommendations (Task 87)
@@ -666,7 +666,7 @@ class InsightsAIService:
             }
         except Exception as e:
             logger.warning("Failed to generate composition recommendations: %s", e)
-            return {"recommendations": f"Unable to generate recommendations: {e}", "generated": False}
+            return {"recommendations": "Unable to generate recommendations at this time", "generated": False}
 
     # ------------------------------------------------------------------
     # 8. Hiring Timeline Estimation (Task 88)
@@ -759,4 +759,4 @@ class InsightsAIService:
             }
         except Exception as e:
             logger.warning("Failed to generate hiring forecast: %s", e)
-            return {"forecast": f"Unable to generate forecast: {e}", "generated": False}
+            return {"forecast": "Unable to generate forecast at this time", "generated": False}

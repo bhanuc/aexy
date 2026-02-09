@@ -16320,15 +16320,6 @@ export const insightsApi = {
   },
 };
 
-  getExtractionJob: async (
-    workspaceId: string,
-    jobId: string
-  ): Promise<KnowledgeExtractionJob> => {
-    const response = await api.get(`/workspaces/${workspaceId}/knowledge-graph/jobs/${jobId}`);
-    return response.data;
-  },
-};
-
 // ============================================================================
 // Recurring Reminders Types
 // ============================================================================

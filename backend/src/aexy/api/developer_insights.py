@@ -93,6 +93,31 @@ def _default_range(period_type: PeriodTypeParam) -> tuple[datetime, datetime]:
     return start, now
 
 
+def _validate_date_range(start_date: datetime, end_date: datetime) -> None:
+    """Validate that start_date < end_date and range is not excessively large."""
+    if start_date >= end_date:
+        raise HTTPException(status_code=400, detail="start_date must be before end_date")
+    max_range = timedelta(days=365)
+    if (end_date - start_date) > max_range:
+        raise HTTPException(status_code=400, detail="Date range cannot exceed 365 days")
+
+
+async def verify_workspace_membership(
+    workspace_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    developer_id: Annotated[str, Depends(get_current_developer_id)],
+) -> str:
+    """Verify the caller is a member of the workspace. Returns developer_id."""
+    stmt = select(WorkspaceMember.developer_id).where(
+        WorkspaceMember.workspace_id == workspace_id,
+        WorkspaceMember.developer_id == developer_id,
+    )
+    result = await db.execute(stmt)
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=403, detail="Not a member of this workspace")
+    return developer_id
+
+
 async def _get_workspace_developer_ids(
     db: AsyncSession, workspace_id: str
 ) -> list[str]:
@@ -135,7 +160,7 @@ async def get_developer_insights(
     workspace_id: str,
     dev_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
     start_date: datetime | None = Query(default=None),
     end_date: datetime | None = Query(default=None),
@@ -146,6 +171,7 @@ async def get_developer_insights(
 
     if not start_date or not end_date:
         start_date, end_date = _default_range(period_type)
+    _validate_date_range(start_date, end_date)
 
     service = DeveloperInsightsService(db)
 
@@ -214,7 +240,7 @@ async def get_velocity_forecast(
     workspace_id: str,
     dev_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
     periods_back: int = Query(default=6, ge=2, le=24),
 ):
@@ -239,7 +265,7 @@ async def get_gaming_flags(
     workspace_id: str,
     dev_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
     start_date: datetime | None = Query(default=None),
     end_date: datetime | None = Query(default=None),
@@ -249,6 +275,7 @@ async def get_gaming_flags(
 
     if not start_date or not end_date:
         start_date, end_date = _default_range(period_type)
+    _validate_date_range(start_date, end_date)
 
     service = DeveloperInsightsService(db)
     result = await service.detect_gaming_patterns(dev_id, start_date, end_date)
@@ -267,7 +294,7 @@ async def get_developer_code_churn(
     workspace_id: str,
     dev_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
     start_date: datetime | None = Query(default=None),
     end_date: datetime | None = Query(default=None),
@@ -278,6 +305,7 @@ async def get_developer_code_churn(
 
     if not start_date or not end_date:
         start_date, end_date = _default_range(period_type)
+    _validate_date_range(start_date, end_date)
 
     service = DeveloperInsightsService(db)
     result = await service.compute_code_churn(dev_id, start_date, end_date, churn_window_days)
@@ -297,7 +325,7 @@ async def get_developer_pr_sizes(
     workspace_id: str,
     dev_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
     start_date: datetime | None = Query(default=None),
     end_date: datetime | None = Query(default=None),
@@ -307,6 +335,7 @@ async def get_developer_pr_sizes(
 
     if not start_date or not end_date:
         start_date, end_date = _default_range(period_type)
+    _validate_date_range(start_date, end_date)
 
     service = DeveloperInsightsService(db)
     result = await service.compute_pr_size_distribution(dev_id, start_date, end_date)
@@ -325,7 +354,7 @@ async def get_developer_health_score(
     workspace_id: str,
     dev_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
     start_date: datetime | None = Query(default=None),
     end_date: datetime | None = Query(default=None),
@@ -335,6 +364,7 @@ async def get_developer_health_score(
 
     if not start_date or not end_date:
         start_date, end_date = _default_range(period_type)
+    _validate_date_range(start_date, end_date)
 
     service = DeveloperInsightsService(db)
     result = await service.compute_health_score(dev_id, start_date, end_date, workspace_id=workspace_id)
@@ -353,7 +383,7 @@ async def get_developer_percentile(
     workspace_id: str,
     dev_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     team_id: str | None = Query(default=None),
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
     start_date: datetime | None = Query(default=None),
@@ -364,6 +394,7 @@ async def get_developer_percentile(
 
     if not start_date or not end_date:
         start_date, end_date = _default_range(period_type)
+    _validate_date_range(start_date, end_date)
 
     if team_id:
         peer_ids = await _get_team_developer_ids(db, team_id)
@@ -392,7 +423,7 @@ async def get_role_benchmark(
     workspace_id: str,
     dev_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
     start_date: datetime | None = Query(default=None),
     end_date: datetime | None = Query(default=None),
@@ -402,6 +433,7 @@ async def get_role_benchmark(
 
     if not start_date or not end_date:
         start_date, end_date = _default_range(period_type)
+    _validate_date_range(start_date, end_date)
 
     service = DeveloperInsightsService(db)
     result = await service.compute_role_benchmarks(dev_id, workspace_id, start_date, end_date)
@@ -420,7 +452,7 @@ async def get_developer_trends(
     workspace_id: str,
     dev_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
     limit: int = Query(default=12, ge=1, le=52),
 ):
@@ -460,7 +492,7 @@ async def get_developer_trends(
 async def get_team_insights(
     workspace_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     team_id: str | None = Query(default=None),
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
     start_date: datetime | None = Query(default=None),
@@ -472,6 +504,7 @@ async def get_team_insights(
 
     if not start_date or not end_date:
         start_date, end_date = _default_range(period_type)
+    _validate_date_range(start_date, end_date)
 
     # --- cache check ---
     cache = _get_insights_cache()
@@ -542,7 +575,7 @@ async def get_team_insights(
 async def export_team_csv(
     workspace_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
     start_date: datetime | None = Query(default=None),
     end_date: datetime | None = Query(default=None),
@@ -552,6 +585,7 @@ async def export_team_csv(
 
     if not start_date or not end_date:
         start_date, end_date = _default_range(period_type)
+    _validate_date_range(start_date, end_date)
 
     dev_ids = await _get_workspace_developer_ids(db, workspace_id)
     if not dev_ids:
@@ -601,7 +635,7 @@ async def export_team_csv(
 async def compare_developers(
     workspace_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     developer_ids: str = Query(description="Comma-separated developer IDs"),
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
     start_date: datetime | None = Query(default=None),
@@ -612,6 +646,7 @@ async def compare_developers(
 
     if not start_date or not end_date:
         start_date, end_date = _default_range(period_type)
+    _validate_date_range(start_date, end_date)
 
     ids = [d.strip() for d in developer_ids.split(",") if d.strip()]
     if not ids:
@@ -655,7 +690,7 @@ async def compare_developers(
 async def get_leaderboard(
     workspace_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     metric: str = Query(default="commits", description="commits|prs_merged|lines_changed|reviews_given"),
     team_id: str | None = Query(default=None),
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
@@ -669,6 +704,7 @@ async def get_leaderboard(
 
     if not start_date or not end_date:
         start_date, end_date = _default_range(period_type)
+    _validate_date_range(start_date, end_date)
 
     # --- cache check ---
     cache = _get_insights_cache()
@@ -703,12 +739,10 @@ async def get_leaderboard(
 
     field_name = metric_map.get(metric, "commits_count")
 
-    # Get developer names
-    dev_names: dict[str, str | None] = {}
-    for dev_id in dev_ids:
-        dev_stmt = select(Developer.name).where(Developer.id == dev_id)
-        dev_result = await db.execute(dev_stmt)
-        dev_names[dev_id] = dev_result.scalar()
+    # Get developer names (batch)
+    dev_names_stmt = select(Developer.id, Developer.name).where(Developer.id.in_(dev_ids))
+    dev_names_result = await db.execute(dev_names_stmt)
+    dev_names: dict[str, str | None] = {row[0]: row[1] for row in dev_names_result.all()}
 
     entries = []
     for m in distribution.member_metrics:
@@ -747,7 +781,7 @@ async def generate_snapshots(
     workspace_id: str,
     request: SnapshotGenerateRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
 ):
     """Trigger snapshot computation for developers and optionally a team."""
     from aexy.services.developer_insights_service import DeveloperInsightsService
@@ -803,7 +837,7 @@ async def generate_snapshots(
 async def get_rotation_impact(
     workspace_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     rotating_developer_ids: str = Query(description="Comma-separated developer IDs rotating off"),
     team_id: str | None = Query(default=None),
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
@@ -815,6 +849,7 @@ async def get_rotation_impact(
 
     if not start_date or not end_date:
         start_date, end_date = _default_range(period_type)
+    _validate_date_range(start_date, end_date)
 
     if team_id:
         dev_ids = await _get_team_developer_ids(db, team_id)
@@ -849,7 +884,7 @@ async def export_developer_data(
     workspace_id: str,
     dev_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
 ):
     """Export all personal insight data for a developer (GDPR compliance)."""
     from aexy.services.developer_insights_service import DeveloperInsightsService
@@ -868,7 +903,7 @@ async def export_developer_data(
 async def get_sprint_capacity(
     workspace_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     team_id: str | None = Query(default=None),
     sprint_length_days: int = Query(default=14, ge=7, le=30),
     periods_back: int = Query(default=4, ge=2, le=12),
@@ -922,7 +957,7 @@ async def get_sprint_capacity(
 async def get_executive_summary(
     workspace_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
     start_date: datetime | None = Query(default=None),
     end_date: datetime | None = Query(default=None),
@@ -933,6 +968,7 @@ async def get_executive_summary(
 
     if not start_date or not end_date:
         start_date, end_date = _default_range(period_type)
+    _validate_date_range(start_date, end_date)
 
     # --- cache check ---
     cache = _get_insights_cache()
@@ -971,7 +1007,7 @@ async def get_executive_summary(
 async def get_bus_factor(
     workspace_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     team_id: str | None = Query(default=None),
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
     start_date: datetime | None = Query(default=None),
@@ -983,6 +1019,7 @@ async def get_bus_factor(
 
     if not start_date or not end_date:
         start_date, end_date = _default_range(period_type)
+    _validate_date_range(start_date, end_date)
 
     if team_id:
         dev_ids = await _get_team_developer_ids(db, team_id)
@@ -1014,7 +1051,7 @@ async def get_project_insights(
     workspace_id: str,
     project_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
     start_date: datetime | None = Query(default=None),
     end_date: datetime | None = Query(default=None),
@@ -1024,6 +1061,7 @@ async def get_project_insights(
 
     if not start_date or not end_date:
         start_date, end_date = _default_range(period_type)
+    _validate_date_range(start_date, end_date)
 
     dev_ids = await _get_project_developer_ids(db, project_id)
     if not dev_ids:
@@ -1069,7 +1107,7 @@ async def get_project_leaderboard(
     workspace_id: str,
     project_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     metric: str = Query(default="commits"),
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
     start_date: datetime | None = Query(default=None),
@@ -1081,6 +1119,7 @@ async def get_project_leaderboard(
 
     if not start_date or not end_date:
         start_date, end_date = _default_range(period_type)
+    _validate_date_range(start_date, end_date)
 
     dev_ids = await _get_project_developer_ids(db, project_id)
     if not dev_ids:
@@ -1133,7 +1172,7 @@ async def get_project_leaderboard(
 async def get_insight_settings(
     workspace_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     team_id: str | None = Query(default=None),
 ):
     """Get insight settings for workspace (org defaults) or a specific team override."""
@@ -1162,7 +1201,7 @@ async def upsert_insight_settings(
     workspace_id: str,
     request: InsightSettingsCreate,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
 ):
     """Create or update insight settings for workspace or team."""
     stmt = select(InsightSettings).where(
@@ -1208,7 +1247,7 @@ async def get_working_schedule(
     workspace_id: str,
     dev_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
 ):
     """Get a developer's working schedule."""
     stmt = select(DeveloperWorkingSchedule).where(
@@ -1236,7 +1275,7 @@ async def upsert_working_schedule(
     dev_id: str,
     request: DeveloperWorkingScheduleCreate,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
 ):
     """Create or update a developer's working schedule."""
     stmt = select(DeveloperWorkingSchedule).where(
@@ -1281,7 +1320,7 @@ async def upsert_working_schedule(
 async def list_alert_rules(
     workspace_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     active_only: bool = Query(default=True),
 ):
     """List insight alert rules for workspace."""
@@ -1302,7 +1341,7 @@ async def create_alert_rule(
     workspace_id: str,
     request: AlertRuleCreate,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
 ):
     """Create a new insight alert rule."""
     rule = InsightAlertRule(
@@ -1332,7 +1371,7 @@ async def update_alert_rule(
     rule_id: str,
     request: AlertRuleUpdate,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
 ):
     """Update an existing alert rule."""
     stmt = select(InsightAlertRule).where(
@@ -1360,7 +1399,7 @@ async def delete_alert_rule(
     workspace_id: str,
     rule_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
 ):
     """Delete an alert rule."""
     stmt = select(InsightAlertRule).where(
@@ -1387,7 +1426,7 @@ async def delete_alert_rule(
 async def seed_alert_templates(
     workspace_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
 ):
     """Seed default alert rule templates for the workspace."""
     from aexy.services.developer_insights_service import DeveloperInsightsService
@@ -1410,7 +1449,7 @@ async def seed_alert_templates(
 async def evaluate_alerts(
     workspace_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
     start_date: datetime | None = Query(default=None),
     end_date: datetime | None = Query(default=None),
@@ -1420,6 +1459,7 @@ async def evaluate_alerts(
 
     if not start_date or not end_date:
         start_date, end_date = _default_range(period_type)
+    _validate_date_range(start_date, end_date)
 
     service = DeveloperInsightsService(db)
     triggered = await service.evaluate_alert_rules(workspace_id, start_date, end_date)
@@ -1442,7 +1482,7 @@ async def evaluate_alerts(
 async def list_alert_history(
     workspace_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     status: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
 ):
@@ -1464,7 +1504,7 @@ async def acknowledge_alert(
     workspace_id: str,
     alert_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
 ):
     """Acknowledge a triggered alert."""
     stmt = select(InsightAlertHistory).where(
@@ -1494,7 +1534,7 @@ async def acknowledge_alert(
 async def get_team_narrative(
     workspace_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     team_id: str | None = Query(default=None),
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
     start_date: datetime | None = Query(default=None),
@@ -1505,6 +1545,7 @@ async def get_team_narrative(
 
     if not start_date or not end_date:
         start_date, end_date = _default_range(period_type)
+    _validate_date_range(start_date, end_date)
 
     if team_id:
         dev_ids = await _get_team_developer_ids(db, team_id)
@@ -1531,7 +1572,7 @@ async def get_developer_narrative(
     workspace_id: str,
     dev_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
     start_date: datetime | None = Query(default=None),
     end_date: datetime | None = Query(default=None),
@@ -1541,6 +1582,7 @@ async def get_developer_narrative(
 
     if not start_date or not end_date:
         start_date, end_date = _default_range(period_type)
+    _validate_date_range(start_date, end_date)
 
     ai_service = InsightsAIService(db)
     result = await ai_service.generate_developer_narrative(workspace_id, dev_id, start_date, end_date)
@@ -1559,7 +1601,7 @@ async def get_developer_anomalies(
     workspace_id: str,
     dev_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
     start_date: datetime | None = Query(default=None),
     end_date: datetime | None = Query(default=None),
@@ -1570,6 +1612,7 @@ async def get_developer_anomalies(
 
     if not start_date or not end_date:
         start_date, end_date = _default_range(period_type)
+    _validate_date_range(start_date, end_date)
 
     ai_service = InsightsAIService(db)
     result = await ai_service.detect_anomalies(workspace_id, dev_id, start_date, end_date, threshold)
@@ -1587,7 +1630,7 @@ async def get_developer_anomalies(
 async def get_root_cause_analysis(
     workspace_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     team_id: str | None = Query(default=None),
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
     start_date: datetime | None = Query(default=None),
@@ -1598,6 +1641,7 @@ async def get_root_cause_analysis(
 
     if not start_date or not end_date:
         start_date, end_date = _default_range(period_type)
+    _validate_date_range(start_date, end_date)
 
     if team_id:
         dev_ids = await _get_team_developer_ids(db, team_id)
@@ -1624,7 +1668,7 @@ async def get_one_on_one_prep(
     workspace_id: str,
     dev_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
     start_date: datetime | None = Query(default=None),
     end_date: datetime | None = Query(default=None),
@@ -1634,6 +1678,7 @@ async def get_one_on_one_prep(
 
     if not start_date or not end_date:
         start_date, end_date = _default_range(period_type)
+    _validate_date_range(start_date, end_date)
 
     ai_service = InsightsAIService(db)
     result = await ai_service.generate_one_on_one_prep(workspace_id, dev_id, start_date, end_date)
@@ -1651,7 +1696,7 @@ async def get_one_on_one_prep(
 async def get_sprint_retro(
     workspace_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     team_id: str | None = Query(default=None),
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.sprint),
     start_date: datetime | None = Query(default=None),
@@ -1662,6 +1707,7 @@ async def get_sprint_retro(
 
     if not start_date or not end_date:
         start_date, end_date = _default_range(period_type)
+    _validate_date_range(start_date, end_date)
 
     if team_id:
         dev_ids = await _get_team_developer_ids(db, team_id)
@@ -1687,7 +1733,7 @@ async def get_sprint_retro(
 async def get_team_trajectory(
     workspace_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     team_id: str | None = Query(default=None),
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
     start_date: datetime | None = Query(default=None),
@@ -1698,6 +1744,7 @@ async def get_team_trajectory(
 
     if not start_date or not end_date:
         start_date, end_date = _default_range(period_type)
+    _validate_date_range(start_date, end_date)
 
     if team_id:
         dev_ids = await _get_team_developer_ids(db, team_id)
@@ -1723,7 +1770,7 @@ async def get_team_trajectory(
 async def get_composition_recommendations(
     workspace_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     team_id: str | None = Query(default=None),
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
     start_date: datetime | None = Query(default=None),
@@ -1734,6 +1781,7 @@ async def get_composition_recommendations(
 
     if not start_date or not end_date:
         start_date, end_date = _default_range(period_type)
+    _validate_date_range(start_date, end_date)
 
     if team_id:
         dev_ids = await _get_team_developer_ids(db, team_id)
@@ -1759,7 +1807,7 @@ async def get_composition_recommendations(
 async def get_hiring_forecast(
     workspace_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    developer_id: Annotated[str, Depends(verify_workspace_membership)],
     team_id: str | None = Query(default=None),
     period_type: PeriodTypeParam = Query(default=PeriodTypeParam.weekly),
     start_date: datetime | None = Query(default=None),
@@ -1770,6 +1818,7 @@ async def get_hiring_forecast(
 
     if not start_date or not end_date:
         start_date, end_date = _default_range(period_type)
+    _validate_date_range(start_date, end_date)
 
     if team_id:
         dev_ids = await _get_team_developer_ids(db, team_id)

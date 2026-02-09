@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { toast } from "sonner";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -122,7 +123,7 @@ export default function InsightsSettingsPage() {
         });
       }
     } catch {
-      // Use defaults on error
+      toast.error("Failed to load settings. Using defaults.");
     } finally {
       setLoading(false);
     }
@@ -172,8 +173,8 @@ export default function InsightsSettingsPage() {
         snapshot_frequency: settings.snapshot_frequency,
       });
       setSaved(true);
-    } catch (err) {
-      console.error("Failed to save settings:", err);
+    } catch {
+      toast.error("Failed to save settings. Please try again.");
     } finally {
       setIsSaving(false);
     }

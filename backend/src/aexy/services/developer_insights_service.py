@@ -1,9 +1,12 @@
 """Developer Insights Service - computes velocity, efficiency, quality,
 sustainability, collaboration, and team distribution metrics."""
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy import select, func, and_, case, distinct
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -325,55 +328,75 @@ class DeveloperInsightsService:
             dt = (p.merged_at - p.created_at_github).total_seconds() / 3600
             cycle_times.append(dt)
 
-        # Time to first review
+        # Time to first review (batch query)
+        pr_github_ids = [p.github_id for p in prs]
+        first_review_stmt = select(
+            CodeReview.pull_request_github_id,
+            func.min(CodeReview.submitted_at),
+        ).where(
+            CodeReview.pull_request_github_id.in_(pr_github_ids),
+        ).group_by(CodeReview.pull_request_github_id)
+        first_review_result = await self.db.execute(first_review_stmt)
+        first_review_map = {row[0]: row[1] for row in first_review_result.all()}
+
         first_review_times = []
-        for p in prs:
-            review_stmt = select(func.min(CodeReview.submitted_at)).where(
-                CodeReview.pull_request_github_id == p.github_id,
-            )
-            result = await self.db.execute(review_stmt)
-            first_review_at = result.scalar()
-            if first_review_at:
-                dt = (first_review_at - p.created_at_github).total_seconds() / 3600
+        pr_created_map = {p.github_id: p.created_at_github for p in prs}
+        for gh_id, first_review_at in first_review_map.items():
+            if first_review_at and gh_id in pr_created_map:
+                dt = (first_review_at - pr_created_map[gh_id]).total_seconds() / 3600
                 first_review_times.append(dt)
 
         # Average PR size
-        avg_pr_size = sum(p.additions + p.deletions for p in prs) / total_prs
+        avg_pr_size = sum(p.additions + p.deletions for p in prs) / total_prs if total_prs else 0
 
-        # Rework ratio: PRs with > 1 review round (more than 1 changes_requested review)
-        rework_count = 0
-        for p in prs:
-            changes_requested_stmt = select(func.count(CodeReview.id)).where(
-                and_(
-                    CodeReview.pull_request_github_id == p.github_id,
-                    CodeReview.state == "changes_requested",
-                )
+        # Rework ratio (batch query): PRs with > 1 changes_requested review
+        changes_requested_stmt = select(
+            CodeReview.pull_request_github_id,
+            func.count(CodeReview.id),
+        ).where(
+            and_(
+                CodeReview.pull_request_github_id.in_(pr_github_ids),
+                CodeReview.state == "changes_requested",
             )
-            cr_result = await self.db.execute(changes_requested_stmt)
-            if (cr_result.scalar() or 0) > 1:
-                rework_count += 1
+        ).group_by(CodeReview.pull_request_github_id)
+        cr_result = await self.db.execute(changes_requested_stmt)
+        cr_counts = {row[0]: row[1] for row in cr_result.all()}
+        rework_count = sum(1 for gh_id in pr_github_ids if cr_counts.get(gh_id, 0) > 1)
 
-        # First commit to merge: earliest commit in same repo within 14 days before PR creation → merge
+        # First commit to merge (batch query): fetch all relevant commits at once
         first_commit_to_merge_times = []
-        for p in merged_prs:
-            lookback = p.created_at_github - timedelta(days=14)
-            earliest_commit_stmt = select(func.min(Commit.committed_at)).where(
-                and_(
-                    Commit.developer_id == developer_id,
-                    Commit.repository == p.repository,
-                    Commit.committed_at >= lookback,
-                    Commit.committed_at <= p.merged_at,
+        if merged_prs:
+            min_lookback = min(p.created_at_github - timedelta(days=14) for p in merged_prs)
+            max_merge = max(p.merged_at for p in merged_prs)
+            repos = list(set(p.repository for p in merged_prs if p.repository))
+
+            if repos:
+                all_commits_stmt = select(
+                    Commit.repository,
+                    Commit.committed_at,
+                ).where(
+                    and_(
+                        Commit.developer_id == developer_id,
+                        Commit.repository.in_(repos),
+                        Commit.committed_at >= min_lookback,
+                        Commit.committed_at <= max_merge,
+                    )
                 )
-            )
-            ec_result = await self.db.execute(earliest_commit_stmt)
-            earliest = ec_result.scalar()
-            if earliest:
-                dt = (p.merged_at - earliest).total_seconds() / 3600
-                first_commit_to_merge_times.append(dt)
-            else:
-                # Fall back to PR cycle time if no commits found
-                dt = (p.merged_at - p.created_at_github).total_seconds() / 3600
-                first_commit_to_merge_times.append(dt)
+                commits_result = await self.db.execute(all_commits_stmt)
+                commits_by_repo: dict[str, list[datetime]] = {}
+                for c_repo, c_time in commits_result.all():
+                    commits_by_repo.setdefault(c_repo, []).append(c_time)
+
+                for p in merged_prs:
+                    repo_commits = commits_by_repo.get(p.repository, [])
+                    lookback = p.created_at_github - timedelta(days=14)
+                    valid = [c for c in repo_commits if lookback <= c <= p.merged_at]
+                    if valid:
+                        earliest = min(valid)
+                        dt = (p.merged_at - earliest).total_seconds() / 3600
+                    else:
+                        dt = (p.merged_at - p.created_at_github).total_seconds() / 3600
+                    first_commit_to_merge_times.append(dt)
 
         return EfficiencyMetrics(
             avg_pr_cycle_time_hours=sum(cycle_times) / len(cycle_times) if cycle_times else 0,
@@ -451,7 +474,13 @@ class DeveloperInsightsService:
             })
 
         sizes.sort()
-        median = sizes[len(sizes) // 2] if sizes else 0
+        if not sizes:
+            median = 0
+        elif len(sizes) % 2 == 1:
+            median = sizes[len(sizes) // 2]
+        else:
+            mid = len(sizes) // 2
+            median = (sizes[mid - 1] + sizes[mid]) / 2
 
         return {
             "distribution": distribution,
@@ -627,16 +656,20 @@ class DeveloperInsightsService:
         own_prs = list(own_prs_result.scalars().all())
 
         self_merged = 0
-        for p in own_prs:
-            other_reviews_stmt = select(func.count(CodeReview.id)).where(
+        if own_prs:
+            own_pr_ids = [p.github_id for p in own_prs]
+            other_review_stmt = select(
+                CodeReview.pull_request_github_id,
+                func.count(CodeReview.id),
+            ).where(
                 and_(
-                    CodeReview.pull_request_github_id == p.github_id,
+                    CodeReview.pull_request_github_id.in_(own_pr_ids),
                     CodeReview.developer_id != developer_id,
                 )
-            )
-            other_count = (await self.db.execute(other_reviews_stmt)).scalar() or 0
-            if other_count == 0:
-                self_merged += 1
+            ).group_by(CodeReview.pull_request_github_id)
+            other_result = await self.db.execute(other_review_stmt)
+            other_counts = {row[0]: row[1] for row in other_result.all()}
+            self_merged = sum(1 for p in own_prs if other_counts.get(p.github_id, 0) == 0)
 
         self_merge_rate = self_merged / len(own_prs) if own_prs else 0
 
@@ -1104,66 +1137,81 @@ class DeveloperInsightsService:
         member_summaries: list[MemberSummary] = []
         total_loads: list[float] = []
 
+        # Batch query: commits per developer
+        c_stmt = select(
+            Commit.developer_id,
+            func.count(Commit.id),
+            func.coalesce(func.sum(Commit.additions + Commit.deletions), 0),
+        ).where(
+            and_(
+                Commit.developer_id.in_(developer_ids),
+                Commit.committed_at >= start,
+                Commit.committed_at <= end,
+            )
+        ).group_by(Commit.developer_id)
+        c_result = await self.db.execute(c_stmt)
+        commit_data = {row[0]: (row[1], row[2]) for row in c_result.all()}
+
+        # Batch query: PRs merged per developer
+        pr_stmt = select(
+            PullRequest.developer_id,
+            func.count(PullRequest.id),
+        ).where(
+            and_(
+                PullRequest.developer_id.in_(developer_ids),
+                PullRequest.state == "merged",
+                PullRequest.merged_at >= start,
+                PullRequest.merged_at <= end,
+            )
+        ).group_by(PullRequest.developer_id)
+        pr_result = await self.db.execute(pr_stmt)
+        pr_data = {row[0]: row[1] for row in pr_result.all()}
+
+        # Batch query: reviews given per developer
+        rv_stmt = select(
+            CodeReview.developer_id,
+            func.count(CodeReview.id),
+        ).where(
+            and_(
+                CodeReview.developer_id.in_(developer_ids),
+                CodeReview.submitted_at >= start,
+                CodeReview.submitted_at <= end,
+            )
+        ).group_by(CodeReview.developer_id)
+        rv_result = await self.db.execute(rv_stmt)
+        review_data = {row[0]: row[1] for row in rv_result.all()}
+
         for dev_id in developer_ids:
-            # Commits count
-            c_stmt = select(
-                func.count(Commit.id),
-                func.coalesce(func.sum(Commit.additions + Commit.deletions), 0),
-            ).where(
-                and_(
-                    Commit.developer_id == dev_id,
-                    Commit.committed_at >= start,
-                    Commit.committed_at <= end,
-                )
-            )
-            c_result = await self.db.execute(c_stmt)
-            c_row = c_result.one()
-
-            # PRs merged
-            pr_stmt = select(func.count(PullRequest.id)).where(
-                and_(
-                    PullRequest.developer_id == dev_id,
-                    PullRequest.state == "merged",
-                    PullRequest.merged_at >= start,
-                    PullRequest.merged_at <= end,
-                )
-            )
-            prs_merged = (await self.db.execute(pr_stmt)).scalar() or 0
-
-            # Reviews given
-            rv_stmt = select(func.count(CodeReview.id)).where(
-                and_(
-                    CodeReview.developer_id == dev_id,
-                    CodeReview.submitted_at >= start,
-                    CodeReview.submitted_at <= end,
-                )
-            )
-            reviews_given = (await self.db.execute(rv_stmt)).scalar() or 0
-
+            commits_count, lines = commit_data.get(dev_id, (0, 0))
+            prs_merged = pr_data.get(dev_id, 0)
+            reviews_given = review_data.get(dev_id, 0)
             summary = MemberSummary(
                 developer_id=dev_id,
-                commits_count=c_row[0] or 0,
+                commits_count=commits_count,
                 prs_merged=prs_merged,
-                lines_changed=c_row[1] or 0,
+                lines_changed=lines,
                 reviews_given=reviews_given,
             )
             member_summaries.append(summary)
-            # Total "load" = commits + prs*3 + reviews
             total_loads.append(summary.commits_count + summary.prs_merged * 3 + summary.reviews_given)
 
         # Gini coefficient
         if role_weighted and workspace_id:
-            # Look up engineering roles for each developer in this workspace
+            # Batch lookup of engineering roles
+            sched_stmt = select(
+                DeveloperWorkingSchedule.developer_id,
+                DeveloperWorkingSchedule.engineering_role,
+            ).where(
+                and_(
+                    DeveloperWorkingSchedule.developer_id.in_(developer_ids),
+                    DeveloperWorkingSchedule.workspace_id == workspace_id,
+                )
+            )
+            role_result = await self.db.execute(sched_stmt)
+            role_map = {row[0]: row[1] for row in role_result.all()}
             role_multipliers: list[float] = []
             for dev_id in developer_ids:
-                sched_stmt = select(DeveloperWorkingSchedule.engineering_role).where(
-                    and_(
-                        DeveloperWorkingSchedule.developer_id == dev_id,
-                        DeveloperWorkingSchedule.workspace_id == workspace_id,
-                    )
-                )
-                role_result = await self.db.execute(sched_stmt)
-                role = role_result.scalar()
+                role = role_map.get(dev_id)
                 multiplier = self.ROLE_EXPECTATIONS.get(role, 1.0) if role else 1.0
                 role_multipliers.append(multiplier)
 
@@ -1502,14 +1550,16 @@ class DeveloperInsightsService:
             if p.state == "merged" and p.merged_at
         ]
         if self_merged:
-            no_review_count = 0
-            for p in self_merged:
-                review_count_stmt = select(func.count(CodeReview.id)).where(
-                    CodeReview.pull_request_github_id == p.github_id,
-                )
-                rc_result = await self.db.execute(review_count_stmt)
-                if (rc_result.scalar() or 0) == 0:
-                    no_review_count += 1
+            sm_ids = [p.github_id for p in self_merged]
+            review_count_stmt = select(
+                CodeReview.pull_request_github_id,
+                func.count(CodeReview.id),
+            ).where(
+                CodeReview.pull_request_github_id.in_(sm_ids),
+            ).group_by(CodeReview.pull_request_github_id)
+            rc_result = await self.db.execute(review_count_stmt)
+            review_counts = {row[0]: row[1] for row in rc_result.all()}
+            no_review_count = sum(1 for p in self_merged if review_counts.get(p.github_id, 0) == 0)
 
             if no_review_count > 0 and len(self_merged) > 0:
                 sr_ratio = no_review_count / len(self_merged)
@@ -1679,7 +1729,8 @@ class DeveloperInsightsService:
                             "severity": severity_str,
                             "message": message,
                         })
-                except Exception:
+                except Exception as exc:
+                    logger.warning("Alert evaluation failed for rule %s dev %s: %s", rule.name, dev_id, exc)
                     continue
 
         if triggered:

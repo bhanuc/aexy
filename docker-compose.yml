@@ -101,8 +101,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      rustfs:
-        condition: service_healthy
+      # rustfs:
+      #   condition: service_healthy
       temporal:
         condition: service_started
     volumes:
@@ -133,8 +133,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      rustfs:
-        condition: service_healthy
+      # rustfs:
+      #   condition: service_healthy
       temporal:
         condition: service_started
     volumes:

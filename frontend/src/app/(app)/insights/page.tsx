@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { redirect } from "next/navigation";
@@ -136,8 +137,8 @@ export default function InsightsPage() {
         end_date: now.toISOString().split("T")[0],
       });
       refetchTeam();
-    } catch (e) {
-      console.error("Failed to generate snapshots:", e);
+    } catch {
+      toast.error("Failed to generate snapshots. Please try again.");
     }
   };
 

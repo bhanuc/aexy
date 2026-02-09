@@ -4,7 +4,7 @@ import enum
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -76,14 +76,14 @@ class DeveloperMetricsSnapshot(Base):
     )
 
     # Metric categories (JSONB for flexible schema evolution)
-    velocity_metrics: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    efficiency_metrics: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    quality_metrics: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    sustainability_metrics: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    collaboration_metrics: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    velocity_metrics: Mapped[dict | None] = mapped_column(JSONB, nullable=True, server_default=text("'{}'"))
+    efficiency_metrics: Mapped[dict | None] = mapped_column(JSONB, nullable=True, server_default=text("'{}'"))
+    quality_metrics: Mapped[dict | None] = mapped_column(JSONB, nullable=True, server_default=text("'{}'"))
+    sustainability_metrics: Mapped[dict | None] = mapped_column(JSONB, nullable=True, server_default=text("'{}'"))
+    collaboration_metrics: Mapped[dict | None] = mapped_column(JSONB, nullable=True, server_default=text("'{}'"))
 
     # Raw counts for debugging/auditing
-    raw_counts: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    raw_counts: Mapped[dict | None] = mapped_column(JSONB, nullable=True, server_default=text("'{}'"))
 
     computed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -371,11 +371,15 @@ class InsightAlertHistory(Base):
     # Who/what triggered it
     developer_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False),
+        ForeignKey("developers.id", ondelete="SET NULL"),
         nullable=True,
+        index=True,
     )
     team_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False),
+        ForeignKey("teams.id", ondelete="SET NULL"),
         nullable=True,
+        index=True,
     )
 
     # Alert details
@@ -394,6 +398,7 @@ class InsightAlertHistory(Base):
     # Acknowledgement
     acknowledged_by_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False),
+        ForeignKey("developers.id", ondelete="SET NULL"),
         nullable=True,
     )
     acknowledged_at: Mapped[datetime | None] = mapped_column(
