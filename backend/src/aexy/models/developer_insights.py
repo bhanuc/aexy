@@ -284,9 +284,10 @@ class InsightAlertRule(Base):
         ForeignKey("workspaces.id", ondelete="CASCADE"),
         index=True,
     )
-    created_by_id: Mapped[str] = mapped_column(
+    created_by_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False),
         ForeignKey("developers.id", ondelete="SET NULL"),
+        nullable=True,
     )
 
     name: Mapped[str] = mapped_column(String(200))
@@ -425,9 +426,10 @@ class InsightReportSchedule(Base):
         ForeignKey("workspaces.id", ondelete="CASCADE"),
         index=True,
     )
-    created_by_id: Mapped[str] = mapped_column(
+    created_by_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False),
         ForeignKey("developers.id", ondelete="SET NULL"),
+        nullable=True,
     )
 
     name: Mapped[str] = mapped_column(String(200))
@@ -498,9 +500,10 @@ class SavedInsightDashboard(Base):
         ForeignKey("workspaces.id", ondelete="CASCADE"),
         index=True,
     )
-    created_by_id: Mapped[str] = mapped_column(
+    created_by_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False),
         ForeignKey("developers.id", ondelete="SET NULL"),
+        nullable=True,
     )
 
     name: Mapped[str] = mapped_column(String(200))

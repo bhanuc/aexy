@@ -353,12 +353,34 @@ class DeveloperInsightsService:
             if (cr_result.scalar() or 0) > 1:
                 rework_count += 1
 
+        # First commit to merge: earliest commit in same repo within 14 days before PR creation → merge
+        first_commit_to_merge_times = []
+        for p in merged_prs:
+            lookback = p.created_at_github - timedelta(days=14)
+            earliest_commit_stmt = select(func.min(Commit.committed_at)).where(
+                and_(
+                    Commit.developer_id == developer_id,
+                    Commit.repository == p.repository,
+                    Commit.committed_at >= lookback,
+                    Commit.committed_at <= p.merged_at,
+                )
+            )
+            ec_result = await self.db.execute(earliest_commit_stmt)
+            earliest = ec_result.scalar()
+            if earliest:
+                dt = (p.merged_at - earliest).total_seconds() / 3600
+                first_commit_to_merge_times.append(dt)
+            else:
+                # Fall back to PR cycle time if no commits found
+                dt = (p.merged_at - p.created_at_github).total_seconds() / 3600
+                first_commit_to_merge_times.append(dt)
+
         return EfficiencyMetrics(
             avg_pr_cycle_time_hours=sum(cycle_times) / len(cycle_times) if cycle_times else 0,
             avg_time_to_first_review_hours=sum(first_review_times) / len(first_review_times) if first_review_times else 0,
             avg_pr_size=avg_pr_size,
             pr_merge_rate=merge_count / total_prs if total_prs else 0,
-            first_commit_to_merge_hours=sum(cycle_times) / len(cycle_times) if cycle_times else 0,
+            first_commit_to_merge_hours=sum(first_commit_to_merge_times) / len(first_commit_to_merge_times) if first_commit_to_merge_times else 0,
             rework_ratio=rework_count / total_prs if total_prs else 0,
         )
 
@@ -2091,7 +2113,7 @@ class DeveloperInsightsService:
                 "prs_merged": vel.prs_merged,
                 "commit_frequency": vel.commit_frequency,
                 "pr_throughput": vel.pr_throughput,
-                "avg_pr_cycle_time": eff.avg_pr_cycle_time,
+                "avg_pr_cycle_time": eff.avg_pr_cycle_time_hours,
                 "pr_merge_rate": eff.pr_merge_rate,
                 "review_participation_rate": qual.review_participation_rate,
                 "avg_review_depth": qual.avg_review_depth,

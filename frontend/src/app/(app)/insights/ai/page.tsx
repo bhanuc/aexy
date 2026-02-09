@@ -250,6 +250,12 @@ export default function AIInsightsPage() {
           generated: hiring?.generated,
           onRefresh: () => refetchHiring(),
         };
+      default:
+        return {
+          content: "",
+          isLoading: false,
+          generated: false,
+        };
     }
   };
 

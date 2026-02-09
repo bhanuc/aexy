@@ -178,7 +178,7 @@ class InsightsAIService:
             "commits": velocity.commits_count,
             "prs_merged": velocity.prs_merged,
             "lines_added": velocity.lines_added,
-            "pr_cycle_time": efficiency.avg_pr_cycle_time,
+            "pr_cycle_time": efficiency.avg_pr_cycle_time_hours,
             "pr_merge_rate": efficiency.pr_merge_rate,
         }
 
@@ -193,8 +193,8 @@ class InsightsAIService:
                 historical["prs_merged"].append(vm["prs_merged"])
             if vm.get("lines_added") is not None:
                 historical["lines_added"].append(vm["lines_added"])
-            if em.get("avg_pr_cycle_time") is not None:
-                historical["pr_cycle_time"].append(em["avg_pr_cycle_time"])
+            if em.get("avg_pr_cycle_time_hours") is not None:
+                historical["pr_cycle_time"].append(em["avg_pr_cycle_time_hours"])
             if em.get("pr_merge_rate") is not None:
                 historical["pr_merge_rate"].append(em["pr_merge_rate"])
 
@@ -380,7 +380,7 @@ class InsightsAIService:
 
         context = {
             "period": f"{start.date()} to {end.date()}",
-            "health_score": health.get("health_score", 0),
+            "health_score": health.get("score", 0),
             "velocity": velocity.to_dict(),
             "efficiency": efficiency.to_dict(),
             "quality": quality.to_dict(),
@@ -411,7 +411,7 @@ class InsightsAIService:
             )
             return {
                 "notes": response_text.strip(),
-                "health_score": health.get("health_score", 0),
+                "health_score": health.get("score", 0),
                 "generated": True,
                 "tokens_used": total_tokens,
             }
