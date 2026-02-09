@@ -1831,6 +1831,7 @@ export interface Workspace {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  members?: Array<{ developer_id: string; role: string }>;
 }
 
 export interface WorkspaceListItem {
@@ -9793,6 +9794,8 @@ export interface AgentCreateData {
   working_hours?: WorkingHoursConfig | null;
   escalation_email?: string;
   escalation_slack_channel?: string;
+  auto_reply_enabled?: boolean;
+  email_signature?: string;
   crm_sync?: boolean;
   calendar_sync?: boolean;
   calendar_id?: string;
@@ -11467,6 +11470,8 @@ export interface OKRGoal {
   period_type: OKRPeriodType;
   period_start?: string;
   period_end?: string;
+  start_date?: string;
+  end_date?: string;
   metric_type: OKRMetricType;
   target_value: number;
   current_value: number;
@@ -11498,6 +11503,7 @@ export interface OKRGoalUpdate {
   title?: string;
   description?: string;
   owner_id?: string;
+  period_type?: OKRPeriodType;
   start_date?: string;
   end_date?: string;
   target_value?: number;
@@ -12209,6 +12215,7 @@ export interface EmailCampaign {
   workspace_id: string;
   name: string;
   subject?: string;
+  preview_text?: string;
   template_id?: string | null;
   template_name?: string;
   html_content?: string | null;
@@ -12297,6 +12304,8 @@ export interface CampaignAnalytics {
   click_to_open_rate: number;
   bounce_rate: number;
   unsubscribe_rate: number;
+  device_stats?: Record<string, number>;
+  link_stats?: Array<{ url: string; clicks: number }>;
 }
 
 export interface AnalyticsOverview {
@@ -15402,5 +15411,1002 @@ export const knowledgeGraphApi = {
   ): Promise<KnowledgeExtractionJob> => {
     const response = await api.get(`/workspaces/${workspaceId}/knowledge-graph/jobs/${jobId}`);
     return response.data;
+  },
+};
+
+// ============================================================================
+// Recurring Reminders Types
+// ============================================================================
+
+export type ReminderStatus = "active" | "paused" | "archived";
+export type ReminderPriority = "low" | "medium" | "high" | "critical";
+export type ReminderFrequency = "once" | "daily" | "weekly" | "biweekly" | "monthly" | "quarterly" | "yearly" | "custom";
+export type ReminderInstanceStatus = "pending" | "notified" | "acknowledged" | "completed" | "skipped" | "escalated" | "overdue";
+export type ReminderEscalationLevel = "l1" | "l2" | "l3" | "l4";
+export type ReminderAssignmentStrategy = "fixed" | "round_robin" | "on_call" | "domain_mapping" | "custom_rule";
+export type ReminderCategory = "compliance" | "review" | "audit" | "security" | "training" | "maintenance" | "reporting" | "custom";
+
+export interface EscalationLevelConfig {
+  level: ReminderEscalationLevel;
+  delay_hours: number;
+  notify_via: string[];
+  notify_user_id?: string;
+  notify_team_id?: string;
+}
+
+export interface EscalationConfig {
+  enabled: boolean;
+  levels: EscalationLevelConfig[];
+}
+
+export interface NotificationConfig {
+  channels: string[];
+  advance_notice_hours: number;
+  include_instructions: boolean;
+  custom_message?: string;
+}
+
+export interface Reminder {
+  id: string;
+  workspace_id: string;
+  title: string;
+  description?: string;
+  category: ReminderCategory;
+  priority: ReminderPriority;
+  status: ReminderStatus;
+  frequency: ReminderFrequency;
+  cron_expression?: string;
+  timezone: string;
+  start_date: string;
+  end_date?: string;
+  next_occurrence?: string;
+  assignment_strategy: ReminderAssignmentStrategy;
+  default_owner_id?: string;
+  default_team_id?: string;
+  escalation_config?: EscalationConfig;
+  notification_config?: NotificationConfig;
+  requires_acknowledgment: boolean;
+  extra_data?: Record<string, unknown>;
+  created_by_id: string;
+  created_at: string;
+  updated_at: string;
+  // Nested
+  default_owner?: { id: string; name: string; email: string };
+  default_team?: { id: string; name: string };
+  created_by?: { id: string; name: string; email: string };
+}
+
+export interface ReminderCreate {
+  title: string;
+  description?: string;
+  category: ReminderCategory;
+  priority?: ReminderPriority;
+  frequency: ReminderFrequency;
+  cron_expression?: string;
+  timezone?: string;
+  start_date: string;
+  end_date?: string;
+  assignment_strategy?: ReminderAssignmentStrategy;
+  default_owner_id?: string;
+  default_team_id?: string;
+  escalation_config?: EscalationConfig;
+  notification_config?: NotificationConfig;
+  requires_acknowledgment?: boolean;
+  extra_data?: Record<string, unknown>;
+}
+
+export interface ReminderUpdate {
+  title?: string;
+  description?: string;
+  category?: ReminderCategory;
+  priority?: ReminderPriority;
+  status?: ReminderStatus;
+  frequency?: ReminderFrequency;
+  cron_expression?: string;
+  timezone?: string;
+  start_date?: string;
+  end_date?: string;
+  assignment_strategy?: ReminderAssignmentStrategy;
+  default_owner_id?: string;
+  default_team_id?: string;
+  escalation_config?: EscalationConfig;
+  notification_config?: NotificationConfig;
+  requires_acknowledgment?: boolean;
+  extra_data?: Record<string, unknown>;
+}
+
+export interface ReminderInstance {
+  id: string;
+  reminder_id: string;
+  due_date: string;
+  status: ReminderInstanceStatus;
+  current_escalation_level?: ReminderEscalationLevel;
+  assigned_owner_id?: string;
+  assigned_team_id?: string;
+  initial_notified_at?: string;
+  last_notified_at?: string;
+  notification_count: number;
+  acknowledged_at?: string;
+  acknowledged_by_id?: string;
+  completed_at?: string;
+  completed_by_id?: string;
+  completion_notes?: string;
+  skipped_at?: string;
+  skipped_by_id?: string;
+  skip_reason?: string;
+  created_at: string;
+  updated_at: string;
+  // Nested
+  reminder?: Reminder;
+  assigned_owner?: { id: string; name: string; email: string };
+  assigned_team?: { id: string; name: string };
+  acknowledged_by?: { id: string; name: string; email: string };
+  completed_by?: { id: string; name: string; email: string };
+  skipped_by?: { id: string; name: string; email: string };
+}
+
+export interface ReminderEscalation {
+  id: string;
+  instance_id: string;
+  level: ReminderEscalationLevel;
+  escalated_to_id: string;
+  notified_at: string;
+  notification_channels: string[];
+  created_at: string;
+  // Nested
+  escalated_to?: { id: string; name: string; email: string };
+}
+
+export interface ControlOwner {
+  id: string;
+  workspace_id: string;
+  control_id: string;
+  control_name: string;
+  domain?: string;
+  primary_owner_id: string;
+  backup_owner_id?: string;
+  team_id?: string;
+  created_at: string;
+  updated_at: string;
+  // Nested
+  primary_owner?: { id: string; name: string; email: string };
+  backup_owner?: { id: string; name: string; email: string };
+  team?: { id: string; name: string };
+}
+
+export interface ControlOwnerCreate {
+  control_id: string;
+  control_name: string;
+  domain?: string;
+  primary_owner_id: string;
+  backup_owner_id?: string;
+  team_id?: string;
+}
+
+export interface ControlOwnerUpdate {
+  control_name?: string;
+  domain?: string;
+  primary_owner_id?: string;
+  backup_owner_id?: string;
+  team_id?: string;
+}
+
+export interface DomainTeamMapping {
+  id: string;
+  workspace_id: string;
+  domain: string;
+  team_id: string;
+  priority: number;
+  created_at: string;
+  updated_at: string;
+  // Nested
+  team?: { id: string; name: string };
+}
+
+export interface DomainTeamMappingCreate {
+  domain: string;
+  team_id: string;
+  priority?: number;
+}
+
+export interface AssignmentRule {
+  id: string;
+  workspace_id: string;
+  name: string;
+  rule_config: Record<string, unknown>;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AssignmentRuleCreate {
+  name: string;
+  rule_config: Record<string, unknown>;
+  is_active?: boolean;
+}
+
+export interface ReminderSuggestion {
+  id: string;
+  workspace_id: string;
+  questionnaire_response_id?: string;
+  question_id?: string;
+  answer_text?: string;
+  suggested_title: string;
+  suggested_description?: string;
+  suggested_frequency: ReminderFrequency;
+  suggested_category: ReminderCategory;
+  inferred_domain?: string;
+  confidence_score: number;
+  status: "pending" | "accepted" | "rejected";
+  reminder_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReminderListResponse {
+  reminders: Reminder[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface ReminderInstanceListResponse {
+  instances: ReminderInstance[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface ReminderDashboardStats {
+  total_reminders: number;
+  active_reminders: number;
+  paused_reminders: number;
+  pending_instances: number;
+  overdue_instances: number;
+  completed_this_week: number;
+  completion_rate_7d: number;
+  by_category: Record<string, number>;
+  by_priority: Record<string, number>;
+  upcoming_7_days: ReminderInstance[];
+}
+
+export interface MyRemindersResponse {
+  assigned_to_me: ReminderInstance[];
+  created_by_me: Reminder[];
+  overdue: ReminderInstance[];
+}
+
+export interface ReminderCalendarEvent {
+  id: string;
+  title: string;
+  date: string;
+  due_date: string;
+  status: ReminderInstanceStatus;
+  priority: ReminderPriority;
+  category: ReminderCategory;
+  reminder_id: string;
+  instance_id: string;
+}
+
+// ============================================================================
+// Recurring Reminders API
+// ============================================================================
+
+export const remindersApi = {
+  // Reminder CRUD
+  list: async (
+    workspaceId: string,
+    params?: {
+      status?: ReminderStatus;
+      category?: ReminderCategory;
+      priority?: ReminderPriority;
+      search?: string;
+      page?: number;
+      page_size?: number;
+    }
+  ): Promise<ReminderListResponse> => {
+    const response = await api.get(`/workspaces/${workspaceId}/reminders`, { params });
+    return response.data;
+  },
+
+  get: async (workspaceId: string, reminderId: string): Promise<Reminder> => {
+    const response = await api.get(`/workspaces/${workspaceId}/reminders/${reminderId}`);
+    return response.data;
+  },
+
+  create: async (workspaceId: string, data: ReminderCreate): Promise<Reminder> => {
+    const response = await api.post(`/workspaces/${workspaceId}/reminders`, data);
+    return response.data;
+  },
+
+  update: async (workspaceId: string, reminderId: string, data: ReminderUpdate): Promise<Reminder> => {
+    const response = await api.patch(`/workspaces/${workspaceId}/reminders/${reminderId}`, data);
+    return response.data;
+  },
+
+  delete: async (workspaceId: string, reminderId: string): Promise<void> => {
+    await api.delete(`/workspaces/${workspaceId}/reminders/${reminderId}`);
+  },
+
+  // Instance Management
+  listInstances: async (
+    workspaceId: string,
+    reminderId: string,
+    params?: {
+      status?: ReminderInstanceStatus;
+      page?: number;
+      page_size?: number;
+    }
+  ): Promise<ReminderInstanceListResponse> => {
+    const response = await api.get(`/workspaces/${workspaceId}/reminders/${reminderId}/instances`, { params });
+    return response.data;
+  },
+
+  getInstance: async (workspaceId: string, instanceId: string): Promise<ReminderInstance> => {
+    const response = await api.get(`/workspaces/${workspaceId}/reminders/instances/${instanceId}`);
+    return response.data;
+  },
+
+  acknowledgeInstance: async (
+    workspaceId: string,
+    instanceId: string,
+    notes?: string
+  ): Promise<ReminderInstance> => {
+    const response = await api.post(`/workspaces/${workspaceId}/reminders/instances/${instanceId}/acknowledge`, {
+      notes,
+    });
+    return response.data;
+  },
+
+  completeInstance: async (
+    workspaceId: string,
+    instanceId: string,
+    data: { notes?: string; evidence_url?: string }
+  ): Promise<ReminderInstance> => {
+    const response = await api.post(`/workspaces/${workspaceId}/reminders/instances/${instanceId}/complete`, data);
+    return response.data;
+  },
+
+  skipInstance: async (
+    workspaceId: string,
+    instanceId: string,
+    reason: string
+  ): Promise<ReminderInstance> => {
+    const response = await api.post(`/workspaces/${workspaceId}/reminders/instances/${instanceId}/skip`, {
+      reason,
+    });
+    return response.data;
+  },
+
+  reassignInstance: async (
+    workspaceId: string,
+    instanceId: string,
+    data: { owner_id?: string; team_id?: string }
+  ): Promise<ReminderInstance> => {
+    const response = await api.post(`/workspaces/${workspaceId}/reminders/instances/${instanceId}/reassign`, data);
+    return response.data;
+  },
+
+  // Dashboard
+  getDashboardStats: async (workspaceId: string): Promise<ReminderDashboardStats> => {
+    const response = await api.get(`/workspaces/${workspaceId}/reminders/dashboard/stats`);
+    return response.data;
+  },
+
+  getMyReminders: async (workspaceId: string): Promise<MyRemindersResponse> => {
+    const response = await api.get(`/workspaces/${workspaceId}/reminders/my-reminders`);
+    return response.data;
+  },
+
+  getCalendarView: async (
+    workspaceId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<ReminderCalendarEvent[]> => {
+    const response = await api.get(`/workspaces/${workspaceId}/reminders/calendar`, {
+      params: { start_date: startDate, end_date: endDate },
+    });
+    return response.data.events || [];
+  },
+
+  // Control Owners
+  listControlOwners: async (
+    workspaceId: string,
+    domain?: string
+  ): Promise<ControlOwner[]> => {
+    const response = await api.get(`/workspaces/${workspaceId}/reminders/control-owners`, {
+      params: domain ? { domain } : undefined,
+    });
+    return response.data;
+  },
+
+  createControlOwner: async (
+    workspaceId: string,
+    data: ControlOwnerCreate
+  ): Promise<ControlOwner> => {
+    const response = await api.post(`/workspaces/${workspaceId}/reminders/control-owners`, data);
+    return response.data;
+  },
+
+  updateControlOwner: async (
+    workspaceId: string,
+    controlOwnerId: string,
+    data: ControlOwnerUpdate
+  ): Promise<ControlOwner> => {
+    const response = await api.patch(`/workspaces/${workspaceId}/reminders/control-owners/${controlOwnerId}`, data);
+    return response.data;
+  },
+
+  deleteControlOwner: async (workspaceId: string, controlOwnerId: string): Promise<void> => {
+    await api.delete(`/workspaces/${workspaceId}/reminders/control-owners/${controlOwnerId}`);
+  },
+
+  // Domain Team Mappings
+  listDomainMappings: async (workspaceId: string): Promise<DomainTeamMapping[]> => {
+    const response = await api.get(`/workspaces/${workspaceId}/reminders/domain-mappings`);
+    return response.data;
+  },
+
+  createDomainMapping: async (
+    workspaceId: string,
+    data: DomainTeamMappingCreate
+  ): Promise<DomainTeamMapping> => {
+    const response = await api.post(`/workspaces/${workspaceId}/reminders/domain-mappings`, data);
+    return response.data;
+  },
+
+  deleteDomainMapping: async (workspaceId: string, mappingId: string): Promise<void> => {
+    await api.delete(`/workspaces/${workspaceId}/reminders/domain-mappings/${mappingId}`);
+  },
+
+  // Assignment Rules
+  listAssignmentRules: async (workspaceId: string): Promise<AssignmentRule[]> => {
+    const response = await api.get(`/workspaces/${workspaceId}/reminders/assignment-rules`);
+    return response.data;
+  },
+
+  createAssignmentRule: async (
+    workspaceId: string,
+    data: AssignmentRuleCreate
+  ): Promise<AssignmentRule> => {
+    const response = await api.post(`/workspaces/${workspaceId}/reminders/assignment-rules`, data);
+    return response.data;
+  },
+
+  updateAssignmentRule: async (
+    workspaceId: string,
+    ruleId: string,
+    data: Partial<AssignmentRuleCreate>
+  ): Promise<AssignmentRule> => {
+    const response = await api.patch(`/workspaces/${workspaceId}/reminders/assignment-rules/${ruleId}`, data);
+    return response.data;
+  },
+
+  deleteAssignmentRule: async (workspaceId: string, ruleId: string): Promise<void> => {
+    await api.delete(`/workspaces/${workspaceId}/reminders/assignment-rules/${ruleId}`);
+  },
+
+  // Suggestions (from questionnaire)
+  listSuggestions: async (
+    workspaceId: string,
+    questionnaireResponseId?: string
+  ): Promise<ReminderSuggestion[]> => {
+    const response = await api.get(`/workspaces/${workspaceId}/reminders/suggestions`, {
+      params: questionnaireResponseId ? { questionnaire_response_id: questionnaireResponseId } : undefined,
+    });
+    return response.data.suggestions;
+  },
+
+  acceptSuggestion: async (
+    workspaceId: string,
+    suggestionId: string,
+    overrides?: Partial<ReminderCreate>
+  ): Promise<Reminder> => {
+    const response = await api.post(`/workspaces/${workspaceId}/reminders/suggestions/${suggestionId}/accept`, overrides || {});
+    return response.data;
+  },
+
+  rejectSuggestion: async (workspaceId: string, suggestionId: string): Promise<void> => {
+    await api.post(`/workspaces/${workspaceId}/reminders/suggestions/${suggestionId}/reject`);
+  },
+
+  // Bulk Operations
+  bulkAssign: async (
+    workspaceId: string,
+    data: { instance_ids: string[]; owner_id?: string; team_id?: string }
+  ): Promise<{ updated_count: number }> => {
+    const response = await api.post(`/workspaces/${workspaceId}/reminders/bulk/assign`, data);
+    return response.data;
+  },
+
+  bulkComplete: async (
+    workspaceId: string,
+    data: { instance_ids: string[]; notes?: string }
+  ): Promise<{ updated_count: number }> => {
+    const response = await api.post(`/workspaces/${workspaceId}/reminders/bulk/complete`, data);
+    return response.data;
+  },
+};
+
+// ============================================================================
+// Questionnaire Import Types
+// ============================================================================
+
+export interface QuestionnaireResponse {
+  id: string;
+  workspace_id: string;
+  title: string;
+  partner_name?: string;
+  assessment_year?: string;
+  source_filename: string;
+  total_questions: number;
+  total_suggestions_generated: number;
+  status: "uploaded" | "analyzed" | "reviewed";
+  extra_metadata: Record<string, unknown>;
+  uploaded_by_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QuestionnaireQuestion {
+  id: string;
+  questionnaire_response_id: string;
+  serial_number?: string;
+  domain?: string;
+  question_text: string;
+  response_text?: string;
+  possible_responses?: string;
+  explanation?: string;
+  is_section_header: boolean;
+  response_type: "yes_no" | "frequency" | "text" | "multi_choice";
+  source_row?: number;
+  created_at: string;
+}
+
+export interface QuestionnaireImportResult {
+  questionnaire: QuestionnaireResponse;
+  questions_count: number;
+  domains: string[];
+  domain_counts: Record<string, number>;
+}
+
+export interface SkipSummary {
+  duplicates: number;
+  negatives: number;
+  blanks: number;
+  headers: number;
+  other: number;
+}
+
+export interface SkippedDuplicate {
+  question_text: string;
+  domain?: string;
+  reason: string;
+  duplicate_of_id?: string;
+  duplicate_of_type?: string; // "suggestion" | "reminder" | "question"
+  duplicate_of_title?: string;
+}
+
+export interface QuestionnaireAnalyzeResult {
+  questionnaire_id: string;
+  suggestions_generated: number;
+  skipped_questions: number;
+  domains_covered: string[];
+  skip_summary?: SkipSummary;
+  skipped_duplicates?: SkippedDuplicate[];
+}
+
+export interface QuestionnaireListResponse {
+  questionnaires: QuestionnaireResponse[];
+  total: number;
+}
+
+// ============================================================================
+// Questionnaire Import API
+// ============================================================================
+
+export const questionnairesApi = {
+  upload: async (
+    workspaceId: string,
+    file: File
+  ): Promise<QuestionnaireImportResult> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await api.post(
+      `/workspaces/${workspaceId}/questionnaires/upload`,
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } }
+    );
+    return response.data;
+  },
+
+  analyze: async (
+    workspaceId: string,
+    questionnaireId: string
+  ): Promise<QuestionnaireAnalyzeResult> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/questionnaires/${questionnaireId}/analyze`
+    );
+    return response.data;
+  },
+
+  list: async (workspaceId: string): Promise<QuestionnaireListResponse> => {
+    const response = await api.get(`/workspaces/${workspaceId}/questionnaires/`);
+    return response.data;
+  },
+
+  get: async (
+    workspaceId: string,
+    questionnaireId: string
+  ): Promise<QuestionnaireResponse> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/questionnaires/${questionnaireId}`
+    );
+    return response.data;
+  },
+
+  getQuestions: async (
+    workspaceId: string,
+    questionnaireId: string
+  ): Promise<QuestionnaireQuestion[]> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/questionnaires/${questionnaireId}/questions`
+    );
+    return response.data;
+  },
+
+  delete: async (
+    workspaceId: string,
+    questionnaireId: string
+  ): Promise<void> => {
+    await api.delete(
+      `/workspaces/${workspaceId}/questionnaires/${questionnaireId}`
+    );
+  },
+};
+
+// ==========================================
+// Compliance Document Center
+// ==========================================
+
+export type ComplianceDocumentStatus = "active" | "archived" | "deleted";
+export type ComplianceEntityType = "reminder" | "reminder_instance" | "certification" | "training" | "control";
+export type ComplianceLinkType = "evidence" | "reference" | "attachment";
+
+export interface ComplianceFolder {
+  id: string;
+  workspace_id: string;
+  parent_id: string | null;
+  name: string;
+  description: string | null;
+  path: string;
+  depth: number;
+  sort_order: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ComplianceFolderTreeNode {
+  id: string;
+  name: string;
+  description: string | null;
+  parent_id: string | null;
+  depth: number;
+  sort_order: number;
+  children: ComplianceFolderTreeNode[];
+  document_count: number;
+}
+
+export interface ComplianceDocument {
+  id: string;
+  workspace_id: string;
+  folder_id: string | null;
+  name: string;
+  description: string | null;
+  file_key: string;
+  file_size: number;
+  mime_type: string;
+  status: ComplianceDocumentStatus;
+  version: number;
+  uploaded_by: string | null;
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+  tags: string[];
+  download_url: string | null;
+}
+
+export interface ComplianceDocumentListResponse {
+  items: ComplianceDocument[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface ComplianceDocumentLink {
+  id: string;
+  document_id: string;
+  entity_type: string;
+  entity_id: string;
+  link_type: string;
+  notes: string | null;
+  linked_by: string | null;
+  created_at: string;
+}
+
+export interface ComplianceEntityDocumentsResponse {
+  documents: ComplianceDocument[];
+  links: ComplianceDocumentLink[];
+}
+
+export interface ComplianceUploadUrlResponse {
+  presigned_url: string;
+  file_key: string;
+  expires_in: number;
+}
+
+export interface ComplianceDocumentCreate {
+  name: string;
+  description?: string;
+  folder_id?: string;
+  file_key: string;
+  file_size: number;
+  mime_type: string;
+  tags?: string[];
+}
+
+export interface ComplianceDocumentUpdate {
+  name?: string;
+  description?: string;
+  folder_id?: string;
+}
+
+export interface ComplianceFolderCreate {
+  name: string;
+  description?: string;
+  parent_id?: string;
+}
+
+export interface ComplianceFolderUpdate {
+  name?: string;
+  description?: string;
+  sort_order?: number;
+}
+
+export const complianceDocumentsApi = {
+  // Upload URL
+  getUploadUrl: async (
+    workspaceId: string,
+    data: { filename: string; content_type: string; file_size: number }
+  ): Promise<ComplianceUploadUrlResponse> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/compliance/documents/upload-url`,
+      data
+    );
+    return response.data;
+  },
+
+  // Direct upload (file goes through backend, no presigned URL needed)
+  uploadDirect: async (
+    workspaceId: string,
+    file: File,
+    metadata: { name?: string; description?: string; folder_id?: string; tags?: string[] }
+  ): Promise<ComplianceDocument> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    if (metadata.name) formData.append("name", metadata.name);
+    if (metadata.description) formData.append("description", metadata.description);
+    if (metadata.folder_id) formData.append("folder_id", metadata.folder_id);
+    if (metadata.tags && metadata.tags.length > 0) formData.append("tags", metadata.tags.join(","));
+    const response = await api.post(
+      `/workspaces/${workspaceId}/compliance/documents/upload`,
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } }
+    );
+    return response.data;
+  },
+
+  // Document CRUD
+  list: async (
+    workspaceId: string,
+    params?: {
+      folder_id?: string;
+      status?: ComplianceDocumentStatus;
+      mime_type?: string;
+      tags?: string;
+      search?: string;
+      uploaded_by?: string;
+      page?: number;
+      page_size?: number;
+      sort_by?: string;
+      sort_order?: string;
+    }
+  ): Promise<ComplianceDocumentListResponse> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/compliance/documents`,
+      { params }
+    );
+    return response.data;
+  },
+
+  get: async (workspaceId: string, documentId: string): Promise<ComplianceDocument> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/compliance/documents/${documentId}`
+    );
+    return response.data;
+  },
+
+  create: async (workspaceId: string, data: ComplianceDocumentCreate): Promise<ComplianceDocument> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/compliance/documents`,
+      data
+    );
+    return response.data;
+  },
+
+  update: async (
+    workspaceId: string,
+    documentId: string,
+    data: ComplianceDocumentUpdate
+  ): Promise<ComplianceDocument> => {
+    const response = await api.patch(
+      `/workspaces/${workspaceId}/compliance/documents/${documentId}`,
+      data
+    );
+    return response.data;
+  },
+
+  move: async (
+    workspaceId: string,
+    documentId: string,
+    folderId: string | null
+  ): Promise<ComplianceDocument> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/compliance/documents/${documentId}/move`,
+      { folder_id: folderId }
+    );
+    return response.data;
+  },
+
+  archive: async (workspaceId: string, documentId: string): Promise<ComplianceDocument> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/compliance/documents/${documentId}/archive`
+    );
+    return response.data;
+  },
+
+  delete: async (workspaceId: string, documentId: string): Promise<void> => {
+    await api.delete(
+      `/workspaces/${workspaceId}/compliance/documents/${documentId}`
+    );
+  },
+
+  // Tags
+  addTags: async (
+    workspaceId: string,
+    documentId: string,
+    tags: string[]
+  ): Promise<{ tags: string[] }> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/compliance/documents/${documentId}/tags`,
+      { tags }
+    );
+    return response.data;
+  },
+
+  removeTag: async (
+    workspaceId: string,
+    documentId: string,
+    tag: string
+  ): Promise<void> => {
+    await api.delete(
+      `/workspaces/${workspaceId}/compliance/documents/${documentId}/tags/${encodeURIComponent(tag)}`
+    );
+  },
+
+  listWorkspaceTags: async (workspaceId: string): Promise<{ tags: string[] }> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/compliance/documents/tags/all`
+    );
+    return response.data;
+  },
+
+  // Links
+  linkDocument: async (
+    workspaceId: string,
+    documentId: string,
+    data: {
+      entity_type: ComplianceEntityType;
+      entity_id: string;
+      link_type?: ComplianceLinkType;
+      notes?: string;
+    }
+  ): Promise<ComplianceDocumentLink> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/compliance/documents/${documentId}/links`,
+      data
+    );
+    return response.data;
+  },
+
+  getDocumentLinks: async (
+    workspaceId: string,
+    documentId: string
+  ): Promise<ComplianceDocumentLink[]> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/compliance/documents/${documentId}/links`
+    );
+    return response.data;
+  },
+
+  unlinkDocument: async (
+    workspaceId: string,
+    documentId: string,
+    linkId: string
+  ): Promise<void> => {
+    await api.delete(
+      `/workspaces/${workspaceId}/compliance/documents/${documentId}/links/${linkId}`
+    );
+  },
+
+  getEntityDocuments: async (
+    workspaceId: string,
+    entityType: ComplianceEntityType,
+    entityId: string
+  ): Promise<ComplianceEntityDocumentsResponse> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/compliance/documents/by-entity/${entityType}/${entityId}`
+    );
+    return response.data;
+  },
+};
+
+export const complianceFoldersApi = {
+  list: async (workspaceId: string): Promise<ComplianceFolder[]> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/compliance/folders`
+    );
+    return response.data;
+  },
+
+  get: async (workspaceId: string, folderId: string): Promise<ComplianceFolder> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/compliance/folders/${folderId}`
+    );
+    return response.data;
+  },
+
+  getTree: async (workspaceId: string): Promise<ComplianceFolderTreeNode[]> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/compliance/folders/tree`
+    );
+    return response.data;
+  },
+
+  create: async (workspaceId: string, data: ComplianceFolderCreate): Promise<ComplianceFolder> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/compliance/folders`,
+      data
+    );
+    return response.data;
+  },
+
+  update: async (
+    workspaceId: string,
+    folderId: string,
+    data: ComplianceFolderUpdate
+  ): Promise<ComplianceFolder> => {
+    const response = await api.patch(
+      `/workspaces/${workspaceId}/compliance/folders/${folderId}`,
+      data
+    );
+    return response.data;
+  },
+
+  delete: async (workspaceId: string, folderId: string): Promise<void> => {
+    await api.delete(
+      `/workspaces/${workspaceId}/compliance/folders/${folderId}`
+    );
   },
 };
