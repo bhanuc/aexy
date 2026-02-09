@@ -180,11 +180,13 @@ async def update_workflow(
     automation_service = CRMAutomationService(db)
     automation = await automation_service.get_automation(automation_id)
     if automation and workflow.nodes:
-        # Extract trigger config from trigger node
+        # Extract trigger type and config from trigger node
+        trigger_type = None
         trigger_config = {}
         for node in workflow.nodes:
             if node.get("type") == "trigger":
                 node_data = node.get("data", {})
+                trigger_type = node_data.get("trigger_type")
                 trigger_config = {
                     k: v for k, v in node_data.items()
                     if k not in ("label", "trigger_type")
@@ -208,7 +210,9 @@ async def update_workflow(
                         "config": config,
                     })
 
-        # Update automation with synced actions and trigger_config
+        # Update automation with synced trigger_type, trigger_config, and actions
+        if trigger_type:
+            automation.trigger_type = trigger_type
         automation.trigger_config = trigger_config
         automation.actions = actions
         await db.flush()
@@ -465,10 +469,26 @@ async def execute_workflow(
             is_dry_run=True,
         )
 
-    # For real executions, queue to Celery
-    from aexy.processing.workflow_tasks import execute_workflow_task
+    # For real executions, dispatch to Temporal
+    from aexy.temporal.client import get_temporal_client
+    from aexy.temporal.workflows.crm_workflow import CRMAutomationWorkflow, CRMWorkflowInput
 
-    execute_workflow_task.delay(execution.id)
+    client = await get_temporal_client()
+    await client.start_workflow(
+        CRMAutomationWorkflow.run,
+        CRMWorkflowInput(
+            execution_id=execution.id,
+            workflow_id=workflow.id,
+            workspace_id=workspace_id,
+            trigger_data=trigger_data,
+            record_id=data.record_id if record_data.get("id") else None,
+            record_data=record_data,
+            nodes=workflow.nodes or [],
+            edges=workflow.edges or [],
+        ),
+        id=f"crm-workflow-{execution.id}",
+        task_queue="workflows",
+    )
 
     return WorkflowExecutionResponse(
         execution_id=execution.id,

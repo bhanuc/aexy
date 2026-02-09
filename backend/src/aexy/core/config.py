@@ -245,9 +245,12 @@ class Settings(BaseSettings):
     github_client_secret: str = ""
     github_private_key: str = ""  # PEM format, can use \n for newlines
     github_private_key_path: str = ""  # Alternative: path to PEM file
-    github_redirect_uri: str = "http://localhost:8000/api/v1/auth/github/callback"
+    github_redirect_uri: str = Field(
+        default="http://localhost:8000/api/v1/auth/github/callback",
+        validation_alias="GITHUB_REDIRECT_URI",
+    )
     github_app_install_url: str = Field(
-        default="",
+        default="https://github.com/apps/devograph/installations/new",
         validation_alias="GITHUB_APP_INSTALL_URL",
     )
 
@@ -318,14 +321,16 @@ class Settings(BaseSettings):
         description="Redis connection URL",
     )
 
-    # Celery (for background processing)
-    celery_broker_url: str = Field(
-        default="redis://localhost:6379/1",
-        description="Celery broker URL",
+    # Temporal (for workflow and task execution)
+    temporal_address: str = Field(
+        default="localhost:7233",
+        description="Temporal server gRPC address",
+        validation_alias="TEMPORAL_ADDRESS",
     )
-    celery_result_backend: str = Field(
-        default="redis://localhost:6379/1",
-        description="Celery result backend URL",
+    temporal_namespace: str = Field(
+        default="default",
+        description="Temporal namespace",
+        validation_alias="TEMPORAL_NAMESPACE",
     )
 
     # AWS SES (for email notifications)

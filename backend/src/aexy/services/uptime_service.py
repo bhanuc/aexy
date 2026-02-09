@@ -131,21 +131,26 @@ class UptimeService:
         await self.db.refresh(monitor)
 
         # Dispatch monitor.created event for automations
-        await dispatch_automation_event(
-            db=self.db,
-            workspace_id=workspace_id,
-            module="uptime",
-            trigger_type="monitor.created",
-            entity_id=monitor.id,
-            trigger_data={
-                "monitor_id": monitor.id,
-                "monitor_name": monitor.name,
-                "check_type": monitor.check_type,
-                "url": monitor.url,
-                "host": monitor.host,
-                "workspace_id": workspace_id,
-            },
-        )
+        logger.info(f"[UPTIME] Monitor created: {monitor.id} '{monitor.name}', dispatching automation event...")
+        try:
+            num_runs = await dispatch_automation_event(
+                db=self.db,
+                workspace_id=workspace_id,
+                module="uptime",
+                trigger_type="monitor.created",
+                entity_id=monitor.id,
+                trigger_data={
+                    "monitor_id": monitor.id,
+                    "monitor_name": monitor.name,
+                    "check_type": monitor.check_type,
+                    "url": monitor.url,
+                    "host": monitor.host,
+                    "workspace_id": workspace_id,
+                },
+            )
+            logger.info(f"[UPTIME] Dispatch completed, {num_runs} automation(s) triggered")
+        except Exception as e:
+            logger.error(f"[UPTIME] Failed to dispatch automation event: {e}")
 
         return monitor
 
