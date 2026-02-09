@@ -1,10 +1,13 @@
 """Workflow action handlers for executing different action types."""
 
 import httpx
+import logging
 import re
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,23 +39,66 @@ class WorkflowActionHandler:
     ) -> NodeExecutionResult:
         """Execute an action based on type."""
         handlers = {
+            # CRM actions
             "update_record": self._update_record,
             "create_record": self._create_record,
             "delete_record": self._delete_record,
-            "send_email": self._send_email,
-            "send_tracked_email": self._send_tracked_email,
-            "send_slack": self._send_slack,
-            "send_sms": self._send_sms,
-            "create_task": self._create_task,
             "add_to_list": self._add_to_list,
             "remove_from_list": self._remove_from_list,
             "enroll_sequence": self._enroll_sequence,
             "unenroll_sequence": self._unenroll_sequence,
-            "webhook_call": self._webhook_call,
             "assign_owner": self._assign_owner,
+            # Communication actions
+            "send_email": self._send_email,
+            "send_tracked_email": self._send_tracked_email,
+            "send_slack": self._send_slack,
+            "send_sms": self._send_sms,
+            "webhook_call": self._webhook_call,
+            "api_request": self._webhook_call,
+            "notify_user": self._notify_user,
+            "notify_team": self._notify_team,
+            # Task / Sprint actions
+            "create_task": self._create_task,
+            "update_task": self._update_task,
+            "assign_task": self._assign_task,
+            "move_task": self._move_task,
+            "create_subtask": self._create_subtask,
+            "add_comment": self._add_comment,
+            # Ticket actions
+            "update_ticket": self._update_ticket,
+            "assign_ticket": self._assign_ticket,
+            "add_response": self._add_response,
+            "escalate": self._escalate,
+            "change_priority": self._change_priority,
+            "add_tag": self._add_tag,
+            "remove_tag": self._remove_tag,
+            # Hiring actions
+            "update_candidate": self._update_candidate,
+            "move_stage": self._move_stage,
+            "schedule_interview": self._schedule_interview,
+            "send_rejection": self._send_rejection,
+            "create_offer": self._create_offer,
+            "add_note": self._add_note,
+            "assign_recruiter": self._assign_recruiter,
+            # Uptime actions
+            "pause_monitor": self._pause_monitor,
+            "resume_monitor": self._resume_monitor,
+            "create_incident": self._create_incident,
+            "resolve_incident": self._resolve_incident,
+            # Booking actions
+            "confirm_booking": self._confirm_booking,
+            "cancel_booking": self._cancel_booking,
+            "reschedule_booking": self._reschedule_booking,
+            "send_reminder": self._send_reminder,
+            # Email marketing actions
             "send_campaign": self._send_campaign,
+            "update_contact": self._update_contact,
+            # Form actions
+            "send_response": self._send_response,
+            # Onboarding actions
             "trigger_onboarding": self._trigger_onboarding,
             "complete_onboarding_step": self._complete_onboarding_step,
+            # AI Agent actions
             "run_agent": self._execute_agent,
         }
 
@@ -735,30 +781,76 @@ class WorkflowActionHandler:
     async def _create_task(
         self, data: dict, context: WorkflowExecutionContext
     ) -> NodeExecutionResult:
-        """Create a task in the ticketing system."""
-        title = data.get("title", "New Task")
-        description = data.get("description", "")
-        assignee_id = data.get("assignee_id")
-        due_date = data.get("due_date")
+        """Create a sprint task."""
+        from aexy.models.sprint import SprintTask
+        from aexy.models.project import ProjectTeam
 
+        title = data.get("task_title") or data.get("title", "New Task")
+        description = data.get("task_description") or data.get("description", "")
         title = self._render_template(title, context)
         description = self._render_template(description, context)
 
-        # Get workspace from context
-        workspace_id = context.trigger_data.get("workspace_id")
+        priority = data.get("task_priority") or data.get("priority", "medium")
+        assignee_id = data.get("assignee_id")
+        project_id = data.get("project_id")
+        sprint_id = data.get("sprint_id")
+        labels = data.get("labels", [])
 
-        # Create task via ticketing service
-        from aexy.services.ticketing_service import TicketingService
+        workspace_id = context.workspace_id or context.trigger_data.get("workspace_id")
+        if not workspace_id:
+            return NodeExecutionResult(
+                node_id="", status="failed", error="No workspace_id in context",
+            )
 
-        service = TicketingService(self.db)
-        # This would create the task
-        # task = await service.create_ticket(...)
+        # Look up team from project
+        team_id = None
+        if project_id:
+            try:
+                result = await self.db.execute(
+                    select(ProjectTeam).where(ProjectTeam.project_id == project_id).limit(1)
+                )
+                project_team = result.scalar_one_or_none()
+                if project_team:
+                    team_id = project_team.team_id
+            except Exception as e:
+                logger.error(f"[CREATE_TASK] Failed to look up team for project: {e}")
 
-        return NodeExecutionResult(
-            node_id="",
-            status="success",
-            output={"title": title, "created": True},
-        )
+        try:
+            task = SprintTask(
+                id=str(uuid4()),
+                workspace_id=workspace_id,
+                team_id=team_id,
+                sprint_id=sprint_id,
+                source_type="automation",
+                source_id=str(uuid4()),
+                title=title,
+                description=description,
+                priority=priority,
+                assignee_id=assignee_id,
+                labels=labels if isinstance(labels, list) else [],
+                status="todo",
+            )
+            self.db.add(task)
+            await self.db.flush()
+
+            logger.info(f"[CREATE_TASK] Task created: id={task.id}, title='{task.title}'")
+
+            return NodeExecutionResult(
+                node_id="",
+                status="success",
+                output={
+                    "task_id": task.id,
+                    "title": task.title,
+                    "project_id": project_id,
+                    "team_id": team_id,
+                    "created": True,
+                },
+            )
+        except Exception as e:
+            logger.error(f"[CREATE_TASK] Failed: {e}", exc_info=True)
+            return NodeExecutionResult(
+                node_id="", status="failed", error=f"Failed to create task: {str(e)}",
+            )
 
     async def _add_to_list(
         self, data: dict, context: WorkflowExecutionContext
@@ -1126,6 +1218,1094 @@ class WorkflowActionHandler:
                 error=f"Agent execution failed: {str(e)}",
             )
 
+    # =========================================================================
+    # UPTIME MODULE ACTIONS
+    # =========================================================================
+
+    async def _pause_monitor(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Pause an uptime monitor."""
+        from aexy.services.uptime_service import UptimeService, MonitorNotFoundError
+
+        monitor_id = data.get("monitor_id") or context.trigger_data.get("monitor_id")
+        if not monitor_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No monitor_id specified")
+
+        try:
+            uptime_service = UptimeService(self.db)
+            monitor = await uptime_service.pause_monitor(monitor_id)
+            return NodeExecutionResult(
+                node_id="", status="success",
+                output={"monitor_id": monitor.id, "monitor_name": monitor.name, "paused": True},
+            )
+        except MonitorNotFoundError:
+            return NodeExecutionResult(node_id="", status="failed", error=f"Monitor {monitor_id} not found")
+        except Exception as e:
+            return NodeExecutionResult(node_id="", status="failed", error=str(e))
+
+    async def _resume_monitor(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Resume a paused uptime monitor."""
+        from aexy.services.uptime_service import UptimeService, MonitorNotFoundError
+
+        monitor_id = data.get("monitor_id") or context.trigger_data.get("monitor_id")
+        if not monitor_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No monitor_id specified")
+
+        try:
+            uptime_service = UptimeService(self.db)
+            monitor = await uptime_service.resume_monitor(monitor_id)
+            return NodeExecutionResult(
+                node_id="", status="success",
+                output={"monitor_id": monitor.id, "monitor_name": monitor.name, "resumed": True},
+            )
+        except MonitorNotFoundError:
+            return NodeExecutionResult(node_id="", status="failed", error=f"Monitor {monitor_id} not found")
+        except Exception as e:
+            return NodeExecutionResult(node_id="", status="failed", error=str(e))
+
+    async def _create_incident(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Create an uptime incident."""
+        from aexy.models.uptime import UptimeIncident, UptimeIncidentStatus
+        from aexy.services.uptime_service import UptimeService
+
+        monitor_id = data.get("monitor_id") or context.trigger_data.get("monitor_id")
+        if not monitor_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No monitor_id specified")
+
+        error_message = data.get("error_message", "Incident created by automation")
+        error_type = data.get("error_type", "manual")
+
+        try:
+            uptime_service = UptimeService(self.db)
+            monitor = await uptime_service.get_monitor(monitor_id)
+            if not monitor:
+                return NodeExecutionResult(node_id="", status="failed", error=f"Monitor {monitor_id} not found")
+
+            existing = await uptime_service.get_ongoing_incident(monitor_id)
+            if existing:
+                return NodeExecutionResult(
+                    node_id="", status="success",
+                    output={"incident_id": existing.id, "already_exists": True},
+                )
+
+            incident = UptimeIncident(
+                id=str(uuid4()),
+                monitor_id=monitor_id,
+                workspace_id=monitor.workspace_id,
+                status=UptimeIncidentStatus.ONGOING.value,
+                first_error_message=error_message,
+                first_error_type=error_type,
+                last_error_message=error_message,
+                last_error_type=error_type,
+                total_checks=0,
+                failed_checks=0,
+            )
+            self.db.add(incident)
+            await self.db.flush()
+
+            return NodeExecutionResult(
+                node_id="", status="success",
+                output={"incident_id": incident.id, "monitor_id": monitor_id, "created": True},
+            )
+        except Exception as e:
+            return NodeExecutionResult(node_id="", status="failed", error=str(e))
+
+    async def _resolve_incident(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Resolve an uptime incident."""
+        from aexy.services.uptime_service import UptimeService, IncidentNotFoundError
+        from aexy.schemas.uptime import UptimeIncidentResolve
+
+        incident_id = data.get("incident_id") or context.trigger_data.get("incident_id")
+        monitor_id = data.get("monitor_id") or context.trigger_data.get("monitor_id")
+
+        uptime_service = UptimeService(self.db)
+
+        if not incident_id and monitor_id:
+            ongoing = await uptime_service.get_ongoing_incident(monitor_id)
+            if ongoing:
+                incident_id = ongoing.id
+
+        if not incident_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No incident_id or monitor_id with ongoing incident")
+
+        try:
+            resolve_data = UptimeIncidentResolve(
+                resolution_notes=data.get("resolution_notes", "Resolved by automation"),
+                root_cause=data.get("root_cause"),
+            )
+            incident = await uptime_service.resolve_incident(incident_id, resolve_data)
+            return NodeExecutionResult(
+                node_id="", status="success",
+                output={"incident_id": incident.id, "status": incident.status, "resolved": True},
+            )
+        except IncidentNotFoundError:
+            return NodeExecutionResult(node_id="", status="failed", error=f"Incident {incident_id} not found")
+        except Exception as e:
+            return NodeExecutionResult(node_id="", status="failed", error=str(e))
+
+    # =========================================================================
+    # SPRINT MODULE ACTIONS
+    # =========================================================================
+
+    async def _update_task(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Update a sprint task."""
+        from aexy.services.sprint_task_service import SprintTaskService
+
+        task_id = data.get("task_id") or context.trigger_data.get("task_id")
+        if not task_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No task_id specified")
+
+        try:
+            task_service = SprintTaskService(self.db)
+            task = await task_service.update_task(
+                task_id=task_id,
+                title=data.get("title"),
+                description=data.get("description"),
+                priority=data.get("priority"),
+                status=data.get("status"),
+                story_points=data.get("story_points"),
+                labels=data.get("labels"),
+            )
+            if not task:
+                return NodeExecutionResult(node_id="", status="failed", error=f"Task {task_id} not found")
+            return NodeExecutionResult(
+                node_id="", status="success",
+                output={"task_id": task.id, "title": task.title, "status": task.status},
+            )
+        except Exception as e:
+            return NodeExecutionResult(node_id="", status="failed", error=str(e))
+
+    async def _assign_task(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Assign a sprint task to a developer."""
+        from aexy.services.sprint_task_service import SprintTaskService
+
+        task_id = data.get("task_id") or context.trigger_data.get("task_id")
+        developer_id = data.get("developer_id") or data.get("assignee_id") or context.trigger_data.get("assignee_id")
+
+        if not task_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No task_id specified")
+        if not developer_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No assignee_id specified")
+
+        try:
+            task_service = SprintTaskService(self.db)
+            task = await task_service.assign_task(
+                task_id=task_id,
+                developer_id=developer_id,
+                reason=data.get("reason", "Assigned by automation"),
+            )
+            if not task:
+                return NodeExecutionResult(node_id="", status="failed", error=f"Task {task_id} not found")
+            return NodeExecutionResult(
+                node_id="", status="success",
+                output={"task_id": task.id, "assignee_id": task.assignee_id},
+            )
+        except Exception as e:
+            return NodeExecutionResult(node_id="", status="failed", error=str(e))
+
+    async def _move_task(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Move a sprint task to a different status or sprint."""
+        from aexy.services.sprint_task_service import SprintTaskService
+
+        task_id = data.get("task_id") or context.trigger_data.get("task_id")
+        new_status = data.get("status")
+        new_sprint_id = data.get("sprint_id")
+
+        if not task_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No task_id specified")
+        if not new_status and not new_sprint_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No status or sprint_id specified")
+
+        try:
+            task_service = SprintTaskService(self.db)
+
+            if new_status:
+                task = await task_service.update_task_status(task_id, new_status)
+            else:
+                task = await task_service.get_task(task_id)
+
+            if not task:
+                return NodeExecutionResult(node_id="", status="failed", error=f"Task {task_id} not found")
+
+            if new_sprint_id:
+                tasks = await task_service.bulk_move_to_sprint([task_id], new_sprint_id)
+                if tasks:
+                    task = tasks[0]
+
+            return NodeExecutionResult(
+                node_id="", status="success",
+                output={"task_id": task.id, "status": task.status, "sprint_id": task.sprint_id},
+            )
+        except Exception as e:
+            return NodeExecutionResult(node_id="", status="failed", error=str(e))
+
+    async def _create_subtask(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Create a subtask under a parent task."""
+        from aexy.services.sprint_task_service import SprintTaskService
+
+        parent_task_id = data.get("parent_task_id") or context.trigger_data.get("task_id")
+        title = data.get("title", "Subtask")
+
+        if not parent_task_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No parent_task_id specified")
+
+        try:
+            task_service = SprintTaskService(self.db)
+            parent = await task_service.get_task(parent_task_id)
+            if not parent:
+                return NodeExecutionResult(node_id="", status="failed", error=f"Parent task {parent_task_id} not found")
+
+            subtask = await task_service.add_task(
+                sprint_id=parent.sprint_id,
+                title=self._render_template(title, context),
+                description=data.get("description"),
+                priority=data.get("priority", "medium"),
+                assignee_id=data.get("assignee_id"),
+                parent_task_id=parent_task_id,
+                status="todo",
+            )
+            return NodeExecutionResult(
+                node_id="", status="success",
+                output={"subtask_id": subtask.id, "parent_task_id": parent_task_id, "title": subtask.title},
+            )
+        except Exception as e:
+            return NodeExecutionResult(node_id="", status="failed", error=str(e))
+
+    async def _add_comment(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Add a comment to a sprint task."""
+        from aexy.models.sprint import SprintTask
+
+        task_id = data.get("task_id") or context.trigger_data.get("task_id")
+        comment_text = data.get("comment", data.get("message", ""))
+
+        if not task_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No task_id specified")
+        if not comment_text:
+            return NodeExecutionResult(node_id="", status="failed", error="No comment text specified")
+
+        comment_text = self._render_template(comment_text, context)
+
+        try:
+            stmt = select(SprintTask).where(SprintTask.id == task_id)
+            result = await self.db.execute(stmt)
+            task = result.scalar_one_or_none()
+            if not task:
+                return NodeExecutionResult(node_id="", status="failed", error=f"Task {task_id} not found")
+
+            # Store comment in custom_fields
+            custom_fields = dict(task.custom_fields) if task.custom_fields else {}
+            comments = custom_fields.get("automation_comments", [])
+            comments.append({
+                "text": comment_text,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "source": "automation",
+            })
+            custom_fields["automation_comments"] = comments
+            task.custom_fields = custom_fields
+            await self.db.flush()
+
+            return NodeExecutionResult(
+                node_id="", status="success",
+                output={"task_id": task_id, "comment_added": True},
+            )
+        except Exception as e:
+            return NodeExecutionResult(node_id="", status="failed", error=str(e))
+
+    # =========================================================================
+    # TICKET MODULE ACTIONS
+    # =========================================================================
+
+    async def _update_ticket(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Update a ticket."""
+        from aexy.services.ticket_service import TicketService
+        from aexy.schemas.ticketing import TicketUpdate
+
+        ticket_id = data.get("ticket_id") or context.trigger_data.get("ticket_id")
+        if not ticket_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No ticket_id specified")
+
+        try:
+            ticket_service = TicketService(self.db)
+            update_data = TicketUpdate(
+                status=data.get("status"),
+                priority=data.get("priority"),
+                severity=data.get("severity"),
+            )
+            ticket = await ticket_service.update_ticket(ticket_id, update_data)
+            if not ticket:
+                return NodeExecutionResult(node_id="", status="failed", error=f"Ticket {ticket_id} not found")
+            return NodeExecutionResult(
+                node_id="", status="success",
+                output={"ticket_id": ticket.id, "ticket_number": ticket.ticket_number, "status": ticket.status},
+            )
+        except Exception as e:
+            return NodeExecutionResult(node_id="", status="failed", error=str(e))
+
+    async def _assign_ticket(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Assign a ticket to a developer or team."""
+        from aexy.services.ticket_service import TicketService
+
+        ticket_id = data.get("ticket_id") or context.trigger_data.get("ticket_id")
+        if not ticket_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No ticket_id specified")
+
+        try:
+            ticket_service = TicketService(self.db)
+            ticket = await ticket_service.assign_ticket(
+                ticket_id=ticket_id,
+                assignee_id=data.get("assignee_id"),
+                team_id=data.get("team_id"),
+            )
+            if not ticket:
+                return NodeExecutionResult(node_id="", status="failed", error=f"Ticket {ticket_id} not found")
+            return NodeExecutionResult(
+                node_id="", status="success",
+                output={"ticket_id": ticket.id, "assignee_id": ticket.assignee_id},
+            )
+        except Exception as e:
+            return NodeExecutionResult(node_id="", status="failed", error=str(e))
+
+    async def _add_response(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Add a response/reply to a ticket."""
+        from aexy.services.ticket_service import TicketService
+
+        ticket_id = data.get("ticket_id") or context.trigger_data.get("ticket_id")
+        message = data.get("message", data.get("response", ""))
+
+        if not ticket_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No ticket_id specified")
+        if not message:
+            return NodeExecutionResult(node_id="", status="failed", error="No message specified")
+
+        message = self._render_template(message, context)
+
+        try:
+            ticket_service = TicketService(self.db)
+            reply = await ticket_service.add_reply(
+                ticket_id=ticket_id,
+                content=message,
+                is_internal=data.get("is_internal", False),
+            )
+            return NodeExecutionResult(
+                node_id="", status="success",
+                output={"ticket_id": ticket_id, "reply_id": reply.id if reply else None, "response_added": True},
+            )
+        except Exception as e:
+            return NodeExecutionResult(node_id="", status="failed", error=str(e))
+
+    async def _escalate(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Escalate a ticket."""
+        from aexy.services.ticket_service import TicketService
+
+        ticket_id = data.get("ticket_id") or context.trigger_data.get("ticket_id")
+        level = data.get("level", "level_1")
+
+        if not ticket_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No ticket_id specified")
+
+        try:
+            ticket_service = TicketService(self.db)
+            ticket = await ticket_service.get_ticket(ticket_id)
+            if not ticket:
+                return NodeExecutionResult(node_id="", status="failed", error=f"Ticket {ticket_id} not found")
+
+            escalation = await ticket_service.trigger_escalation(ticket, level)
+            if not escalation:
+                return NodeExecutionResult(
+                    node_id="", status="success",
+                    output={"ticket_id": ticket_id, "message": "No matching escalation matrix found"},
+                )
+            return NodeExecutionResult(
+                node_id="", status="success",
+                output={"ticket_id": ticket_id, "escalation_id": escalation.id, "level": escalation.level},
+            )
+        except Exception as e:
+            return NodeExecutionResult(node_id="", status="failed", error=str(e))
+
+    async def _change_priority(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Change a ticket's priority."""
+        from aexy.services.ticket_service import TicketService
+        from aexy.schemas.ticketing import TicketUpdate
+
+        ticket_id = data.get("ticket_id") or context.trigger_data.get("ticket_id")
+        priority = data.get("priority")
+
+        if not ticket_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No ticket_id specified")
+        if not priority:
+            return NodeExecutionResult(node_id="", status="failed", error="No priority specified")
+
+        try:
+            ticket_service = TicketService(self.db)
+            update_data = TicketUpdate(priority=priority)
+            ticket = await ticket_service.update_ticket(ticket_id, update_data)
+            if not ticket:
+                return NodeExecutionResult(node_id="", status="failed", error=f"Ticket {ticket_id} not found")
+            return NodeExecutionResult(
+                node_id="", status="success",
+                output={"ticket_id": ticket.id, "priority": ticket.priority},
+            )
+        except Exception as e:
+            return NodeExecutionResult(node_id="", status="failed", error=str(e))
+
+    async def _add_tag(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Add a tag to a ticket."""
+        from aexy.services.ticket_service import TicketService
+
+        ticket_id = data.get("ticket_id") or context.trigger_data.get("ticket_id")
+        tag = data.get("tag", data.get("tag_name", ""))
+
+        if not ticket_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No ticket_id specified")
+        if not tag:
+            return NodeExecutionResult(node_id="", status="failed", error="No tag specified")
+
+        try:
+            ticket_service = TicketService(self.db)
+            ticket = await ticket_service.get_ticket(ticket_id)
+            if not ticket:
+                return NodeExecutionResult(node_id="", status="failed", error=f"Ticket {ticket_id} not found")
+
+            tags = list(ticket.tags) if ticket.tags else []
+            if tag not in tags:
+                tags.append(tag)
+                ticket.tags = tags
+                await self.db.flush()
+
+            return NodeExecutionResult(
+                node_id="", status="success",
+                output={"ticket_id": ticket_id, "tag": tag, "tags": tags},
+            )
+        except Exception as e:
+            return NodeExecutionResult(node_id="", status="failed", error=str(e))
+
+    async def _remove_tag(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Remove a tag from a ticket."""
+        from aexy.services.ticket_service import TicketService
+
+        ticket_id = data.get("ticket_id") or context.trigger_data.get("ticket_id")
+        tag = data.get("tag", data.get("tag_name", ""))
+
+        if not ticket_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No ticket_id specified")
+        if not tag:
+            return NodeExecutionResult(node_id="", status="failed", error="No tag specified")
+
+        try:
+            ticket_service = TicketService(self.db)
+            ticket = await ticket_service.get_ticket(ticket_id)
+            if not ticket:
+                return NodeExecutionResult(node_id="", status="failed", error=f"Ticket {ticket_id} not found")
+
+            tags = list(ticket.tags) if ticket.tags else []
+            if tag in tags:
+                tags.remove(tag)
+                ticket.tags = tags
+                await self.db.flush()
+
+            return NodeExecutionResult(
+                node_id="", status="success",
+                output={"ticket_id": ticket_id, "tag_removed": tag, "tags": tags},
+            )
+        except Exception as e:
+            return NodeExecutionResult(node_id="", status="failed", error=str(e))
+
+    # =========================================================================
+    # HIRING MODULE ACTIONS
+    # =========================================================================
+
+    async def _update_candidate(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Update a hiring candidate's custom fields."""
+        from aexy.models.assessment import Candidate
+
+        candidate_id = data.get("candidate_id") or context.trigger_data.get("candidate_id")
+        if not candidate_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No candidate_id specified")
+
+        try:
+            stmt = select(Candidate).where(Candidate.id == candidate_id)
+            result = await self.db.execute(stmt)
+            candidate = result.scalar_one_or_none()
+            if not candidate:
+                return NodeExecutionResult(node_id="", status="failed", error=f"Candidate {candidate_id} not found")
+
+            custom_fields = dict(candidate.custom_fields) if candidate.custom_fields else {}
+            if data.get("status"):
+                custom_fields["hiring_status"] = data["status"]
+            if data.get("notes"):
+                existing = custom_fields.get("notes", "")
+                custom_fields["notes"] = f"{existing}\n\n---\n{data['notes']}" if existing else data["notes"]
+            if data.get("rating"):
+                custom_fields["rating"] = data["rating"]
+            if data.get("custom_data"):
+                custom_fields.update(data["custom_data"])
+
+            candidate.custom_fields = custom_fields
+            await self.db.flush()
+
+            return NodeExecutionResult(
+                node_id="", status="success",
+                output={"candidate_id": candidate.id, "updated": True},
+            )
+        except Exception as e:
+            return NodeExecutionResult(node_id="", status="failed", error=str(e))
+
+    async def _move_stage(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Move a candidate to a different hiring stage."""
+        from aexy.models.assessment import Candidate
+
+        candidate_id = data.get("candidate_id") or context.trigger_data.get("candidate_id")
+        new_stage = data.get("stage")
+
+        if not candidate_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No candidate_id specified")
+        if not new_stage:
+            return NodeExecutionResult(node_id="", status="failed", error="No stage specified")
+
+        try:
+            stmt = select(Candidate).where(Candidate.id == candidate_id)
+            result = await self.db.execute(stmt)
+            candidate = result.scalar_one_or_none()
+            if not candidate:
+                return NodeExecutionResult(node_id="", status="failed", error=f"Candidate {candidate_id} not found")
+
+            custom_fields = dict(candidate.custom_fields) if candidate.custom_fields else {}
+            old_stage = custom_fields.get("hiring_status", "applied")
+            custom_fields["hiring_status"] = new_stage
+            custom_fields["stage_changed_at"] = datetime.now(timezone.utc).isoformat()
+            candidate.custom_fields = custom_fields
+            await self.db.flush()
+
+            return NodeExecutionResult(
+                node_id="", status="success",
+                output={"candidate_id": candidate.id, "old_stage": old_stage, "new_stage": new_stage},
+            )
+        except Exception as e:
+            return NodeExecutionResult(node_id="", status="failed", error=str(e))
+
+    async def _schedule_interview(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Schedule an interview for a candidate."""
+        from aexy.models.assessment import Candidate
+
+        candidate_id = data.get("candidate_id") or context.trigger_data.get("candidate_id")
+        if not candidate_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No candidate_id specified")
+
+        try:
+            stmt = select(Candidate).where(Candidate.id == candidate_id)
+            result = await self.db.execute(stmt)
+            candidate = result.scalar_one_or_none()
+            if not candidate:
+                return NodeExecutionResult(node_id="", status="failed", error=f"Candidate {candidate_id} not found")
+
+            custom_fields = dict(candidate.custom_fields) if candidate.custom_fields else {}
+
+            current_status = custom_fields.get("hiring_status", "applied")
+            if current_status not in ("interviewing", "offer", "hired"):
+                custom_fields["hiring_status"] = "interviewing"
+
+            interview_data = {
+                "interviewer_id": data.get("interviewer_id"),
+                "interview_type": data.get("interview_type", "video"),
+                "scheduled_at": data.get("scheduled_at"),
+                "duration_minutes": data.get("duration_minutes", 60),
+                "notes": data.get("notes", ""),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+
+            interviews = custom_fields.get("scheduled_interviews", [])
+            if not isinstance(interviews, list):
+                interviews = []
+            interviews.append(interview_data)
+            custom_fields["scheduled_interviews"] = interviews
+            candidate.custom_fields = custom_fields
+            await self.db.flush()
+
+            return NodeExecutionResult(
+                node_id="", status="success",
+                output={"candidate_id": candidate.id, "interview_scheduled": True, "interview_type": interview_data["interview_type"]},
+            )
+        except Exception as e:
+            return NodeExecutionResult(node_id="", status="failed", error=str(e))
+
+    async def _send_rejection(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Send a rejection email/notification for a candidate."""
+        candidate_id = data.get("candidate_id") or context.trigger_data.get("candidate_id")
+        if not candidate_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No candidate_id specified")
+
+        # Update candidate stage to rejected
+        from aexy.models.assessment import Candidate
+        try:
+            stmt = select(Candidate).where(Candidate.id == candidate_id)
+            result = await self.db.execute(stmt)
+            candidate = result.scalar_one_or_none()
+            if not candidate:
+                return NodeExecutionResult(node_id="", status="failed", error=f"Candidate {candidate_id} not found")
+
+            custom_fields = dict(candidate.custom_fields) if candidate.custom_fields else {}
+            custom_fields["hiring_status"] = "rejected"
+            custom_fields["rejected_at"] = datetime.now(timezone.utc).isoformat()
+            custom_fields["rejection_reason"] = data.get("reason", "")
+            candidate.custom_fields = custom_fields
+            await self.db.flush()
+
+            # Send rejection email if email configured
+            email_to = data.get("email") or candidate.email if hasattr(candidate, "email") else None
+            if email_to:
+                subject = data.get("email_subject", "Application Update")
+                body = data.get("email_body", data.get("message", "Thank you for your application. Unfortunately, we have decided to move forward with other candidates."))
+                body = self._render_template(body, context)
+
+                from aexy.temporal.dispatch import dispatch
+                from aexy.temporal.task_queues import TaskQueue
+                from aexy.temporal.activities.email import SendWorkflowEmailInput
+
+                await dispatch(
+                    "send_workflow_email",
+                    SendWorkflowEmailInput(
+                        workspace_id=context.workspace_id,
+                        to_email=email_to,
+                        subject=subject,
+                        html_body=body,
+                        record_id=context.record_id,
+                    ),
+                    task_queue=TaskQueue.EMAIL,
+                )
+
+            return NodeExecutionResult(
+                node_id="", status="success",
+                output={"candidate_id": candidate.id, "rejected": True, "email_sent": email_to is not None},
+            )
+        except Exception as e:
+            return NodeExecutionResult(node_id="", status="failed", error=str(e))
+
+    async def _create_offer(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Create an offer for a candidate."""
+        from aexy.models.assessment import Candidate
+
+        candidate_id = data.get("candidate_id") or context.trigger_data.get("candidate_id")
+        if not candidate_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No candidate_id specified")
+
+        try:
+            stmt = select(Candidate).where(Candidate.id == candidate_id)
+            result = await self.db.execute(stmt)
+            candidate = result.scalar_one_or_none()
+            if not candidate:
+                return NodeExecutionResult(node_id="", status="failed", error=f"Candidate {candidate_id} not found")
+
+            custom_fields = dict(candidate.custom_fields) if candidate.custom_fields else {}
+            custom_fields["hiring_status"] = "offer"
+            custom_fields["offer_details"] = {
+                "position": data.get("position", ""),
+                "salary": data.get("salary", ""),
+                "start_date": data.get("start_date", ""),
+                "notes": data.get("notes", ""),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            candidate.custom_fields = custom_fields
+            await self.db.flush()
+
+            return NodeExecutionResult(
+                node_id="", status="success",
+                output={"candidate_id": candidate.id, "offer_created": True},
+            )
+        except Exception as e:
+            return NodeExecutionResult(node_id="", status="failed", error=str(e))
+
+    async def _add_note(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Add a note to a candidate."""
+        from aexy.models.assessment import Candidate
+
+        candidate_id = data.get("candidate_id") or context.trigger_data.get("candidate_id")
+        note_text = data.get("note", data.get("message", ""))
+
+        if not candidate_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No candidate_id specified")
+        if not note_text:
+            return NodeExecutionResult(node_id="", status="failed", error="No note text specified")
+
+        note_text = self._render_template(note_text, context)
+
+        try:
+            stmt = select(Candidate).where(Candidate.id == candidate_id)
+            result = await self.db.execute(stmt)
+            candidate = result.scalar_one_or_none()
+            if not candidate:
+                return NodeExecutionResult(node_id="", status="failed", error=f"Candidate {candidate_id} not found")
+
+            custom_fields = dict(candidate.custom_fields) if candidate.custom_fields else {}
+            existing_notes = custom_fields.get("notes", "")
+            if existing_notes:
+                custom_fields["notes"] = f"{existing_notes}\n\n---\n{note_text}"
+            else:
+                custom_fields["notes"] = note_text
+            candidate.custom_fields = custom_fields
+            await self.db.flush()
+
+            return NodeExecutionResult(
+                node_id="", status="success",
+                output={"candidate_id": candidate.id, "note_added": True},
+            )
+        except Exception as e:
+            return NodeExecutionResult(node_id="", status="failed", error=str(e))
+
+    async def _assign_recruiter(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Assign a recruiter to a candidate."""
+        from aexy.models.assessment import Candidate
+
+        candidate_id = data.get("candidate_id") or context.trigger_data.get("candidate_id")
+        recruiter_id = data.get("recruiter_id") or data.get("assignee_id")
+
+        if not candidate_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No candidate_id specified")
+        if not recruiter_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No recruiter_id specified")
+
+        try:
+            stmt = select(Candidate).where(Candidate.id == candidate_id)
+            result = await self.db.execute(stmt)
+            candidate = result.scalar_one_or_none()
+            if not candidate:
+                return NodeExecutionResult(node_id="", status="failed", error=f"Candidate {candidate_id} not found")
+
+            custom_fields = dict(candidate.custom_fields) if candidate.custom_fields else {}
+            custom_fields["recruiter_id"] = recruiter_id
+            custom_fields["recruiter_assigned_at"] = datetime.now(timezone.utc).isoformat()
+            candidate.custom_fields = custom_fields
+            await self.db.flush()
+
+            return NodeExecutionResult(
+                node_id="", status="success",
+                output={"candidate_id": candidate.id, "recruiter_id": recruiter_id},
+            )
+        except Exception as e:
+            return NodeExecutionResult(node_id="", status="failed", error=str(e))
+
+    # =========================================================================
+    # BOOKING MODULE ACTIONS
+    # =========================================================================
+
+    async def _confirm_booking(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Confirm a booking."""
+        from aexy.models.booking.booking import Booking
+
+        booking_id = data.get("booking_id") or context.trigger_data.get("booking_id")
+        if not booking_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No booking_id specified")
+
+        try:
+            stmt = select(Booking).where(Booking.id == booking_id)
+            result = await self.db.execute(stmt)
+            booking = result.scalar_one_or_none()
+            if not booking:
+                return NodeExecutionResult(node_id="", status="failed", error=f"Booking {booking_id} not found")
+
+            booking.status = "confirmed"
+            await self.db.flush()
+
+            return NodeExecutionResult(
+                node_id="", status="success",
+                output={"booking_id": booking.id, "status": "confirmed"},
+            )
+        except Exception as e:
+            return NodeExecutionResult(node_id="", status="failed", error=str(e))
+
+    async def _cancel_booking(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Cancel a booking."""
+        from aexy.models.booking.booking import Booking
+
+        booking_id = data.get("booking_id") or context.trigger_data.get("booking_id")
+        if not booking_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No booking_id specified")
+
+        try:
+            stmt = select(Booking).where(Booking.id == booking_id)
+            result = await self.db.execute(stmt)
+            booking = result.scalar_one_or_none()
+            if not booking:
+                return NodeExecutionResult(node_id="", status="failed", error=f"Booking {booking_id} not found")
+
+            booking.status = "cancelled"
+            booking.cancelled_at = datetime.now(timezone.utc)
+            booking.cancellation_reason = data.get("reason", "Cancelled by automation")
+            booking.cancelled_by = "system"
+            await self.db.flush()
+
+            return NodeExecutionResult(
+                node_id="", status="success",
+                output={"booking_id": booking.id, "status": "cancelled"},
+            )
+        except Exception as e:
+            return NodeExecutionResult(node_id="", status="failed", error=str(e))
+
+    async def _reschedule_booking(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Reschedule a booking."""
+        from aexy.models.booking.booking import Booking
+
+        booking_id = data.get("booking_id") or context.trigger_data.get("booking_id")
+        new_start_time = data.get("new_start_time")
+
+        if not booking_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No booking_id specified")
+        if not new_start_time:
+            return NodeExecutionResult(node_id="", status="failed", error="No new_start_time specified")
+
+        try:
+            stmt = select(Booking).where(Booking.id == booking_id)
+            result = await self.db.execute(stmt)
+            booking = result.scalar_one_or_none()
+            if not booking:
+                return NodeExecutionResult(node_id="", status="failed", error=f"Booking {booking_id} not found")
+
+            old_start = booking.start_time
+
+            from dateutil.parser import parse as parse_datetime
+            booking.start_time = parse_datetime(new_start_time)
+            if data.get("new_end_time"):
+                booking.end_time = parse_datetime(data["new_end_time"])
+
+            # Store reschedule info in answers
+            answers = dict(booking.answers) if booking.answers else {}
+            history = answers.get("reschedule_history", [])
+            history.append({
+                "old_start": old_start.isoformat() if old_start else None,
+                "new_start": new_start_time,
+                "reason": data.get("reason", "Rescheduled by automation"),
+                "rescheduled_at": datetime.now(timezone.utc).isoformat(),
+            })
+            answers["reschedule_history"] = history
+            booking.answers = answers
+            booking.status = "confirmed"
+            await self.db.flush()
+
+            return NodeExecutionResult(
+                node_id="", status="success",
+                output={"booking_id": booking.id, "rescheduled": True, "new_start": new_start_time},
+            )
+        except Exception as e:
+            return NodeExecutionResult(node_id="", status="failed", error=str(e))
+
+    async def _send_reminder(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Send a booking reminder via email or Slack."""
+        booking_id = data.get("booking_id") or context.trigger_data.get("booking_id")
+        message = data.get("message", data.get("message_template", "Reminder: You have an upcoming booking."))
+        message = self._render_template(message, context)
+        channel = data.get("channel", "email")
+
+        if channel == "slack":
+            return await self._send_slack(
+                {"message_template": message, "channel_id": data.get("channel_id"), "user_email": data.get("user_email")},
+                context,
+            )
+        else:
+            email_to = data.get("to") or data.get("email")
+            if not email_to:
+                email_to = context.record_data.get("values", {}).get("email")
+            if not email_to:
+                return NodeExecutionResult(node_id="", status="failed", error="No email address for reminder")
+            return await self._send_email(
+                {"to": email_to, "email_subject": data.get("subject", "Booking Reminder"), "email_body": message},
+                context,
+            )
+
+    # =========================================================================
+    # NOTIFICATION ACTIONS
+    # =========================================================================
+
+    async def _notify_user(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Send notification to a specific user."""
+        from aexy.models.developer import Developer
+
+        user_id = data.get("user_id")
+        user_email = data.get("user_email")
+        message = data.get("message", data.get("message_template", ""))
+        channel = data.get("channel", "slack")
+
+        message = self._render_template(message, context)
+
+        if not user_id and not user_email:
+            return NodeExecutionResult(node_id="", status="failed", error="No user_id or user_email specified")
+
+        try:
+            developer = None
+            if user_id:
+                result = await self.db.execute(select(Developer).where(Developer.id == user_id))
+                developer = result.scalar_one_or_none()
+            elif user_email:
+                result = await self.db.execute(select(Developer).where(Developer.email == user_email))
+                developer = result.scalar_one_or_none()
+
+            if not developer:
+                return NodeExecutionResult(node_id="", status="failed", error=f"User not found: {user_id or user_email}")
+
+            channels_notified = []
+
+            if channel in ("slack", "both"):
+                slack_result = await self._send_slack(
+                    {"user_email": developer.email, "message_template": message},
+                    context,
+                )
+                if slack_result.status == "success":
+                    channels_notified.append("slack")
+
+            if channel in ("email", "both"):
+                email_result = await self._send_email(
+                    {"to": developer.email, "email_subject": data.get("email_subject", "Notification"), "email_body": message},
+                    context,
+                )
+                if email_result.status == "success":
+                    channels_notified.append("email")
+
+            return NodeExecutionResult(
+                node_id="", status="success",
+                output={"user_id": developer.id, "channels_notified": channels_notified},
+            )
+        except Exception as e:
+            return NodeExecutionResult(node_id="", status="failed", error=str(e))
+
+    async def _notify_team(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Send notification to an entire team."""
+        from aexy.models.team import Team
+
+        team_id = data.get("team_id")
+        channel_id = data.get("channel_id")
+        message = data.get("message", data.get("message_template", ""))
+        message = self._render_template(message, context)
+
+        if not team_id and not channel_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No team_id or channel_id specified")
+
+        if team_id and not channel_id:
+            try:
+                result = await self.db.execute(select(Team).where(Team.id == team_id))
+                team = result.scalar_one_or_none()
+                if team:
+                    channel_id = getattr(team, "slack_channel_id", None)
+            except Exception:
+                pass
+
+        if not channel_id:
+            return NodeExecutionResult(node_id="", status="failed", error="No channel available for team notification")
+
+        return await self._send_slack(
+            {"channel_id": channel_id, "message_template": message},
+            context,
+        )
+
+    # =========================================================================
+    # EMAIL MARKETING ACTIONS
+    # =========================================================================
+
+    async def _update_contact(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Update an email marketing contact (CRM record update)."""
+        # Delegates to update_record with the contact data
+        return await self._update_record(data, context)
+
+    # =========================================================================
+    # FORM ACTIONS
+    # =========================================================================
+
+    async def _send_response(
+        self, data: dict, context: WorkflowExecutionContext
+    ) -> NodeExecutionResult:
+        """Send a response/confirmation after form submission."""
+        email_to = data.get("to") or data.get("email")
+        if not email_to:
+            email_to = context.record_data.get("values", {}).get("email")
+        if not email_to:
+            email_to = context.trigger_data.get("email")
+
+        if not email_to:
+            return NodeExecutionResult(node_id="", status="failed", error="No email address for response")
+
+        subject = data.get("email_subject", data.get("subject", "Thank you for your submission"))
+        body = data.get("email_body", data.get("message", "We have received your submission."))
+
+        subject = self._render_template(subject, context)
+        body = self._render_template(body, context)
+
+        from aexy.temporal.dispatch import dispatch
+        from aexy.temporal.task_queues import TaskQueue
+        from aexy.temporal.activities.email import SendWorkflowEmailInput
+
+        await dispatch(
+            "send_workflow_email",
+            SendWorkflowEmailInput(
+                workspace_id=context.workspace_id,
+                to_email=email_to,
+                subject=subject,
+                html_body=body,
+                record_id=context.record_id,
+            ),
+            task_queue=TaskQueue.EMAIL,
+        )
+
+        return NodeExecutionResult(
+            node_id="", status="success",
+            output={"to": email_to, "subject": subject, "queued": True},
+        )
+
     def _get_context_value(self, path: str, context: WorkflowExecutionContext) -> Any:
         """Get a value from context using dot notation."""
         parts = path.split(".")
@@ -1165,10 +2345,26 @@ class WorkflowActionHandler:
 
 
 class SyncWorkflowActionHandler:
-    """Synchronous action handler for Celery tasks."""
+    """Synchronous action handler (legacy, used for backward compat only).
+
+    Note: Temporal's execute_workflow_action activity uses the async
+    WorkflowActionHandler instead. This sync handler is retained for
+    any remaining sync call-sites but dispatches to Temporal rather
+    than Celery.
+    """
 
     def __init__(self, db: Session):
         self.db = db
+
+    @staticmethod
+    def _dispatch_temporal(activity_name: str, activity_input, task_queue: str = "operations"):
+        """Fire-and-forget dispatch to Temporal from synchronous code."""
+        import asyncio
+        from aexy.temporal.dispatch import dispatch as temporal_dispatch
+        try:
+            asyncio.run(temporal_dispatch(activity_name, activity_input, task_queue))
+        except Exception as e:
+            logger.warning(f"Failed to dispatch {activity_name} to Temporal: {e}")
 
     def execute_action(
         self,
@@ -1179,22 +2375,65 @@ class SyncWorkflowActionHandler:
     ) -> dict:
         """Execute an action based on type."""
         handlers = {
+            # CRM actions
             "update_record": self._update_record,
             "create_record": self._create_record,
             "delete_record": self._delete_record,
-            "send_email": self._send_email,
-            "send_slack": self._send_slack,
-            "send_sms": self._send_sms,
-            "create_task": self._create_task,
             "add_to_list": self._add_to_list,
             "remove_from_list": self._remove_from_list,
             "enroll_sequence": self._enroll_sequence,
             "unenroll_sequence": self._unenroll_sequence,
-            "webhook_call": self._webhook_call,
             "assign_owner": self._assign_owner,
+            # Communication actions
+            "send_email": self._send_email,
+            "send_slack": self._send_slack,
+            "send_sms": self._send_sms,
+            "webhook_call": self._webhook_call,
+            "api_request": self._webhook_call,
+            "notify_user": self._notify_user,
+            "notify_team": self._notify_team,
+            # Task / Sprint actions
+            "create_task": self._create_task,
+            "update_task": self._update_task,
+            "assign_task": self._assign_task,
+            "move_task": self._move_task,
+            "create_subtask": self._create_subtask,
+            "add_comment": self._add_comment,
+            # Ticket actions
+            "update_ticket": self._update_ticket,
+            "assign_ticket": self._assign_ticket,
+            "add_response": self._add_response,
+            "escalate": self._escalate,
+            "change_priority": self._change_priority,
+            "add_tag": self._add_tag,
+            "remove_tag": self._remove_tag,
+            # Hiring actions
+            "update_candidate": self._update_candidate,
+            "move_stage": self._move_stage,
+            "schedule_interview": self._schedule_interview,
+            "send_rejection": self._send_rejection,
+            "create_offer": self._create_offer,
+            "add_note": self._add_note,
+            "assign_recruiter": self._assign_recruiter,
+            # Uptime actions
+            "pause_monitor": self._pause_monitor,
+            "resume_monitor": self._resume_monitor,
+            "create_incident": self._create_incident,
+            "resolve_incident": self._resolve_incident,
+            # Booking actions
+            "confirm_booking": self._confirm_booking,
+            "cancel_booking": self._cancel_booking,
+            "reschedule_booking": self._reschedule_booking,
+            "send_reminder": self._send_reminder,
+            # Email marketing actions
             "send_campaign": self._send_campaign,
+            "update_contact": self._update_contact,
+            # Form actions
+            "send_response": self._send_response,
+            # Onboarding actions
             "trigger_onboarding": self._trigger_onboarding,
             "complete_onboarding_step": self._complete_onboarding_step,
+            # AI Agent actions
             "run_agent": self._execute_agent,
         }
 
@@ -1205,7 +2444,7 @@ class SyncWorkflowActionHandler:
         return handler(data, context, execution)
 
     def _execute_agent(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
-        """Execute an AI agent synchronously (for Celery workers)."""
+        """Execute an AI agent synchronously."""
         from aexy.services.automation_agent_service import SyncAutomationAgentService
 
         agent_id = data.get("agent_id")
@@ -1455,10 +2694,70 @@ class SyncWorkflowActionHandler:
         return {"status": "success", "output": {"to": phone_to, "queued": True}}
 
     def _create_task(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
-        """Create a task."""
-        title = data.get("title", "New Task")
+        """Create a sprint task."""
+        from aexy.models.sprint import SprintTask
+        from aexy.models.project import ProjectTeam
+
+        title = data.get("task_title") or data.get("title", "New Task")
+        description = data.get("task_description") or data.get("description", "")
         title = self._render_template(title, context)
-        return {"status": "success", "output": {"title": title, "created": True}}
+        description = self._render_template(description, context)
+
+        priority = data.get("task_priority") or data.get("priority", "medium")
+        assignee_id = data.get("assignee_id")
+        project_id = data.get("project_id")
+        sprint_id = data.get("sprint_id")
+        labels = data.get("labels", [])
+
+        workspace_id = execution.workspace_id
+        if not workspace_id:
+            return {"status": "failed", "error": "No workspace_id in context"}
+
+        # Look up team from project
+        team_id = None
+        if project_id:
+            try:
+                project_team = self.db.execute(
+                    select(ProjectTeam).where(ProjectTeam.project_id == project_id).limit(1)
+                ).scalar_one_or_none()
+                if project_team:
+                    team_id = project_team.team_id
+            except Exception as e:
+                logger.error(f"[CREATE_TASK] Failed to look up team for project: {e}")
+
+        try:
+            task = SprintTask(
+                id=str(uuid4()),
+                workspace_id=workspace_id,
+                team_id=team_id,
+                sprint_id=sprint_id,
+                source_type="automation",
+                source_id=str(uuid4()),
+                title=title,
+                description=description,
+                priority=priority,
+                assignee_id=assignee_id,
+                labels=labels if isinstance(labels, list) else [],
+                status="todo",
+            )
+            self.db.add(task)
+            self.db.commit()
+
+            logger.info(f"[CREATE_TASK] Task created: id={task.id}, title='{task.title}'")
+
+            return {
+                "status": "success",
+                "output": {
+                    "task_id": task.id,
+                    "title": task.title,
+                    "project_id": project_id,
+                    "team_id": team_id,
+                    "created": True,
+                },
+            }
+        except Exception as e:
+            logger.error(f"[CREATE_TASK] Failed: {e}", exc_info=True)
+            return {"status": "failed", "error": f"Failed to create task: {str(e)}"}
 
     def _add_to_list(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
         """Add a record to a CRM list."""
@@ -1784,6 +3083,917 @@ class SyncWorkflowActionHandler:
             "status": "success",
             "output": {"progress_id": progress_id or "pending", "queued": True},
         }
+
+    # =========================================================================
+    # UPTIME MODULE ACTIONS (sync)
+    # =========================================================================
+
+    def _pause_monitor(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Pause an uptime monitor."""
+        from aexy.models.uptime import UptimeMonitor
+
+        monitor_id = data.get("monitor_id") or context.get("trigger_data", {}).get("monitor_id")
+        if not monitor_id:
+            return {"status": "failed", "error": "No monitor_id specified"}
+
+        try:
+            monitor = self.db.execute(
+                select(UptimeMonitor).where(UptimeMonitor.id == monitor_id)
+            ).scalar_one_or_none()
+            if monitor:
+                monitor.is_paused = True
+                self.db.commit()
+            else:
+                return {"status": "failed", "error": f"Monitor {monitor_id} not found"}
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+        return {"status": "success", "output": {"monitor_id": monitor_id, "paused": True}}
+
+    def _resume_monitor(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Resume a paused uptime monitor."""
+        from aexy.models.uptime import UptimeMonitor
+
+        monitor_id = data.get("monitor_id") or context.get("trigger_data", {}).get("monitor_id")
+        if not monitor_id:
+            return {"status": "failed", "error": "No monitor_id specified"}
+
+        try:
+            monitor = self.db.execute(
+                select(UptimeMonitor).where(UptimeMonitor.id == monitor_id)
+            ).scalar_one_or_none()
+            if monitor:
+                monitor.is_paused = False
+                self.db.commit()
+            else:
+                return {"status": "failed", "error": f"Monitor {monitor_id} not found"}
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+        return {"status": "success", "output": {"monitor_id": monitor_id, "resumed": True}}
+
+    def _create_incident(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Create an uptime incident."""
+        from aexy.models.uptime import UptimeIncident, UptimeIncidentStatus
+
+        monitor_id = data.get("monitor_id") or context.get("trigger_data", {}).get("monitor_id")
+        if not monitor_id:
+            return {"status": "failed", "error": "No monitor_id specified"}
+
+        try:
+            incident = UptimeIncident(
+                id=str(uuid4()),
+                monitor_id=monitor_id,
+                workspace_id=execution.workspace_id,
+                status=UptimeIncidentStatus.ONGOING.value,
+                first_error_message=data.get("error_message", "Incident created by automation"),
+                first_error_type=data.get("error_type", "manual"),
+                last_error_message=data.get("error_message", "Incident created by automation"),
+                last_error_type=data.get("error_type", "manual"),
+                total_checks=0,
+                failed_checks=0,
+            )
+            self.db.add(incident)
+            self.db.commit()
+            return {"status": "success", "output": {"incident_id": incident.id, "monitor_id": monitor_id, "created": True}}
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+
+    def _resolve_incident(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Resolve an uptime incident."""
+        from aexy.models.uptime import UptimeIncident, UptimeIncidentStatus
+
+        incident_id = data.get("incident_id") or context.get("trigger_data", {}).get("incident_id")
+        monitor_id = data.get("monitor_id") or context.get("trigger_data", {}).get("monitor_id")
+
+        if not incident_id and not monitor_id:
+            return {"status": "failed", "error": "No incident_id or monitor_id specified"}
+
+        try:
+            if incident_id:
+                incident = self.db.execute(
+                    select(UptimeIncident).where(UptimeIncident.id == incident_id)
+                ).scalar_one_or_none()
+            elif monitor_id:
+                incident = self.db.execute(
+                    select(UptimeIncident).where(
+                        UptimeIncident.monitor_id == monitor_id,
+                        UptimeIncident.status == UptimeIncidentStatus.ONGOING.value,
+                    )
+                ).scalar_one_or_none()
+            else:
+                incident = None
+
+            if incident:
+                incident.status = UptimeIncidentStatus.RESOLVED.value
+                incident.resolution_notes = data.get("resolution_notes", "Resolved by automation")
+                incident.root_cause = data.get("root_cause")
+                incident.resolved_at = datetime.now(timezone.utc)
+                self.db.commit()
+                return {"status": "success", "output": {"incident_id": incident.id, "resolved": True}}
+            return {"status": "failed", "error": "Incident not found"}
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+
+    # =========================================================================
+    # SPRINT MODULE ACTIONS (sync)
+    # =========================================================================
+
+    def _update_task(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Update a sprint task."""
+        from aexy.models.sprint import SprintTask
+
+        task_id = data.get("task_id") or context.get("trigger_data", {}).get("task_id")
+        if not task_id:
+            return {"status": "failed", "error": "No task_id specified"}
+
+        try:
+            task = self.db.execute(
+                select(SprintTask).where(SprintTask.id == task_id)
+            ).scalar_one_or_none()
+            if not task:
+                return {"status": "failed", "error": f"Task {task_id} not found"}
+            for field in ("title", "description", "priority", "status", "story_points", "labels"):
+                val = data.get(field)
+                if val is not None:
+                    setattr(task, field, val)
+            self.db.commit()
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+        return {"status": "success", "output": {"task_id": task_id, "updated": True}}
+
+    def _assign_task(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Assign a sprint task."""
+        from aexy.models.sprint import SprintTask
+
+        task_id = data.get("task_id") or context.get("trigger_data", {}).get("task_id")
+        developer_id = data.get("developer_id") or data.get("assignee_id")
+
+        if not task_id:
+            return {"status": "failed", "error": "No task_id specified"}
+        if not developer_id:
+            return {"status": "failed", "error": "No assignee_id specified"}
+
+        try:
+            task = self.db.execute(
+                select(SprintTask).where(SprintTask.id == task_id)
+            ).scalar_one_or_none()
+            if not task:
+                return {"status": "failed", "error": f"Task {task_id} not found"}
+            task.assignee_id = developer_id
+            self.db.commit()
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+        return {"status": "success", "output": {"task_id": task_id, "assignee_id": developer_id, "assigned": True}}
+
+    def _move_task(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Move a sprint task."""
+        from aexy.models.sprint import SprintTask
+
+        task_id = data.get("task_id") or context.get("trigger_data", {}).get("task_id")
+        if not task_id:
+            return {"status": "failed", "error": "No task_id specified"}
+
+        try:
+            task = self.db.execute(
+                select(SprintTask).where(SprintTask.id == task_id)
+            ).scalar_one_or_none()
+            if not task:
+                return {"status": "failed", "error": f"Task {task_id} not found"}
+            if data.get("status"):
+                task.status = data["status"]
+            if data.get("sprint_id"):
+                task.sprint_id = data["sprint_id"]
+            self.db.commit()
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+        return {"status": "success", "output": {"task_id": task_id, "moved": True}}
+
+    def _create_subtask(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Create a subtask."""
+        from aexy.models.sprint import SprintTask
+
+        parent_task_id = data.get("parent_task_id") or context.get("trigger_data", {}).get("task_id")
+        if not parent_task_id:
+            return {"status": "failed", "error": "No parent_task_id specified"}
+
+        title = data.get("title", "Subtask")
+        title = self._render_template(title, context)
+
+        try:
+            parent = self.db.execute(
+                select(SprintTask).where(SprintTask.id == parent_task_id)
+            ).scalar_one_or_none()
+            if not parent:
+                return {"status": "failed", "error": f"Parent task {parent_task_id} not found"}
+            subtask = SprintTask(
+                id=str(uuid4()),
+                title=title,
+                description=data.get("description"),
+                priority=data.get("priority", "medium"),
+                assignee_id=data.get("assignee_id"),
+                parent_task_id=parent_task_id,
+                workspace_id=parent.workspace_id,
+                project_id=parent.project_id,
+                sprint_id=parent.sprint_id,
+                task_type="subtask",
+            )
+            self.db.add(subtask)
+            self.db.commit()
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+        return {"status": "success", "output": {"parent_task_id": parent_task_id, "created": True}}
+
+    def _add_comment(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Add a comment to a sprint task."""
+        from aexy.models.sprint import SprintTask
+
+        task_id = data.get("task_id") or context.get("trigger_data", {}).get("task_id")
+        comment_text = data.get("comment", data.get("message", ""))
+
+        if not task_id:
+            return {"status": "failed", "error": "No task_id specified"}
+        if not comment_text:
+            return {"status": "failed", "error": "No comment text specified"}
+
+        comment_text = self._render_template(comment_text, context)
+
+        try:
+            task = self.db.execute(
+                select(SprintTask).where(SprintTask.id == task_id)
+            ).scalar_one_or_none()
+            if not task:
+                return {"status": "failed", "error": f"Task {task_id} not found"}
+
+            custom_fields = dict(task.custom_fields) if task.custom_fields else {}
+            comments = custom_fields.get("automation_comments", [])
+            comments.append({
+                "text": comment_text,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "source": "automation",
+            })
+            custom_fields["automation_comments"] = comments
+            task.custom_fields = custom_fields
+            self.db.commit()
+
+            return {"status": "success", "output": {"task_id": task_id, "comment_added": True}}
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+
+    # =========================================================================
+    # TICKET MODULE ACTIONS (sync)
+    # =========================================================================
+
+    def _update_ticket(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Update a ticket."""
+        from aexy.models.ticketing import Ticket
+
+        ticket_id = data.get("ticket_id") or context.get("trigger_data", {}).get("ticket_id")
+        if not ticket_id:
+            return {"status": "failed", "error": "No ticket_id specified"}
+
+        try:
+            ticket = self.db.execute(
+                select(Ticket).where(Ticket.id == ticket_id)
+            ).scalar_one_or_none()
+            if not ticket:
+                return {"status": "failed", "error": f"Ticket {ticket_id} not found"}
+            for field in ("status", "priority", "severity"):
+                val = data.get(field)
+                if val is not None:
+                    setattr(ticket, field, val)
+            self.db.commit()
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+        return {"status": "success", "output": {"ticket_id": ticket_id, "updated": True}}
+
+    def _assign_ticket(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Assign a ticket."""
+        from aexy.models.ticketing import Ticket
+
+        ticket_id = data.get("ticket_id") or context.get("trigger_data", {}).get("ticket_id")
+        if not ticket_id:
+            return {"status": "failed", "error": "No ticket_id specified"}
+
+        try:
+            ticket = self.db.execute(
+                select(Ticket).where(Ticket.id == ticket_id)
+            ).scalar_one_or_none()
+            if not ticket:
+                return {"status": "failed", "error": f"Ticket {ticket_id} not found"}
+            if data.get("assignee_id"):
+                ticket.assignee_id = data["assignee_id"]
+            if data.get("team_id"):
+                ticket.team_id = data["team_id"]
+            self.db.commit()
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+        return {"status": "success", "output": {"ticket_id": ticket_id, "assigned": True}}
+
+    def _add_response(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Add a response to a ticket."""
+        from aexy.models.ticketing import Ticket, TicketResponse
+
+        ticket_id = data.get("ticket_id") or context.get("trigger_data", {}).get("ticket_id")
+        message = data.get("message", data.get("response", ""))
+
+        if not ticket_id:
+            return {"status": "failed", "error": "No ticket_id specified"}
+        if not message:
+            return {"status": "failed", "error": "No message specified"}
+
+        message = self._render_template(message, context)
+
+        try:
+            response = TicketResponse(
+                id=str(uuid4()),
+                ticket_id=ticket_id,
+                content=message,
+                is_internal=data.get("is_internal", False),
+                source="automation",
+            )
+            self.db.add(response)
+            self.db.commit()
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+        return {"status": "success", "output": {"ticket_id": ticket_id, "response_added": True}}
+
+    def _escalate(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Escalate a ticket."""
+        from aexy.models.ticketing import Ticket
+
+        ticket_id = data.get("ticket_id") or context.get("trigger_data", {}).get("ticket_id")
+        level = data.get("level", "level_1")
+
+        if not ticket_id:
+            return {"status": "failed", "error": "No ticket_id specified"}
+
+        try:
+            ticket = self.db.execute(
+                select(Ticket).where(Ticket.id == ticket_id)
+            ).scalar_one_or_none()
+            if not ticket:
+                return {"status": "failed", "error": f"Ticket {ticket_id} not found"}
+            ticket.escalation_level = level
+            self.db.commit()
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+        return {"status": "success", "output": {"ticket_id": ticket_id, "level": level, "escalated": True}}
+
+    def _change_priority(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Change a ticket's priority."""
+        from aexy.models.ticketing import Ticket
+
+        ticket_id = data.get("ticket_id") or context.get("trigger_data", {}).get("ticket_id")
+        priority = data.get("priority")
+
+        if not ticket_id:
+            return {"status": "failed", "error": "No ticket_id specified"}
+        if not priority:
+            return {"status": "failed", "error": "No priority specified"}
+
+        try:
+            ticket = self.db.execute(
+                select(Ticket).where(Ticket.id == ticket_id)
+            ).scalar_one_or_none()
+            if not ticket:
+                return {"status": "failed", "error": f"Ticket {ticket_id} not found"}
+            ticket.priority = priority
+            self.db.commit()
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+        return {"status": "success", "output": {"ticket_id": ticket_id, "priority": priority, "updated": True}}
+
+    def _add_tag(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Add a tag to a ticket."""
+        from aexy.models.ticketing import Ticket
+
+        ticket_id = data.get("ticket_id") or context.get("trigger_data", {}).get("ticket_id")
+        tag = data.get("tag", data.get("tag_name", ""))
+
+        if not ticket_id:
+            return {"status": "failed", "error": "No ticket_id specified"}
+        if not tag:
+            return {"status": "failed", "error": "No tag specified"}
+
+        try:
+            ticket = self.db.execute(
+                select(Ticket).where(Ticket.id == ticket_id)
+            ).scalar_one_or_none()
+            if not ticket:
+                return {"status": "failed", "error": f"Ticket {ticket_id} not found"}
+
+            tags = list(ticket.tags) if ticket.tags else []
+            if tag not in tags:
+                tags.append(tag)
+                ticket.tags = tags
+                self.db.commit()
+
+            return {"status": "success", "output": {"ticket_id": ticket_id, "tag": tag, "tags": tags}}
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+
+    def _remove_tag(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Remove a tag from a ticket."""
+        from aexy.models.ticketing import Ticket
+
+        ticket_id = data.get("ticket_id") or context.get("trigger_data", {}).get("ticket_id")
+        tag = data.get("tag", data.get("tag_name", ""))
+
+        if not ticket_id:
+            return {"status": "failed", "error": "No ticket_id specified"}
+        if not tag:
+            return {"status": "failed", "error": "No tag specified"}
+
+        try:
+            ticket = self.db.execute(
+                select(Ticket).where(Ticket.id == ticket_id)
+            ).scalar_one_or_none()
+            if not ticket:
+                return {"status": "failed", "error": f"Ticket {ticket_id} not found"}
+
+            tags = list(ticket.tags) if ticket.tags else []
+            if tag in tags:
+                tags.remove(tag)
+                ticket.tags = tags
+                self.db.commit()
+
+            return {"status": "success", "output": {"ticket_id": ticket_id, "tag_removed": tag, "tags": tags}}
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+
+    # =========================================================================
+    # HIRING MODULE ACTIONS (sync)
+    # =========================================================================
+
+    def _update_candidate(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Update a hiring candidate's custom fields."""
+        from aexy.models.assessment import Candidate
+
+        candidate_id = data.get("candidate_id") or context.get("trigger_data", {}).get("candidate_id")
+        if not candidate_id:
+            return {"status": "failed", "error": "No candidate_id specified"}
+
+        try:
+            candidate = self.db.execute(
+                select(Candidate).where(Candidate.id == candidate_id)
+            ).scalar_one_or_none()
+            if not candidate:
+                return {"status": "failed", "error": f"Candidate {candidate_id} not found"}
+
+            custom_fields = dict(candidate.custom_fields) if candidate.custom_fields else {}
+            if data.get("status"):
+                custom_fields["hiring_status"] = data["status"]
+            if data.get("notes"):
+                existing = custom_fields.get("notes", "")
+                custom_fields["notes"] = f"{existing}\n\n---\n{data['notes']}" if existing else data["notes"]
+            if data.get("rating"):
+                custom_fields["rating"] = data["rating"]
+            if data.get("custom_data"):
+                custom_fields.update(data["custom_data"])
+
+            candidate.custom_fields = custom_fields
+            self.db.commit()
+
+            return {"status": "success", "output": {"candidate_id": candidate.id, "updated": True}}
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+
+    def _move_stage(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Move a candidate to a different hiring stage."""
+        from aexy.models.assessment import Candidate
+
+        candidate_id = data.get("candidate_id") or context.get("trigger_data", {}).get("candidate_id")
+        new_stage = data.get("stage")
+
+        if not candidate_id:
+            return {"status": "failed", "error": "No candidate_id specified"}
+        if not new_stage:
+            return {"status": "failed", "error": "No stage specified"}
+
+        try:
+            candidate = self.db.execute(
+                select(Candidate).where(Candidate.id == candidate_id)
+            ).scalar_one_or_none()
+            if not candidate:
+                return {"status": "failed", "error": f"Candidate {candidate_id} not found"}
+
+            custom_fields = dict(candidate.custom_fields) if candidate.custom_fields else {}
+            old_stage = custom_fields.get("hiring_status", "applied")
+            custom_fields["hiring_status"] = new_stage
+            custom_fields["stage_changed_at"] = datetime.now(timezone.utc).isoformat()
+            candidate.custom_fields = custom_fields
+            self.db.commit()
+
+            return {"status": "success", "output": {"candidate_id": candidate.id, "old_stage": old_stage, "new_stage": new_stage}}
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+
+    def _schedule_interview(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Schedule an interview for a candidate."""
+        from aexy.models.assessment import Candidate
+
+        candidate_id = data.get("candidate_id") or context.get("trigger_data", {}).get("candidate_id")
+        if not candidate_id:
+            return {"status": "failed", "error": "No candidate_id specified"}
+
+        try:
+            candidate = self.db.execute(
+                select(Candidate).where(Candidate.id == candidate_id)
+            ).scalar_one_or_none()
+            if not candidate:
+                return {"status": "failed", "error": f"Candidate {candidate_id} not found"}
+
+            custom_fields = dict(candidate.custom_fields) if candidate.custom_fields else {}
+            current_status = custom_fields.get("hiring_status", "applied")
+            if current_status not in ("interviewing", "offer", "hired"):
+                custom_fields["hiring_status"] = "interviewing"
+
+            interview_data = {
+                "interviewer_id": data.get("interviewer_id"),
+                "interview_type": data.get("interview_type", "video"),
+                "scheduled_at": data.get("scheduled_at"),
+                "duration_minutes": data.get("duration_minutes", 60),
+                "notes": data.get("notes", ""),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+
+            interviews = custom_fields.get("scheduled_interviews", [])
+            if not isinstance(interviews, list):
+                interviews = []
+            interviews.append(interview_data)
+            custom_fields["scheduled_interviews"] = interviews
+            candidate.custom_fields = custom_fields
+            self.db.commit()
+
+            return {"status": "success", "output": {"candidate_id": candidate.id, "interview_scheduled": True}}
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+
+    def _send_rejection(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Send a rejection for a candidate."""
+        from aexy.models.assessment import Candidate
+
+        candidate_id = data.get("candidate_id") or context.get("trigger_data", {}).get("candidate_id")
+        if not candidate_id:
+            return {"status": "failed", "error": "No candidate_id specified"}
+
+        try:
+            candidate = self.db.execute(
+                select(Candidate).where(Candidate.id == candidate_id)
+            ).scalar_one_or_none()
+            if not candidate:
+                return {"status": "failed", "error": f"Candidate {candidate_id} not found"}
+
+            custom_fields = dict(candidate.custom_fields) if candidate.custom_fields else {}
+            custom_fields["hiring_status"] = "rejected"
+            custom_fields["rejected_at"] = datetime.now(timezone.utc).isoformat()
+            custom_fields["rejection_reason"] = data.get("reason", "")
+            candidate.custom_fields = custom_fields
+            self.db.commit()
+
+            # Send rejection email if configured
+            email_to = data.get("email") or (candidate.email if hasattr(candidate, "email") else None)
+            if email_to:
+                from aexy.temporal.activities.email import SendWorkflowEmailInput
+                body = data.get("email_body", data.get("message", "Thank you for your application."))
+                body = self._render_template(body, context)
+                self._dispatch_temporal(
+                    "send_workflow_email",
+                    SendWorkflowEmailInput(
+                        workspace_id=execution.workspace_id,
+                        to_email=email_to,
+                        subject=data.get("email_subject", "Application Update"),
+                        html_body=body,
+                        record_id=execution.record_id,
+                    ),
+                    task_queue="email",
+                )
+
+            return {"status": "success", "output": {"candidate_id": candidate.id, "rejected": True}}
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+
+    def _create_offer(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Create an offer for a candidate."""
+        from aexy.models.assessment import Candidate
+
+        candidate_id = data.get("candidate_id") or context.get("trigger_data", {}).get("candidate_id")
+        if not candidate_id:
+            return {"status": "failed", "error": "No candidate_id specified"}
+
+        try:
+            candidate = self.db.execute(
+                select(Candidate).where(Candidate.id == candidate_id)
+            ).scalar_one_or_none()
+            if not candidate:
+                return {"status": "failed", "error": f"Candidate {candidate_id} not found"}
+
+            custom_fields = dict(candidate.custom_fields) if candidate.custom_fields else {}
+            custom_fields["hiring_status"] = "offer"
+            custom_fields["offer_details"] = {
+                "position": data.get("position", ""),
+                "salary": data.get("salary", ""),
+                "start_date": data.get("start_date", ""),
+                "notes": data.get("notes", ""),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            candidate.custom_fields = custom_fields
+            self.db.commit()
+
+            return {"status": "success", "output": {"candidate_id": candidate.id, "offer_created": True}}
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+
+    def _add_note(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Add a note to a candidate."""
+        from aexy.models.assessment import Candidate
+
+        candidate_id = data.get("candidate_id") or context.get("trigger_data", {}).get("candidate_id")
+        note_text = data.get("note", data.get("message", ""))
+
+        if not candidate_id:
+            return {"status": "failed", "error": "No candidate_id specified"}
+        if not note_text:
+            return {"status": "failed", "error": "No note text specified"}
+
+        note_text = self._render_template(note_text, context)
+
+        try:
+            candidate = self.db.execute(
+                select(Candidate).where(Candidate.id == candidate_id)
+            ).scalar_one_or_none()
+            if not candidate:
+                return {"status": "failed", "error": f"Candidate {candidate_id} not found"}
+
+            custom_fields = dict(candidate.custom_fields) if candidate.custom_fields else {}
+            existing = custom_fields.get("notes", "")
+            custom_fields["notes"] = f"{existing}\n\n---\n{note_text}" if existing else note_text
+            candidate.custom_fields = custom_fields
+            self.db.commit()
+
+            return {"status": "success", "output": {"candidate_id": candidate.id, "note_added": True}}
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+
+    def _assign_recruiter(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Assign a recruiter to a candidate."""
+        from aexy.models.assessment import Candidate
+
+        candidate_id = data.get("candidate_id") or context.get("trigger_data", {}).get("candidate_id")
+        recruiter_id = data.get("recruiter_id") or data.get("assignee_id")
+
+        if not candidate_id:
+            return {"status": "failed", "error": "No candidate_id specified"}
+        if not recruiter_id:
+            return {"status": "failed", "error": "No recruiter_id specified"}
+
+        try:
+            candidate = self.db.execute(
+                select(Candidate).where(Candidate.id == candidate_id)
+            ).scalar_one_or_none()
+            if not candidate:
+                return {"status": "failed", "error": f"Candidate {candidate_id} not found"}
+
+            custom_fields = dict(candidate.custom_fields) if candidate.custom_fields else {}
+            custom_fields["recruiter_id"] = recruiter_id
+            custom_fields["recruiter_assigned_at"] = datetime.now(timezone.utc).isoformat()
+            candidate.custom_fields = custom_fields
+            self.db.commit()
+
+            return {"status": "success", "output": {"candidate_id": candidate.id, "recruiter_id": recruiter_id}}
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+
+    # =========================================================================
+    # BOOKING MODULE ACTIONS (sync)
+    # =========================================================================
+
+    def _confirm_booking(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Confirm a booking."""
+        from aexy.models.booking.booking import Booking
+
+        booking_id = data.get("booking_id") or context.get("trigger_data", {}).get("booking_id")
+        if not booking_id:
+            return {"status": "failed", "error": "No booking_id specified"}
+
+        try:
+            booking = self.db.execute(
+                select(Booking).where(Booking.id == booking_id)
+            ).scalar_one_or_none()
+            if not booking:
+                return {"status": "failed", "error": f"Booking {booking_id} not found"}
+
+            booking.status = "confirmed"
+            self.db.commit()
+            return {"status": "success", "output": {"booking_id": booking.id, "status": "confirmed"}}
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+
+    def _cancel_booking(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Cancel a booking."""
+        from aexy.models.booking.booking import Booking
+
+        booking_id = data.get("booking_id") or context.get("trigger_data", {}).get("booking_id")
+        if not booking_id:
+            return {"status": "failed", "error": "No booking_id specified"}
+
+        try:
+            booking = self.db.execute(
+                select(Booking).where(Booking.id == booking_id)
+            ).scalar_one_or_none()
+            if not booking:
+                return {"status": "failed", "error": f"Booking {booking_id} not found"}
+
+            booking.status = "cancelled"
+            booking.cancelled_at = datetime.now(timezone.utc)
+            booking.cancellation_reason = data.get("reason", "Cancelled by automation")
+            booking.cancelled_by = "system"
+            self.db.commit()
+            return {"status": "success", "output": {"booking_id": booking.id, "status": "cancelled"}}
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+
+    def _reschedule_booking(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Reschedule a booking."""
+        from aexy.models.booking.booking import Booking
+
+        booking_id = data.get("booking_id") or context.get("trigger_data", {}).get("booking_id")
+        new_start_time = data.get("new_start_time")
+
+        if not booking_id:
+            return {"status": "failed", "error": "No booking_id specified"}
+        if not new_start_time:
+            return {"status": "failed", "error": "No new_start_time specified"}
+
+        try:
+            booking = self.db.execute(
+                select(Booking).where(Booking.id == booking_id)
+            ).scalar_one_or_none()
+            if not booking:
+                return {"status": "failed", "error": f"Booking {booking_id} not found"}
+
+            old_start = booking.start_time
+            from dateutil.parser import parse as parse_datetime
+            booking.start_time = parse_datetime(new_start_time)
+            if data.get("new_end_time"):
+                booking.end_time = parse_datetime(data["new_end_time"])
+
+            answers = dict(booking.answers) if booking.answers else {}
+            history = answers.get("reschedule_history", [])
+            history.append({
+                "old_start": old_start.isoformat() if old_start else None,
+                "new_start": new_start_time,
+                "reason": data.get("reason", "Rescheduled by automation"),
+                "rescheduled_at": datetime.now(timezone.utc).isoformat(),
+            })
+            answers["reschedule_history"] = history
+            booking.answers = answers
+            booking.status = "confirmed"
+            self.db.commit()
+
+            return {"status": "success", "output": {"booking_id": booking.id, "rescheduled": True}}
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+
+    def _send_reminder(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Send a booking reminder."""
+        from aexy.temporal.activities.email import SendWorkflowEmailInput
+
+        message = data.get("message", data.get("message_template", "Reminder: You have an upcoming booking."))
+        message = self._render_template(message, context)
+
+        email_to = data.get("to") or data.get("email")
+        if not email_to:
+            record_data = context.get("record_data", {})
+            email_to = record_data.get("values", {}).get("email")
+
+        if not email_to:
+            return {"status": "failed", "error": "No email address for reminder"}
+
+        self._dispatch_temporal(
+            "send_workflow_email",
+            SendWorkflowEmailInput(
+                workspace_id=execution.workspace_id,
+                to_email=email_to,
+                subject=data.get("subject", "Booking Reminder"),
+                html_body=message,
+                record_id=execution.record_id,
+            ),
+            task_queue="email",
+        )
+        return {"status": "success", "output": {"to": email_to, "queued": True}}
+
+    # =========================================================================
+    # NOTIFICATION ACTIONS (sync)
+    # =========================================================================
+
+    def _notify_user(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Send notification to a specific user."""
+        from aexy.temporal.activities.integrations import SendSlackWorkflowMessageInput
+        from aexy.temporal.activities.email import SendWorkflowEmailInput
+
+        user_id = data.get("user_id")
+        user_email = data.get("user_email")
+        message = data.get("message", data.get("message_template", ""))
+        channel = data.get("channel", "slack")
+        message = self._render_template(message, context)
+
+        if not user_id and not user_email:
+            return {"status": "failed", "error": "No user_id or user_email specified"}
+
+        if channel in ("slack", "both"):
+            self._dispatch_temporal(
+                "send_slack_workflow_message",
+                SendSlackWorkflowMessageInput(
+                    workspace_id=execution.workspace_id,
+                    target_type="dm",
+                    target=user_email or user_id,
+                    message=message,
+                    record_id=execution.record_id,
+                ),
+                task_queue="integrations",
+            )
+
+        if channel in ("email", "both"):
+            if user_email:
+                self._dispatch_temporal(
+                    "send_workflow_email",
+                    SendWorkflowEmailInput(
+                        workspace_id=execution.workspace_id,
+                        to_email=user_email,
+                        subject=data.get("email_subject", "Notification"),
+                        html_body=message,
+                        record_id=execution.record_id,
+                    ),
+                    task_queue="email",
+                )
+
+        return {"status": "success", "output": {"user": user_id or user_email, "channel": channel, "queued": True}}
+
+    def _notify_team(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Send notification to an entire team."""
+        from aexy.temporal.activities.integrations import SendSlackMessageInput
+
+        channel_id = data.get("channel_id")
+        message = data.get("message", data.get("message_template", ""))
+        message = self._render_template(message, context)
+
+        if not channel_id:
+            return {"status": "failed", "error": "No channel_id specified"}
+
+        self._dispatch_temporal(
+            "send_slack_message",
+            SendSlackMessageInput(
+                workspace_id=execution.workspace_id,
+                channel=channel_id,
+                message=message,
+            ),
+            task_queue="integrations",
+        )
+        return {"status": "success", "output": {"channel_id": channel_id, "queued": True}}
+
+    # =========================================================================
+    # EMAIL MARKETING ACTIONS (sync)
+    # =========================================================================
+
+    def _update_contact(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Update an email marketing contact."""
+        return self._update_record(data, context, execution)
+
+    # =========================================================================
+    # FORM ACTIONS (sync)
+    # =========================================================================
+
+    def _send_response(self, data: dict, context: dict, execution: WorkflowExecution) -> dict:
+        """Send a response after form submission."""
+        from aexy.temporal.activities.email import SendWorkflowEmailInput
+
+        email_to = data.get("to") or data.get("email")
+        if not email_to:
+            record_data = context.get("record_data", {})
+            email_to = record_data.get("values", {}).get("email")
+        if not email_to:
+            email_to = context.get("trigger_data", {}).get("email")
+
+        if not email_to:
+            return {"status": "failed", "error": "No email address for response"}
+
+        subject = data.get("email_subject", data.get("subject", "Thank you for your submission"))
+        body = data.get("email_body", data.get("message", "We have received your submission."))
+        subject = self._render_template(subject, context)
+        body = self._render_template(body, context)
+
+        self._dispatch_temporal(
+            "send_workflow_email",
+            SendWorkflowEmailInput(
+                workspace_id=execution.workspace_id,
+                to_email=email_to,
+                subject=subject,
+                html_body=body,
+                record_id=execution.record_id,
+            ),
+            task_queue="email",
+        )
+        return {"status": "success", "output": {"to": email_to, "subject": subject, "queued": True}}
 
     def _get_context_value(self, path: str, context: dict) -> Any:
         """Get a value from context using dot notation."""

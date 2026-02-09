@@ -23,6 +23,7 @@ class PermissionCategory(str, Enum):
     FORMS = "forms"
     ONCALL = "oncall"
     INSIGHTS = "insights"
+    COMPLIANCE = "compliance"
 
 
 # Master permission catalog
@@ -258,6 +259,17 @@ PERMISSIONS: dict[str, dict] = {
         "description": "Configure insights settings and generate snapshots",
         "default_for": ["admin", "manager"],
     },
+    # Compliance
+    "can_view_compliance": {
+        "category": PermissionCategory.COMPLIANCE,
+        "description": "View compliance documents, reminders, and reports",
+        "default_for": ["admin", "manager", "hr"],
+    },
+    "can_manage_compliance": {
+        "category": PermissionCategory.COMPLIANCE,
+        "description": "Upload documents, manage folders, and configure compliance",
+        "default_for": ["admin", "hr"],
+    },
     # Billing
     "can_view_billing": {
         "category": PermissionCategory.BILLING,
@@ -463,6 +475,9 @@ WIDGET_PERMISSIONS: dict[str, list[str]] = {
     "systemHealth": ["can_manage_workspace_settings"],
     "auditLog": ["can_manage_workspace_settings"],
     "integrationStatus": ["can_manage_integrations"],
+    # Compliance widgets
+    "complianceOverview": ["can_view_compliance"],
+    "complianceDocuments": ["can_view_compliance"],
     # Billing widgets
     "billingOverview": ["can_view_billing"],
     "seatUsage": ["can_view_billing"],

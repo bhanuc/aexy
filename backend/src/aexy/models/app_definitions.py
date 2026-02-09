@@ -308,6 +308,36 @@ APP_CATALOG: dict[str, AppConfig] = {
             },
         },
     },
+    "compliance": {
+        "name": "Compliance",
+        "description": "Compliance management, documents, and reminders",
+        "icon": "ShieldCheck",
+        "category": AppCategory.PEOPLE,
+        "base_route": "/compliance",
+        "required_permission": "can_view_compliance",
+        "modules": {
+            "reminders": {
+                "name": "Reminders",
+                "description": "Recurring compliance reminders",
+                "route": "/reminders",
+            },
+            "document_center": {
+                "name": "Document Center",
+                "description": "Upload and manage compliance documents",
+                "route": "/documents",
+            },
+            "training": {
+                "name": "Training",
+                "description": "Mandatory training management",
+                "route": "/training",
+            },
+            "certifications": {
+                "name": "Certifications",
+                "description": "Certification tracking",
+                "route": "/certifications",
+            },
+        },
+    },
 }
 
 
@@ -354,6 +384,7 @@ SYSTEM_APP_BUNDLES: dict[str, BundleConfig] = {
             "email_marketing": {"enabled": False},
             "forms": {"enabled": False},
             "insights": {"enabled": False},
+            "compliance": {"enabled": False},
         },
     },
     "people": {
@@ -384,6 +415,15 @@ SYSTEM_APP_BUNDLES: dict[str, BundleConfig] = {
                 },
             },
             "learning": {"enabled": True, "modules": {}},
+            "compliance": {
+                "enabled": True,
+                "modules": {
+                    "reminders": True,
+                    "document_center": True,
+                    "training": True,
+                    "certifications": True,
+                },
+            },
             "docs": {"enabled": True, "modules": {}},
             "forms": {"enabled": True, "modules": {}},
             # Disabled for people ops
@@ -429,6 +469,7 @@ SYSTEM_APP_BUNDLES: dict[str, BundleConfig] = {
             "learning": {"enabled": False},
             "oncall": {"enabled": False},
             "insights": {"enabled": False},
+            "compliance": {"enabled": False},
         },
     },
     "full_access": {
@@ -497,6 +538,15 @@ SYSTEM_APP_BUNDLES: dict[str, BundleConfig] = {
                     "team_overview": True,
                     "leaderboard": True,
                     "developer_drilldown": True,
+                },
+            },
+            "compliance": {
+                "enabled": True,
+                "modules": {
+                    "reminders": True,
+                    "document_center": True,
+                    "training": True,
+                    "certifications": True,
                 },
             },
         },
