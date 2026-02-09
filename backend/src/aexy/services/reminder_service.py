@@ -221,7 +221,8 @@ class ReminderService:
             if filters.team_id:
                 stmt = stmt.where(Reminder.default_team_id == filters.team_id)
             if filters.search:
-                search_pattern = f"%{filters.search}%"
+                escaped = filters.search.replace("%", r"\%").replace("_", r"\_")
+                search_pattern = f"%{escaped}%"
                 stmt = stmt.where(
                     or_(
                         Reminder.title.ilike(search_pattern),
@@ -596,9 +597,9 @@ class ReminderService:
         if start_date.tzinfo is None:
             # If start_date is naive, localize it to the specified timezone
             try:
-                import pytz
-                tz = pytz.timezone(timezone_str) if timezone_str else pytz.UTC
-                start_date = tz.localize(start_date)
+                from zoneinfo import ZoneInfo
+                tz = ZoneInfo(timezone_str) if timezone_str else timezone.utc
+                start_date = start_date.replace(tzinfo=tz)
             except Exception:
                 # Fallback: assume UTC if timezone parsing fails
                 start_date = start_date.replace(tzinfo=timezone.utc)
@@ -635,6 +636,13 @@ class ReminderService:
             elif frequency == ReminderFrequency.QUARTERLY.value:
                 # Move forward 3 months
                 new_month = base.month + 3
+                if new_month > 12:
+                    base = base.replace(year=base.year + 1, month=new_month - 12)
+                else:
+                    base = base.replace(month=new_month)
+            elif frequency == ReminderFrequency.SEMI_ANNUAL.value:
+                # Move forward 6 months
+                new_month = base.month + 6
                 if new_month > 12:
                     base = base.replace(year=base.year + 1, month=new_month - 12)
                 else:

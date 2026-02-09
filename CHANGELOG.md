@@ -5,6 +5,140 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.3] - 2026-02-09
+
+### Added
+
+#### Compliance Center
+
+New top-level Compliance module for managing regulatory compliance, documents, reminders, training, and certifications.
+
+**New Routes:**
+- `/compliance` - Compliance dashboard with overview stats, upcoming reminders, and category breakdown
+- `/compliance/reminders` - Recurring compliance reminder management with list and calendar views
+- `/compliance/reminders/new` - Multi-step reminder creation wizard (basic info, schedule, assignment, review)
+- `/compliance/reminders/[reminderId]` - Reminder detail and instance history
+- `/compliance/reminders/calendar` - Calendar view of upcoming reminder instances
+- `/compliance/reminders/compliance` - Questionnaire import and analysis
+- `/compliance/documents` - Document Center with folder tree, search, filtering, and upload
+- `/compliance/documents/[documentId]` - Document detail with metadata, tags, and entity linking
+- `/compliance/training` - Mandatory training management with assignment tracking
+- `/compliance/certifications` - Certification tracking with developer enrollment and progress
+- `/compliance/calendar` - Unified compliance calendar
+
+---
+
+#### Recurring Reminders System
+
+Full-featured recurring reminder engine for compliance tasks with escalation, assignment, and scheduling.
+
+**Backend:**
+- New models: `Reminder`, `ReminderInstance`, `ReminderEscalation`, `ControlOwner`, `DomainTeamMapping`, `AssignmentRule`, `ReminderSuggestion`
+- New API: `api/reminders.py` - 30+ endpoints for reminders, instances, control owners, assignment rules, domain mappings, suggestions, dashboard stats, calendar, and bulk operations
+- New service: `services/reminder_service.py` - Reminder CRUD, instance generation, acknowledgment, completion, skip, reassignment, escalation, and dashboard statistics
+- New schemas: `schemas/reminder.py` - Complete Pydantic schemas for all reminder operations
+- Migration: `migrate_reminders.sql` - 7 tables with proper indexes, triggers, and constraints
+
+**Temporal Activities** (`temporal/activities/reminders.py`):
+- `generate_reminder_instances` - Daily task to generate upcoming instances from recurrence rules
+- `check_overdue_reminders` - Hourly check for overdue instances with automatic escalation
+- `send_reminder_notifications` - Sends due/upcoming reminder notifications
+- `send_weekly_slack_summary` - Weekly compliance status summary (logging only for now)
+- `check_evidence_freshness` - Daily check for stale evidence on completed instances
+
+**Features:**
+- Recurrence: daily, weekly, biweekly, monthly, quarterly, semi-annual, annual frequencies
+- Priority levels: low, medium, high, critical
+- Categories: regulatory, security, financial, hr, operational, it, legal, environmental, quality, data_privacy, health_safety, custom
+- Auto-assignment via control owners, domain-team mappings, and configurable assignment rules
+- 3-level escalation: manager, director, VP with configurable timeframes
+- Evidence collection with link attachments on instance completion
+- Bulk operations: assign and complete multiple instances at once
+
+**Frontend:**
+- `useReminders` hook - React Query integration with 10+ hooks for all reminder operations
+- Shared components: `ReminderCard`, `ReminderInstanceCard`, `ReminderStatusBadge`, `ReminderPriorityBadge`, `ReminderCategoryBadge`, `InstanceStatusBadge`, `RecurrenceDisplay`
+- `ReminderCreationWizard` - 4-step wizard with validation and team/owner assignment
+
+---
+
+#### Questionnaire Import & Analysis
+
+Import compliance questionnaires from Excel/CSV with AI-powered column detection and automatic reminder generation.
+
+**Backend:**
+- New models: `QuestionnaireResponse`, `QuestionnaireQuestion` with status tracking
+- New API: `api/questionnaires.py` - Upload, analyze, accept/reject suggestions, list responses
+- New service: `services/questionnaire_service.py` - 3-tier column detection (exact alias match, fuzzy substring, LLM fallback), cross-questionnaire deduplication, and automatic reminder suggestion generation
+- Migration: `migrate_questionnaire.sql` - Questionnaire tables with proper indexing
+
+**Frontend:**
+- `useQuestionnaires` hook - Upload, analysis, and suggestion management
+- Compliance questionnaire import page with file upload and analysis results
+
+---
+
+#### Compliance Document Center
+
+Upload, organize, and manage compliance documents with folder hierarchy, tagging, and entity linking.
+
+**Backend:**
+- New models: `ComplianceFolder`, `ComplianceDocument`, `ComplianceDocumentTag`, `ComplianceDocumentLink`
+- New API: `api/compliance_documents.py` - Document CRUD, folder management, tag operations, entity linking, search with filtering
+- New service: `services/compliance_document_service.py` - Document upload, folder tree management, tag operations, entity linking
+- Migration: `migrate_compliance_documents.sql` - Document and folder tables with S3 key storage
+
+**Frontend:**
+- `useComplianceDocuments` hook - React Query integration for documents, folders, tags, and entity links
+- Components: `DocumentCard`, `FolderTree`, `CreateFolderModal`, `UploadModal`, `DocumentFilters`, `DocumentLinkPanel`
+- File type detection with appropriate icons (PDF, spreadsheet, image, generic)
+- Folder nesting up to 3 levels deep
+
+---
+
+#### S3-Compatible Storage Service
+
+Replaced R2-specific storage with a generic S3-compatible `StorageService` supporting RustFS (dev) and any S3-compatible provider (production).
+
+**Backend:**
+- New service: `services/storage_service.py` - Generic S3 client with presigned URL generation, direct upload, multipart upload, and download
+- Backward-compatible shim: `r2_upload_service.py` re-exports `StorageService` as `R2UploadService`
+- New config fields: `S3_ENDPOINT_URL`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME`, `S3_REGION`, `S3_PUBLIC_ENDPOINT_URL`, `S3_RECORDINGS_PREFIX`, `S3_COMPLIANCE_PREFIX`, `COMPLIANCE_MAX_FILE_SIZE_MB`
+- Deprecated R2-specific config fields (still functional for backward compatibility)
+
+**Docker:**
+- Added RustFS service (S3-compatible object storage) for local development
+- Auto-creates `aexy-storage` bucket on startup via `rustfs-init` helper container
+- Environment variables wired for backend container
+
+---
+
+#### Permissions & Navigation
+
+- New permission category: `COMPLIANCE` with `can_view_compliance` and `can_manage_compliance`
+- New app definition: `compliance` in app catalog with `reminders`, `document_center`, `training`, and `certifications` modules
+- Updated system app bundles: compliance enabled in `people` and `full_access` bundles, disabled in `engineering` and `sales_marketing`
+- New notification event types: `REMINDER_DUE`, `REMINDER_ACKNOWLEDGED`, `REMINDER_COMPLETED`, `REMINDER_ESCALATED`, `REMINDER_OVERDUE`, `REMINDER_ASSIGNED`
+- Compliance section added to sidebar in both grouped and flat layouts
+- Compliance widget permissions: `complianceOverview`, `complianceDocuments`
+
+### Changed
+
+- Refactored `R2UploadService` into generic `StorageService` with S3-compatible backend support
+- Storage configuration moved from R2-specific to S3-generic fields with backward compatibility
+
+### Fixed
+
+- Fixed reminder creation bug (commit `f4e79d9`)
+- Fixed miscellaneous TypeScript errors across frontend (commit `73e7641`)
+
+### Dependencies
+
+- Added `croniter>=2.0.0` for cron expression parsing
+- Added RustFS Docker service for local S3-compatible storage
+
+---
+
 ## [0.5.2] - 2026-02-09
 
 ### Fixed
@@ -59,6 +193,8 @@ Replaced Celery 5.3+ task queue with Temporal Python SDK for all background proc
 - Onboarding activity input dataclasses now match `OnboardingService` API signatures
 - Warming metrics dispatch uses proper `UpdateWarmingMetricsInput` dataclass instead of raw dict
 - Workflow action callers updated to pass correct field names to Temporal activities
+
+---
 
 ## [0.5.0] - 2026-02-02
 

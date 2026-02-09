@@ -113,7 +113,21 @@ async def upload_document_directly(
     await _verify_access(workspace_id, current_user, db, "member")
     service = ComplianceDocumentService(db)
 
+    # Check file size via Content-Length header before reading into memory
+    from aexy.core.config import get_settings
+    _settings = get_settings()
+    max_bytes = _settings.compliance_max_file_size_mb * 1024 * 1024
+    if file.size and file.size > max_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File too large. Maximum size is {_settings.compliance_max_file_size_mb}MB",
+        )
     file_data = await file.read()
+    if len(file_data) > max_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File too large. Maximum size is {_settings.compliance_max_file_size_mb}MB",
+        )
     content_type = file.content_type or "application/octet-stream"
 
     try:
@@ -203,6 +217,43 @@ async def list_documents(
     return DocumentListResponse(
         items=items, total=total, page=page, page_size=page_size
     )
+
+
+@router.get("/by-entity/{entity_type}/{entity_id}", response_model=EntityDocumentsResponse)
+async def get_entity_documents(
+    workspace_id: str,
+    entity_type: EntityTypeEnum,
+    entity_id: str,
+    current_user: Developer = Depends(get_current_developer),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all documents linked to a specific entity."""
+    await _verify_access(workspace_id, current_user, db)
+    service = ComplianceDocumentService(db)
+    results = await service.get_entity_documents(
+        workspace_id, entity_type.value, entity_id
+    )
+
+    documents = []
+    links = []
+    for doc, link in results:
+        documents.append(_doc_to_response(doc))
+        links.append(LinkResponse.model_validate(link))
+
+    return EntityDocumentsResponse(documents=documents, links=links)
+
+
+@router.get("/tags/all", response_model=TagListResponse)
+async def list_workspace_tags(
+    workspace_id: str,
+    current_user: Developer = Depends(get_current_developer),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all unique tags used across compliance documents in this workspace."""
+    await _verify_access(workspace_id, current_user, db)
+    service = ComplianceDocumentService(db)
+    tags = await service.list_workspace_tags(workspace_id)
+    return TagListResponse(tags=tags)
 
 
 @router.get("/{document_id}", response_model=DocumentResponse)
@@ -374,50 +425,6 @@ async def unlink_document(
     service = ComplianceDocumentService(db)
     if not await service.unlink_document(workspace_id, document_id, link_id):
         raise HTTPException(status_code=404, detail="Link not found")
-
-
-# --- Entity Reverse Lookup ---
-
-@router.get(
-    "/by-entity/{entity_type}/{entity_id}",
-    response_model=EntityDocumentsResponse,
-)
-async def get_entity_documents(
-    workspace_id: str,
-    entity_type: EntityTypeEnum,
-    entity_id: str,
-    current_user: Developer = Depends(get_current_developer),
-    db: AsyncSession = Depends(get_db),
-):
-    """Get all documents linked to a specific entity."""
-    await _verify_access(workspace_id, current_user, db)
-    service = ComplianceDocumentService(db)
-    results = await service.get_entity_documents(
-        workspace_id, entity_type.value, entity_id
-    )
-
-    documents = []
-    links = []
-    for doc, link in results:
-        documents.append(_doc_to_response(doc))
-        links.append(LinkResponse.model_validate(link))
-
-    return EntityDocumentsResponse(documents=documents, links=links)
-
-
-# --- Workspace Tags ---
-
-@router.get("/tags/all", response_model=TagListResponse)
-async def list_workspace_tags(
-    workspace_id: str,
-    current_user: Developer = Depends(get_current_developer),
-    db: AsyncSession = Depends(get_db),
-):
-    """List all unique tags used across compliance documents in this workspace."""
-    await _verify_access(workspace_id, current_user, db)
-    service = ComplianceDocumentService(db)
-    tags = await service.list_workspace_tags(workspace_id)
-    return TagListResponse(tags=tags)
 
 
 # --- Folder Router ---
