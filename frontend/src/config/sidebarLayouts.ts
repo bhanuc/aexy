@@ -41,6 +41,7 @@ import {
     AlertTriangle,
     History,
     Bot,
+    TrendingUp,
 } from "lucide-react";
 
 export type SidebarLayoutType = "grouped" | "flat";
@@ -129,6 +130,11 @@ const automationsItems: SidebarItemConfig[] = [
     { href: "/automations/new", label: "Create Automation", icon: UserPlus },
 ];
 
+const insightsItems: SidebarItemConfig[] = [
+    { href: "/insights", label: "Team Overview", icon: LayoutDashboard },
+    { href: "/insights/leaderboard", label: "Leaderboard", icon: BarChart },
+];
+
 /**
  * Version 1: Grouped Layout (Role-Based)
  * Items organized by functional areas: Engineering, People, Business, Knowledge
@@ -185,6 +191,12 @@ export const GROUPED_LAYOUT: SidebarLayoutConfig = {
                     label: "Uptime",
                     icon: MonitorCheck,
                     items: uptimeItems,
+                },
+                {
+                    href: "/insights",
+                    label: "Insights",
+                    icon: TrendingUp,
+                    items: insightsItems,
                 },
             ],
         },
@@ -310,6 +322,12 @@ export const FLAT_LAYOUT: SidebarLayoutConfig = {
                     label: "Automations",
                     icon: Zap,
                     items: automationsItems,
+                },
+                {
+                    href: "/insights",
+                    label: "Insights",
+                    icon: TrendingUp,
+                    items: insightsItems,
                 },
                 { href: "/learning", label: "Learning", icon: GraduationCap },
                 { href: "/docs", label: "Docs", icon: FileText },

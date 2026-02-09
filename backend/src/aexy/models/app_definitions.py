@@ -283,6 +283,31 @@ APP_CATALOG: dict[str, AppConfig] = {
         "required_permission": "can_view_oncall",
         "modules": {},
     },
+    "insights": {
+        "name": "Insights",
+        "description": "Developer productivity metrics and team analytics",
+        "icon": "TrendingUp",
+        "category": AppCategory.ENGINEERING,
+        "base_route": "/insights",
+        "required_permission": "can_view_insights",
+        "modules": {
+            "team_overview": {
+                "name": "Team Overview",
+                "description": "Team-wide velocity, efficiency, and workload distribution",
+                "route": "",
+            },
+            "leaderboard": {
+                "name": "Leaderboard",
+                "description": "Ranked developer metrics",
+                "route": "/leaderboard",
+            },
+            "developer_drilldown": {
+                "name": "Developer Drill-down",
+                "description": "Individual developer metrics deep-dive",
+                "route": "/developers",
+            },
+        },
+    },
 }
 
 
@@ -328,6 +353,7 @@ SYSTEM_APP_BUNDLES: dict[str, BundleConfig] = {
             "crm": {"enabled": False},
             "email_marketing": {"enabled": False},
             "forms": {"enabled": False},
+            "insights": {"enabled": False},
         },
     },
     "people": {
@@ -367,6 +393,7 @@ SYSTEM_APP_BUNDLES: dict[str, BundleConfig] = {
             "crm": {"enabled": False},
             "email_marketing": {"enabled": False},
             "oncall": {"enabled": False},
+            "insights": {"enabled": False},
         },
     },
     "business": {
@@ -401,6 +428,7 @@ SYSTEM_APP_BUNDLES: dict[str, BundleConfig] = {
             "hiring": {"enabled": False},
             "learning": {"enabled": False},
             "oncall": {"enabled": False},
+            "insights": {"enabled": False},
         },
     },
     "full_access": {
@@ -463,6 +491,14 @@ SYSTEM_APP_BUNDLES: dict[str, BundleConfig] = {
             "docs": {"enabled": True, "modules": {}},
             "forms": {"enabled": True, "modules": {}},
             "oncall": {"enabled": True, "modules": {}},
+            "insights": {
+                "enabled": True,
+                "modules": {
+                    "team_overview": True,
+                    "leaderboard": True,
+                    "developer_drilldown": True,
+                },
+            },
         },
     },
 }

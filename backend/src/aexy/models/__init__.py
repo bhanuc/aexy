@@ -382,6 +382,20 @@ from aexy.models.roadmap_voting import (
     RoadmapVote,
     RoadmapComment,
 )
+from aexy.models.developer_insights import (
+    DeveloperMetricsSnapshot,
+    TeamMetricsSnapshot,
+    PeriodType,
+    InsightSettings,
+    DeveloperWorkingSchedule,
+    InsightAlertRule,
+    InsightAlertHistory,
+    InsightReportSchedule,
+    SavedInsightDashboard,
+    AlertSeverity,
+    AlertStatus,
+    ScheduleFrequency,
+)
 
 __all__ = [
     # Plan
@@ -757,4 +771,17 @@ __all__ = [
     "RoadmapRequest",
     "RoadmapVote",
     "RoadmapComment",
+    # Developer Insights
+    "DeveloperMetricsSnapshot",
+    "TeamMetricsSnapshot",
+    "PeriodType",
+    "InsightSettings",
+    "DeveloperWorkingSchedule",
+    "InsightAlertRule",
+    "InsightAlertHistory",
+    "InsightReportSchedule",
+    "SavedInsightDashboard",
+    "AlertSeverity",
+    "AlertStatus",
+    "ScheduleFrequency",
 ]

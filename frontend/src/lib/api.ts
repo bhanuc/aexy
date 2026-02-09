@@ -15404,3 +15404,815 @@ export const knowledgeGraphApi = {
     return response.data;
   },
 };
+
+// =============================================================================
+// Developer Insights API
+// =============================================================================
+
+export interface VelocityMetrics {
+  commits_count: number;
+  prs_merged: number;
+  lines_added: number;
+  lines_removed: number;
+  net_lines: number;
+  commit_frequency: number;
+  pr_throughput: number;
+  avg_commit_size: number;
+}
+
+export interface EfficiencyMetrics {
+  avg_pr_cycle_time_hours: number;
+  avg_time_to_first_review_hours: number;
+  avg_pr_size: number;
+  pr_merge_rate: number;
+  first_commit_to_merge_hours: number;
+  rework_ratio: number;
+}
+
+export interface QualityMetrics {
+  review_participation_rate: number;
+  avg_review_depth: number;
+  review_turnaround_hours: number;
+  self_merge_rate: number;
+}
+
+export interface SustainabilityMetrics {
+  weekend_commit_ratio: number;
+  late_night_commit_ratio: number;
+  longest_streak_days: number;
+  avg_daily_active_hours: number;
+  focus_score: number;
+}
+
+export interface CollaborationMetrics {
+  unique_collaborators: number;
+  cross_team_pr_ratio: number;
+  review_given_count: number;
+  review_received_count: number;
+  knowledge_sharing_score: number;
+}
+
+export interface SprintProductivityMetrics {
+  tasks_assigned: number;
+  tasks_completed: number;
+  story_points_committed: number;
+  story_points_completed: number;
+  task_completion_rate: number;
+  avg_cycle_time_hours: number;
+  avg_lead_time_hours: number;
+  sprints_participated: number;
+  carry_over_tasks: number;
+  task_type_distribution: Record<string, number>;
+}
+
+export interface DeveloperInsightsResponse {
+  developer_id: string;
+  workspace_id: string;
+  period_start: string;
+  period_end: string;
+  period_type: string;
+  velocity: VelocityMetrics;
+  efficiency: EfficiencyMetrics;
+  quality: QualityMetrics;
+  sustainability: SustainabilityMetrics;
+  collaboration: CollaborationMetrics;
+  sprint?: SprintProductivityMetrics | null;
+  raw_counts?: Record<string, any>;
+  computed_at?: string;
+  previous?: DeveloperInsightsResponse | null;
+}
+
+export interface DeveloperSnapshotResponse {
+  id: string;
+  developer_id: string;
+  workspace_id: string;
+  period_start: string;
+  period_end: string;
+  period_type: string;
+  velocity_metrics?: VelocityMetrics;
+  efficiency_metrics?: EfficiencyMetrics;
+  quality_metrics?: QualityMetrics;
+  sustainability_metrics?: SustainabilityMetrics;
+  collaboration_metrics?: CollaborationMetrics;
+  raw_counts?: Record<string, number>;
+  computed_at?: string;
+}
+
+export interface MemberSummary {
+  developer_id: string;
+  commits_count: number;
+  prs_merged: number;
+  lines_changed: number;
+  reviews_given: number;
+}
+
+export interface TeamDistribution {
+  gini_coefficient: number;
+  top_contributor_share: number;
+  member_metrics: MemberSummary[];
+  bottleneck_developers: string[];
+}
+
+export interface TeamAggregate {
+  total_commits: number;
+  total_prs_merged: number;
+  total_lines_changed: number;
+  total_reviews: number;
+  avg_commits_per_member: number;
+  avg_prs_per_member: number;
+}
+
+export interface TeamInsightsResponse {
+  workspace_id: string;
+  team_id?: string | null;
+  period_start: string;
+  period_end: string;
+  period_type: string;
+  member_count: number;
+  aggregate: TeamAggregate;
+  distribution: TeamDistribution;
+  computed_at?: string;
+}
+
+export interface LeaderboardEntry {
+  developer_id: string;
+  developer_name?: string | null;
+  value: number;
+  rank: number;
+}
+
+export interface LeaderboardResponse {
+  metric: string;
+  period_type: string;
+  period_start: string;
+  period_end: string;
+  entries: LeaderboardEntry[];
+}
+
+export interface SnapshotGenerateResponse {
+  developer_snapshots_created: number;
+  team_snapshot_created: boolean;
+}
+
+export interface InsightSettingsData {
+  id: string;
+  workspace_id: string;
+  team_id?: string | null;
+  working_hours?: {
+    start_hour: number;
+    end_hour: number;
+    timezone: string;
+    late_night_threshold_hour: number;
+  } | null;
+  health_score_weights?: {
+    velocity: number;
+    efficiency: number;
+    quality: number;
+    sustainability: number;
+    collaboration: number;
+  } | null;
+  bottleneck_multiplier: number;
+  auto_generate_snapshots: boolean;
+  snapshot_frequency: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AlertRuleData {
+  id: string;
+  workspace_id: string;
+  created_by_id: string;
+  name: string;
+  description?: string | null;
+  metric_category: string;
+  metric_name: string;
+  condition_operator: string;
+  condition_value: number;
+  scope_type: string;
+  scope_id?: string | null;
+  severity: string;
+  notification_channels?: string[] | null;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AlertHistoryData {
+  id: string;
+  rule_id: string;
+  workspace_id: string;
+  developer_id?: string | null;
+  team_id?: string | null;
+  metric_value: number;
+  threshold_value: number;
+  severity: string;
+  status: string;
+  message?: string | null;
+  acknowledged_by_id?: string | null;
+  acknowledged_at?: string | null;
+  resolved_at?: string | null;
+  triggered_at?: string;
+}
+
+export type InsightsPeriodType = "daily" | "weekly" | "sprint" | "monthly";
+
+export interface PRSizeDistribution {
+  distribution: { trivial: number; small: number; medium: number; large: number; massive: number };
+  avg_size: number;
+  median_size: number;
+  total_prs: number;
+  prs: { id: string; title: string; additions: number; deletions: number; size: number; category: string; state: string }[];
+}
+
+export interface CodeChurnResponse {
+  developer_id: string;
+  workspace_id: string;
+  period_start: string;
+  period_end: string;
+  churn_window_days: number;
+  churn_rate: number;
+  total_additions: number;
+  total_deletions: number;
+  churn_deletions: number;
+  per_repo: { repository: string; additions: number; deletions: number; churn_deletions: number; churn_rate: number }[];
+}
+
+export interface HealthScoreBreakdown {
+  score: number;
+  weight: number;
+}
+
+export interface HealthScoreResponse {
+  developer_id: string;
+  workspace_id: string;
+  period_start: string;
+  period_end: string;
+  score: number;
+  breakdown: {
+    velocity: HealthScoreBreakdown;
+    efficiency: HealthScoreBreakdown;
+    quality: HealthScoreBreakdown;
+    sustainability: HealthScoreBreakdown;
+    collaboration: HealthScoreBreakdown;
+  };
+}
+
+export interface PercentileRankingEntry {
+  value: number;
+  percentile: number;
+  rank: number;
+  total: number;
+}
+
+export interface PercentileRankingsResponse {
+  developer_id: string;
+  workspace_id: string;
+  team_id: string | null;
+  period_start: string;
+  period_end: string;
+  peer_count: number;
+  rankings: Record<string, PercentileRankingEntry>;
+}
+
+export interface VelocityForecastResponse {
+  developer_id: string;
+  workspace_id: string;
+  period_type: string;
+  data_points: number;
+  confidence: number;
+  forecast: {
+    commits: number;
+    prs_merged: number;
+    lines_added: number;
+  };
+}
+
+export interface GamingFlag {
+  pattern: string;
+  severity: "low" | "medium" | "high";
+  evidence: string;
+  value?: number;
+}
+
+export interface GamingFlagsResponse {
+  developer_id: string;
+  workspace_id: string;
+  period_start: string;
+  period_end: string;
+  risk_level: "none" | "low" | "medium" | "high";
+  flags: GamingFlag[];
+}
+
+export interface AlertEvaluationResponse {
+  workspace_id: string;
+  period_start: string;
+  period_end: string;
+  rules_evaluated: boolean;
+  alerts_triggered: number;
+  triggered: {
+    rule_id: string;
+    rule_name: string;
+    developer_id: string;
+    metric_value: number;
+    threshold_value: number;
+    severity: string;
+  }[];
+}
+
+export interface RoleBenchmarkEntry {
+  value: number;
+  median: number;
+  percentile: number;
+  rank: number;
+  total: number;
+}
+
+export interface RoleBenchmarkResponse {
+  developer_id: string;
+  workspace_id: string;
+  period_start: string;
+  period_end: string;
+  engineering_role: string | null;
+  peer_count: number;
+  benchmarks: Record<string, RoleBenchmarkEntry>;
+}
+
+export interface SprintCapacityDeveloper {
+  developer_id: string;
+  forecast: {
+    commits: number;
+    prs_merged: number;
+    lines_added: number;
+    story_points: number;
+  };
+  confidence: number;
+  data_points: number;
+}
+
+export interface SprintCapacityResponse {
+  workspace_id: string;
+  team_id: string | null;
+  sprint_length_days: number;
+  member_count: number;
+  team_forecast: {
+    commits: number;
+    prs_merged: number;
+    lines_added: number;
+    story_points: number;
+  };
+  team_confidence: number;
+  per_developer: SprintCapacityDeveloper[];
+}
+
+export interface ExecutiveSummaryResponse {
+  workspace_id: string;
+  period_start: string;
+  period_end: string;
+  total_developers: number;
+  activity: {
+    total_commits: number;
+    total_prs_merged: number;
+    total_reviews: number;
+    total_lines_changed: number;
+    avg_commits_per_dev: number;
+    avg_prs_per_dev: number;
+  };
+  health: {
+    gini_coefficient: number;
+    workload_balance: "good" | "moderate" | "poor";
+    burnout_risk_count: number;
+    bottleneck_count: number;
+  };
+  risks: {
+    burnout: { developer_id: string; weekend_ratio: number; late_night_ratio: number }[];
+    bottlenecks: { developer_id: string; commits: number; ratio_vs_avg: number }[];
+  };
+  top_contributors: { developer_id: string; commits: number; prs_merged: number; lines_changed: number }[];
+}
+
+export interface RotationImpactResponse {
+  workspace_id: string;
+  team_id: string | null;
+  period_start: string;
+  period_end: string;
+  team_size: number;
+  rotating_count: number;
+  remaining_count: number;
+  current: { commits: number; prs_merged: number; lines_changed: number };
+  impact: { commit_loss_pct: number; pr_loss_pct: number; lines_loss_pct: number };
+  forecast_without_replacement: { commits: number; prs_merged: number };
+  forecast_with_replacement: { commits: number; prs_merged: number; ramp_up_factor: number; note: string };
+  departing_developers: { developer_id: string; commits: number; prs_merged: number; lines_changed: number; commit_share: number }[];
+}
+
+export interface DeveloperDataExport {
+  developer_id: string;
+  workspace_id: string;
+  exported_at: string;
+  snapshots: Record<string, unknown>[];
+  working_schedule: Record<string, unknown> | null;
+  alert_history: Record<string, unknown>[];
+}
+
+export const insightsApi = {
+  getDeveloperInsights: async (
+    workspaceId: string,
+    developerId: string,
+    params?: {
+      period_type?: InsightsPeriodType;
+      start_date?: string;
+      end_date?: string;
+      compare_previous?: boolean;
+    }
+  ): Promise<DeveloperInsightsResponse> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/insights/developers/${developerId}`,
+      { params }
+    );
+    return response.data;
+  },
+
+  getDeveloperTrends: async (
+    workspaceId: string,
+    developerId: string,
+    params?: { period_type?: InsightsPeriodType; limit?: number }
+  ): Promise<DeveloperSnapshotResponse[]> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/insights/developers/${developerId}/trends`,
+      { params }
+    );
+    return response.data;
+  },
+
+  getDeveloperCodeChurn: async (
+    workspaceId: string,
+    developerId: string,
+    params?: {
+      period_type?: InsightsPeriodType;
+      start_date?: string;
+      end_date?: string;
+      churn_window_days?: number;
+    }
+  ): Promise<CodeChurnResponse> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/insights/developers/${developerId}/code-churn`,
+      { params }
+    );
+    return response.data;
+  },
+
+  getDeveloperPRSizes: async (
+    workspaceId: string,
+    developerId: string,
+    params?: {
+      period_type?: InsightsPeriodType;
+      start_date?: string;
+      end_date?: string;
+    }
+  ): Promise<PRSizeDistribution> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/insights/developers/${developerId}/pr-sizes`,
+      { params }
+    );
+    return response.data;
+  },
+
+  getDeveloperHealthScore: async (
+    workspaceId: string,
+    developerId: string,
+    params?: {
+      period_type?: InsightsPeriodType;
+      start_date?: string;
+      end_date?: string;
+    }
+  ): Promise<HealthScoreResponse> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/insights/developers/${developerId}/health-score`,
+      { params }
+    );
+    return response.data;
+  },
+
+  getDeveloperPercentile: async (
+    workspaceId: string,
+    developerId: string,
+    params?: {
+      team_id?: string;
+      period_type?: InsightsPeriodType;
+      start_date?: string;
+      end_date?: string;
+    }
+  ): Promise<PercentileRankingsResponse> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/insights/developers/${developerId}/percentile`,
+      { params }
+    );
+    return response.data;
+  },
+
+  getTeamInsights: async (
+    workspaceId: string,
+    params?: {
+      team_id?: string;
+      period_type?: InsightsPeriodType;
+      start_date?: string;
+      end_date?: string;
+    }
+  ): Promise<TeamInsightsResponse> => {
+    const response = await api.get(`/workspaces/${workspaceId}/insights/team`, {
+      params,
+    });
+    return response.data;
+  },
+
+  compareDevs: async (
+    workspaceId: string,
+    developerIds: string[],
+    params?: {
+      period_type?: InsightsPeriodType;
+      start_date?: string;
+      end_date?: string;
+    }
+  ): Promise<DeveloperInsightsResponse[]> => {
+    const response = await api.get(`/workspaces/${workspaceId}/insights/team/compare`, {
+      params: { ...params, developer_ids: developerIds.join(",") },
+    });
+    return response.data;
+  },
+
+  getLeaderboard: async (
+    workspaceId: string,
+    params?: {
+      metric?: string;
+      team_id?: string;
+      period_type?: InsightsPeriodType;
+      start_date?: string;
+      end_date?: string;
+      limit?: number;
+    }
+  ): Promise<LeaderboardResponse> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/insights/team/leaderboard`,
+      { params }
+    );
+    return response.data;
+  },
+
+  generateSnapshots: async (
+    workspaceId: string,
+    data: {
+      period_type?: InsightsPeriodType;
+      start_date: string;
+      end_date: string;
+      developer_ids?: string[];
+      team_id?: string;
+    }
+  ): Promise<SnapshotGenerateResponse> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/insights/snapshots/generate`,
+      data
+    );
+    return response.data;
+  },
+
+  // Project-level insights
+  getProjectInsights: async (
+    workspaceId: string,
+    projectId: string,
+    params?: {
+      period_type?: InsightsPeriodType;
+      start_date?: string;
+      end_date?: string;
+    }
+  ): Promise<TeamInsightsResponse> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/insights/projects/${projectId}`,
+      { params }
+    );
+    return response.data;
+  },
+
+  getProjectLeaderboard: async (
+    workspaceId: string,
+    projectId: string,
+    params?: {
+      metric?: string;
+      period_type?: InsightsPeriodType;
+      limit?: number;
+    }
+  ): Promise<LeaderboardResponse> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/insights/projects/${projectId}/leaderboard`,
+      { params }
+    );
+    return response.data;
+  },
+
+  // Settings
+  getSettings: async (
+    workspaceId: string,
+    teamId?: string
+  ): Promise<InsightSettingsData> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/insights/settings`,
+      { params: teamId ? { team_id: teamId } : undefined }
+    );
+    return response.data;
+  },
+
+  saveSettings: async (
+    workspaceId: string,
+    data: Partial<InsightSettingsData> & { team_id?: string | null }
+  ): Promise<InsightSettingsData> => {
+    const response = await api.put(
+      `/workspaces/${workspaceId}/insights/settings`,
+      data
+    );
+    return response.data;
+  },
+
+  // Alert Rules
+  listAlertRules: async (
+    workspaceId: string,
+    activeOnly?: boolean
+  ): Promise<AlertRuleData[]> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/insights/alerts/rules`,
+      { params: { active_only: activeOnly ?? true } }
+    );
+    return response.data;
+  },
+
+  createAlertRule: async (
+    workspaceId: string,
+    data: Omit<AlertRuleData, "id" | "workspace_id" | "created_by_id" | "created_at" | "updated_at">
+  ): Promise<AlertRuleData> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/insights/alerts/rules`,
+      data
+    );
+    return response.data;
+  },
+
+  deleteAlertRule: async (workspaceId: string, ruleId: string): Promise<void> => {
+    await api.delete(`/workspaces/${workspaceId}/insights/alerts/rules/${ruleId}`);
+  },
+
+  // Alert History
+  listAlertHistory: async (
+    workspaceId: string,
+    params?: { status?: string; limit?: number }
+  ): Promise<AlertHistoryData[]> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/insights/alerts/history`,
+      { params }
+    );
+    return response.data;
+  },
+
+  acknowledgeAlert: async (workspaceId: string, alertId: string): Promise<void> => {
+    await api.patch(
+      `/workspaces/${workspaceId}/insights/alerts/history/${alertId}/acknowledge`
+    );
+  },
+
+  evaluateAlerts: async (
+    workspaceId: string,
+    params?: {
+      period_type?: InsightsPeriodType;
+      start_date?: string;
+      end_date?: string;
+    }
+  ): Promise<AlertEvaluationResponse> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/insights/alerts/evaluate`,
+      null,
+      { params }
+    );
+    return response.data;
+  },
+
+  getDeveloperForecast: async (
+    workspaceId: string,
+    developerId: string,
+    params?: {
+      period_type?: InsightsPeriodType;
+      periods_back?: number;
+    }
+  ): Promise<VelocityForecastResponse> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/insights/developers/${developerId}/forecast`,
+      { params }
+    );
+    return response.data;
+  },
+
+  getDeveloperGamingFlags: async (
+    workspaceId: string,
+    developerId: string,
+    params?: {
+      period_type?: InsightsPeriodType;
+      start_date?: string;
+      end_date?: string;
+    }
+  ): Promise<GamingFlagsResponse> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/insights/developers/${developerId}/gaming-flags`,
+      { params }
+    );
+    return response.data;
+  },
+
+  seedAlertTemplates: async (workspaceId: string): Promise<{ created: number; templates: AlertRuleData[] }> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/insights/alerts/templates/seed`
+    );
+    return response.data;
+  },
+
+  updateAlertRule: async (
+    workspaceId: string,
+    ruleId: string,
+    data: Partial<Omit<AlertRuleData, "id" | "workspace_id" | "created_by_id" | "created_at" | "updated_at">>
+  ): Promise<AlertRuleData> => {
+    const response = await api.patch(
+      `/workspaces/${workspaceId}/insights/alerts/rules/${ruleId}`,
+      data
+    );
+    return response.data;
+  },
+
+  getSprintCapacity: async (
+    workspaceId: string,
+    params?: {
+      team_id?: string;
+      sprint_length_days?: number;
+      periods_back?: number;
+    }
+  ): Promise<SprintCapacityResponse> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/insights/team/sprint-capacity`,
+      { params }
+    );
+    return response.data;
+  },
+
+  getExecutiveSummary: async (
+    workspaceId: string,
+    params?: {
+      period_type?: InsightsPeriodType;
+      start_date?: string;
+      end_date?: string;
+    }
+  ): Promise<ExecutiveSummaryResponse> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/insights/executive/summary`,
+      { params }
+    );
+    return response.data;
+  },
+
+  getDeveloperRoleBenchmark: async (
+    workspaceId: string,
+    developerId: string,
+    params?: {
+      period_type?: InsightsPeriodType;
+      start_date?: string;
+      end_date?: string;
+    }
+  ): Promise<RoleBenchmarkResponse> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/insights/developers/${developerId}/role-benchmark`,
+      { params }
+    );
+    return response.data;
+  },
+
+  getRotationImpact: async (
+    workspaceId: string,
+    rotatingDeveloperIds: string[],
+    params?: {
+      team_id?: string;
+      period_type?: InsightsPeriodType;
+      start_date?: string;
+      end_date?: string;
+    }
+  ): Promise<RotationImpactResponse> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/insights/team/rotation-impact`,
+      null,
+      { params: { ...params, rotating_developer_ids: rotatingDeveloperIds.join(",") } }
+    );
+    return response.data;
+  },
+
+  exportDeveloperData: async (
+    workspaceId: string,
+    developerId: string
+  ): Promise<DeveloperDataExport> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/insights/developers/${developerId}/export`
+    );
+    return response.data;
+  },
+};

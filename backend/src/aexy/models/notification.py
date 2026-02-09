@@ -60,6 +60,10 @@ class NotificationEventType(str, Enum):
     USAGE_ALERT_90 = "usage_alert_90"  # 90% of limit reached (critical)
     USAGE_ALERT_100 = "usage_alert_100"  # Limit reached
 
+    # Insights alerts
+    INSIGHT_ALERT_WARNING = "insight_alert_warning"
+    INSIGHT_ALERT_CRITICAL = "insight_alert_critical"
+
 
 class Notification(Base):
     """In-app notification for a user.
@@ -247,4 +251,7 @@ DEFAULT_NOTIFICATION_PREFERENCES = {
     NotificationEventType.ONCALL_SWAP_DECLINED: {"in_app": True, "email": True, "slack": False},
     # Task mentions
     NotificationEventType.TASK_MENTIONED: {"in_app": True, "email": True, "slack": False},
+    # Insights alerts
+    NotificationEventType.INSIGHT_ALERT_WARNING: {"in_app": True, "email": False, "slack": False},
+    NotificationEventType.INSIGHT_ALERT_CRITICAL: {"in_app": True, "email": True, "slack": False},
 }

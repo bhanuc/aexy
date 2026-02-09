@@ -22,6 +22,7 @@ class PermissionCategory(str, Enum):
     LEARNING = "learning"
     FORMS = "forms"
     ONCALL = "oncall"
+    INSIGHTS = "insights"
 
 
 # Master permission catalog
@@ -246,6 +247,17 @@ PERMISSIONS: dict[str, dict] = {
         "description": "Manage on-call schedules and rotations",
         "default_for": ["admin", "manager"],
     },
+    # Insights
+    "can_view_insights": {
+        "category": PermissionCategory.INSIGHTS,
+        "description": "View developer insights and team metrics",
+        "default_for": ["admin", "manager"],
+    },
+    "can_manage_insights": {
+        "category": PermissionCategory.INSIGHTS,
+        "description": "Configure insights settings and generate snapshots",
+        "default_for": ["admin", "manager"],
+    },
     # Billing
     "can_view_billing": {
         "category": PermissionCategory.BILLING,
@@ -441,6 +453,11 @@ WIDGET_PERMISSIONS: dict[str, list[str]] = {
     # On-call widgets
     "oncallSchedule": ["can_view_oncall"],
     "oncallStatus": ["can_view_oncall"],
+    # Insights widgets
+    "teamInsights": ["can_view_insights"],
+    "developerInsights": ["can_view_insights"],
+    "insightsLeaderboard": ["can_view_insights"],
+    "workloadDistribution": ["can_view_insights"],
     # Admin widgets
     "orgMetrics": ["can_manage_workspace_settings"],
     "systemHealth": ["can_manage_workspace_settings"],
