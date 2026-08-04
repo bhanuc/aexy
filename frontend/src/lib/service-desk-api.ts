@@ -92,6 +92,8 @@ export interface TicketTAT {
 export interface CorrespondenceEntry {
   id: string;
   author_email: string | null;
+  /** The internal person who sent it. Only set on outgoing mail. */
+  author_name: string | null;
   content: string;
   created_at: string;
   /** "outgoing" was sent from the ticket by a KAM or manager; "incoming" is a
@@ -103,6 +105,9 @@ export interface CorrespondenceEntry {
 export interface TicketEmailRecipient {
   email: string;
   label: string;
+  /** Stage the ticket moves to when this recipient is written to; null when
+   *  writing to them says nothing about who now has to act. */
+  stage: PendingWith | null;
 }
 
 /** A file that arrived on the ticket's original email. */
@@ -263,7 +268,7 @@ export const serviceDeskApi = {
     (await api.post(`${base(ws)}/tickets/manual`, data)).data,
   emailStakeholder: async (
     ws: string, id: string,
-    data: { to: string; subject: string; body: string; attachment_filenames?: string[] },
+    data: { to: string; subject: string; body: string; attachment_filenames?: string[]; move_ticket?: boolean },
   ): Promise<ServiceDeskTicketDetail> =>
     (await api.post(`${base(ws)}/tickets/${id}/email`, data)).data,
   convertToTask: async (

@@ -136,7 +136,7 @@ export function useServiceDeskMutations() {
       onSuccess: () => invalidateTickets(),
     }),
     emailStakeholder: useMutation({
-      mutationFn: ({ id, data }: { id: string; data: { to: string; subject: string; body: string; attachment_filenames?: string[] } }) =>
+      mutationFn: ({ id, data }: { id: string; data: { to: string; subject: string; body: string; attachment_filenames?: string[]; move_ticket?: boolean } }) =>
         serviceDeskApi.emailStakeholder(ws!, id, data),
       onSuccess: (_r, v) => invalidateTickets(v.id),
     }),

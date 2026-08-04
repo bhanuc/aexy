@@ -273,6 +273,7 @@ async def email_stakeholder(
         data.body,
         sender_id=str(current.id),
         attachment_filenames=data.attachment_filenames,
+        move_ticket=data.move_ticket,
         scope_developer_id=current.id,
     )
 

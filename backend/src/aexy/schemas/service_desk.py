@@ -270,6 +270,10 @@ class ServiceDeskCorrespondence(BaseModel):
 
     id: str
     author_email: str | None = None
+    # The internal person who pressed Send. Only set on outgoing mail: an
+    # inbound reply has no Aexy author. Without it the ticket shows only the
+    # shared mailbox, so nobody can tell which KAM actually wrote to a partner.
+    author_name: str | None = None
     content: str
     created_at: datetime
     # "outgoing" is mail a KAM or manager sent from the ticket; "incoming" is a
@@ -283,6 +287,10 @@ class TicketEmailRecipient(BaseModel):
 
     email: str
     label: str
+    # The stage the ticket moves to when this recipient is written to, or None
+    # when writing to them says nothing about who now has to act (the original
+    # requester, if they are not also a configured partner or insurer).
+    stage: PendingWith | None = None
 
 
 class TicketAttachment(BaseModel):
@@ -305,6 +313,9 @@ class StakeholderEmailRequest(BaseModel):
     # payload: the bytes are re-fetched from the original email, so a caller
     # cannot use the desk to send a file that never arrived on the ticket.
     attachment_filenames: list[str] = Field(default_factory=list, max_length=10)
+    # Sending is usually the hand-off, so the stage follows the recipient by
+    # default. A KAM sending an update rather than a request unticks it.
+    move_ticket: bool = True
 
 
 class ServiceDeskTicketDetail(ServiceDeskTicketResponse):

@@ -70,6 +70,7 @@ export default function ServiceDeskTicketDetailPage() {
   const [mailSubject, setMailSubject] = useState("");
   const [mailBody, setMailBody] = useState("");
   const [mailFiles, setMailFiles] = useState<string[]>([]);
+  const [mailMoves, setMailMoves] = useState(true);
   // A send cannot be undone once Gmail accepts it, and the recipient list holds
   // partners and insurers side by side, so the last guard against a misdirected
   // email is showing exactly what is about to leave and to whom.
@@ -83,6 +84,10 @@ export default function ServiceDeskTicketDetailPage() {
   // none, so visibility alone must not unlock a single control here.
   const canEdit =
     !!settings?.can_manage || (!!user?.id && ticket.assigned_kam_id === user.id);
+
+  const mailStageRaw = ticket.email_recipients.find((r) => r.email === mailTo)?.stage ?? null;
+  // Already there? Then there is nothing to move and no choice to offer.
+  const mailStage = mailStageRaw && mailStageRaw !== ticket.pending_with ? mailStageRaw : null;
 
   const pc = SERVICE_DESK_PENDING_WITH_COLORS[ticket.pending_with];
   const bc = SERVICE_DESK_BREACH_COLORS[ticket.tat.breach_level];
@@ -118,6 +123,7 @@ export default function ServiceDeskTicketDetailPage() {
         subject: mailSubject.trim(),
         body: mailBody.trim(),
         attachment_filenames: mailFiles,
+        move_ticket: mailMoves,
       },
     });
     setMailSubject("");
@@ -319,6 +325,24 @@ export default function ServiceDeskTicketDetailPage() {
             </div>
           )}
 
+          {/* Sending is usually the hand-off, so the stage follows the recipient.
+              Untick when the mail is an update rather than a request. */}
+          {mailStage && (
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={mailMoves}
+                onChange={(e) => { setMailMoves(e.target.checked); setConfirming(false); }}
+              />
+              <span>
+                {t("detail.emailMoveStage", {
+                  stage: SERVICE_DESK_PENDING_WITH_LABELS[mailStage] ?? mailStage,
+                })}
+              </span>
+            </label>
+          )}
+
           {confirming && (
             <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm">
               <div className="font-medium">{t("detail.emailConfirmTitle")}</div>
@@ -330,6 +354,12 @@ export default function ServiceDeskTicketDetailPage() {
                   <span className="text-muted-foreground">{t("detail.emailAttach")}: </span>
                   {mailFiles.length ? mailFiles.join(", ") : t("detail.emailNoAttachments")}
                 </div>
+                {mailStage && mailMoves && (
+                  <div>
+                    <span className="text-muted-foreground">{t("detail.changeTo")}: </span>
+                    {SERVICE_DESK_PENDING_WITH_LABELS[mailStage] ?? mailStage}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -523,6 +553,11 @@ export default function ServiceDeskTicketDetailPage() {
                   <Badge variant={entry.direction === "outgoing" ? "default" : "secondary"}>
                     {entry.direction === "outgoing" ? t("detail.outgoing") : t("detail.incoming")}
                   </Badge>
+                  {entry.direction === "outgoing" && entry.author_name && (
+                    <span className="text-xs text-muted-foreground">
+                      {t("detail.sentBy", { name: entry.author_name })}
+                    </span>
+                  )}
                 </div>
                 <div className="mt-0.5 text-xs text-muted-foreground">{new Date(entry.created_at).toLocaleString()}</div>
                 <p className="mt-2 whitespace-pre-wrap text-sm">{entry.content}</p>

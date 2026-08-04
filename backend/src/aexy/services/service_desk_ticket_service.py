@@ -544,12 +544,12 @@ class ServiceDeskTicketService:
         out: list[TicketEmailRecipient] = []
         seen: set[str] = set()
 
-        def add(address: str | None, label: str) -> None:
+        def add(address: str | None, label: str, stage: str | None = None) -> None:
             key = (address or "").strip().lower()
             if "@" not in key or key in seen:
                 return
             seen.add(key)
-            out.append(TicketEmailRecipient(email=key, label=label))
+            out.append(TicketEmailRecipient(email=key, label=label, stage=stage))
 
         if sd.partner_id:
             rows = (
@@ -567,7 +567,7 @@ class ServiceDeskTicketService:
                 )
             ).all()
             for name, domain in rows:
-                add(domain, f"{name} (partner)")
+                add(domain, f"{name} (partner)", PendingWith.PARTNER.value)
 
         rows = (
             await self.db.execute(
@@ -584,9 +584,10 @@ class ServiceDeskTicketService:
             )
         ).all()
         for name, domain in rows:
-            add(domain, f"{name} (insurer)")
+            add(domain, f"{name} (insurer)", PendingWith.INSURER.value)
 
         add(ticket.submitter_email, ticket.submitter_name or "Requester")
+
         return out
 
     @staticmethod
@@ -674,6 +675,7 @@ class ServiceDeskTicketService:
         body: str,
         sender_id: str,
         attachment_filenames: list[str] | None = None,
+        move_ticket: bool = True,
         scope_developer_id: str | None = None,
     ) -> ServiceDeskTicketDetail:
         """Send a ticket email as the watched mailbox and log it on the ticket.
@@ -699,11 +701,12 @@ class ServiceDeskTicketService:
             raise HTTPException(status_code=404, detail="Ticket not found")
 
         recipient = to_email.strip().lower()
-        allowed = {
-            option.email
+        options = {
+            option.email: option
             for option in await self._email_recipients(workspace_id, sd, ticket)
         }
-        if recipient not in allowed:
+        chosen = options.get(recipient)
+        if chosen is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=(
@@ -752,6 +755,20 @@ class ServiceDeskTicketService:
             )
         )
         await self.db.flush()
+
+        # Reuse the one transition path rather than writing the ledger by hand,
+        # so an emailed hand-off is indistinguishable from a Move to click: same
+        # segment, same timeline entry, same clock. The KAM can still move the
+        # ticket by hand, and can untick the move when the mail is only an update.
+        if move_ticket and chosen.stage and chosen.stage != sd.pending_with:
+            return await self.change_pending_with(
+                workspace_id,
+                ticket_id,
+                chosen.stage,
+                changed_by_id=sender_id,
+                note=f"Emailed {chosen.label}",
+                scope_developer_id=scope_developer_id,
+            )
         return await self.get_detail(workspace_id, ticket_id)
 
 
@@ -879,16 +896,19 @@ class ServiceDeskTicketService:
             if isinstance(raw_detected_issues, list)
             else []
         )
+        # Outer join the author so an outgoing message can name the person who
+        # sent it. Inbound replies have no Aexy author and stay unattributed.
         correspondence = (
             await self.db.execute(
-                select(TicketResponse)
+                select(TicketResponse, Developer.name, Developer.email)
+                .outerjoin(Developer, Developer.id == TicketResponse.author_id)
                 .where(
                     TicketResponse.ticket_id == ticket_id,
                     TicketResponse.is_internal.is_(False),
                 )
                 .order_by(TicketResponse.created_at)
             )
-        ).scalars().all()
+        ).all()
 
         return ServiceDeskTicketDetail(
             id=sd.id,
@@ -920,11 +940,12 @@ class ServiceDeskTicketService:
                 ServiceDeskCorrespondence(
                     id=response.id,
                     author_email=response.author_email,
+                    author_name=(author_name or author_email) if response.author_id else None,
                     content=response.content,
                     created_at=response.created_at,
                     direction="outgoing" if response.author_id else "incoming",
                 )
-                for response in correspondence
+                for response, author_name, author_email in correspondence
             ],
             email_recipients=await self._email_recipients(workspace_id, sd, ticket),
             attachments=[

@@ -94,7 +94,9 @@
       "emailConfirmTitle": "Check before this leaves",
       "emailConfirmHint": "This sends from the desk mailbox and cannot be recalled.",
       "emailConfirmSend": "Confirm and send",
-      "emailCancel": "Cancel"
+      "emailCancel": "Cancel",
+      "sentBy": "Sent by {name}",
+      "emailMoveStage": "Move this ticket to {stage} when sent"
     },
     "ai": {
       "title": "AI email categorisation",

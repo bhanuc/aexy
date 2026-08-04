@@ -16,7 +16,7 @@ import secrets
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -52,6 +52,12 @@ _MAX_ISSUES_PER_EMAIL = 5
 # this sure about both halves. Anything less certain stays one triage ticket —
 # a human merging two tickets costs more than a human splitting one.
 _SPLIT_MIN_CONFIDENCE = 0.85
+# Attaching an insurer's mail to the wrong claim is worse than opening one extra
+# ticket, because insurance correspondence about different claims reads almost
+# identically. So a content match must be both confident and unambiguous, and it
+# is only ever attempted for a sender already known to master data.
+_AI_MATCH_MIN_CONFIDENCE = 0.85
+_AI_MATCH_MAX_CANDIDATES = 20
 
 # Headers that mean "a machine sent this". The X-Auto* ones only ever appear on
 # auto-responders, so their presence is enough; Precedence needs a value check
@@ -171,13 +177,35 @@ class ServiceDeskIntakeService:
 
         # 2) Threading — append to an existing ticket if this is a reply
         existing = await self._find_thread_ticket(workspace_id, email)
+        match_note: str | None = None
+        suggestion: str | None = None
+        if existing is None and not automatic and await self._ai_enabled(workspace_id):
+            # 2b) Deterministic matching found nothing. With AI on, a stakeholder
+            #     who started a fresh thread and dropped the ticket number can
+            #     still be reunited with their ticket — but only on a confident,
+            #     single candidate. Anything else falls through to a new ticket.
+            existing, match_note, suggestion = await self._ai_match_ticket(workspace_id, email)
         if existing is not None:
             await self._append_reply(workspace_id, existing, email, automatic=automatic)
+            if match_note:
+                # Visible on the timeline so a human can see the merge happened,
+                # why, and undo it if the model was wrong.
+                self.db.add(
+                    TicketResponse(
+                        id=str(uuid4()),
+                        ticket_id=existing.id,
+                        content=match_note,
+                        is_internal=True,
+                    )
+                )
+                await self.db.flush()
             await self._link_message(workspace_id, email.message_id, existing.id)
             return existing
 
         # 3) New ticket
-        ticket = await self._create_ticket(workspace_id, email, mailbox, source, automatic=automatic)
+        ticket = await self._create_ticket(
+            workspace_id, email, mailbox, source, automatic=automatic, suggestion=suggestion
+        )
         await self._link_message(workspace_id, email.message_id, ticket.id)
         return ticket
 
@@ -251,6 +279,120 @@ class ServiceDeskIntakeService:
             ).scalar_one_or_none()
         return None
 
+    async def _ai_match_ticket(
+        self, workspace_id: str, email: InboundEmail
+    ) -> tuple[Ticket | None, str | None, str | None]:
+        """Reunite a stray stakeholder email with its ticket, carefully.
+
+        Returns ``(ticket, merge_note, suggestion)``. A ticket is returned only
+        when the model names exactly one open candidate and is confident about
+        it; otherwise the email becomes a new ticket and, if there was a
+        near-miss, ``suggestion`` carries it so a human is asked to decide.
+
+        Two hard limits make this safe enough to run unattended. The sender must
+        already be a partner or insurer in master data, so an unknown address can
+        never be merged into someone's claim. And the candidate list is scoped to
+        that same company's open tickets, so the model is never choosing between
+        two different partners' claims in the first place.
+        """
+        address = _address_of(email.from_email)
+        domain = _domain_of(email.from_email)
+        partner = await self._match_partner(workspace_id, domain, address)
+        insurer = None if partner else await self._match_insurer(workspace_id, domain, address)
+        if partner is None and insurer is None:
+            return None, None, None
+
+        query = (
+            select(Ticket, ServiceDeskTicket)
+            .join(ServiceDeskTicket, ServiceDeskTicket.ticket_id == Ticket.id)
+            .where(
+                Ticket.workspace_id == workspace_id,
+                ServiceDeskTicket.workspace_id == workspace_id,
+                ServiceDeskTicket.pending_with != PendingWith.CLOSED.value,
+            )
+            .order_by(Ticket.created_at.desc())
+            .limit(_AI_MATCH_MAX_CANDIDATES)
+        )
+        if partner is not None:
+            query = query.where(ServiceDeskTicket.partner_id == partner.id)
+        else:
+            # An insurer writes about claims the desk sent them, so the plausible
+            # homes are tickets already handed to that insurer.
+            query = query.where(
+                or_(
+                    ServiceDeskTicket.insurer_id == insurer.id,
+                    ServiceDeskTicket.pending_with == PendingWith.INSURER.value,
+                )
+            )
+        rows = (await self.db.execute(query)).all()
+        if not rows:
+            return None, None, None
+
+        by_number = {ticket.ticket_number: ticket for ticket, _ in rows}
+        catalogue = "\n".join(
+            f"- {TICKET_PREFIX}-{ticket.ticket_number}: "
+            f"{(ticket.field_values or {}).get('subject') or '(no subject)'} "
+            f"[{sd.request_type}, pending with {sd.pending_with}]"
+            for ticket, sd in rows
+        )
+        sender_label = partner.name if partner is not None else insurer.name
+
+        try:
+            from aexy.llm.gateway import get_llm_gateway
+
+            system = (
+                "You match an incoming insurance email to an existing open ticket. "
+                "Only match when the email clearly continues that specific ticket's "
+                "request. Different claims often use near-identical wording, so "
+                "answer null unless you are certain. Reply with compact JSON: "
+                '{"ticket": "BSD-12" or null, "confidence": 0..1, "reason": "one short sentence"}. '
+                "JSON only."
+            )
+            user = (
+                f"Sender: {email.from_email} ({sender_label})\n"
+                f"Subject: {email.subject}\n\n{(email.body_text or '')[:1500]}\n\n"
+                f"Open tickets for this company:\n{catalogue}"
+            )
+            text, *_ = await get_llm_gateway().call_llm(
+                system, user, tokens_estimate=350, workspace_id=workspace_id
+            )
+            found = re.search(r"\{.*\}", text, re.DOTALL)
+            if not found:
+                return None, None, None
+            data = json.loads(found.group(0))
+        except Exception as exc:  # noqa: BLE001 — matching is best-effort
+            logger.info("Service desk: AI match skipped (%s)", exc)
+            return None, None, None
+
+        raw = data.get("ticket")
+        reason = str(data.get("reason") or "")[:300]
+        try:
+            confidence = max(0.0, min(1.0, float(data.get("confidence", 0))))
+        except (TypeError, ValueError):
+            confidence = 0.0
+
+        matched = _BSD_RE.search(str(raw or ""))
+        candidate = by_number.get(int(matched.group(1))) if matched else None
+        if candidate is None:
+            return None, None, None
+
+        display = f"{TICKET_PREFIX}-{candidate.ticket_number}"
+        if confidence >= _AI_MATCH_MIN_CONFIDENCE:
+            return (
+                candidate,
+                f"Matched to this ticket by AI at {confidence:.0%} confidence "
+                f"(no ticket number in the subject). Reason: {reason or 'not given'}. "
+                "Move this message if the match is wrong.",
+                None,
+            )
+        return (
+            None,
+            None,
+            f"This may belong to {display} — AI suggested it at {confidence:.0%} "
+            f"confidence, which was too low to merge automatically. "
+            f"Reason: {reason or 'not given'}. A human should confirm or ignore.",
+        )
+
     async def _append_reply(
         self, workspace_id: str, ticket: Ticket, email: InboundEmail, automatic: bool = False
     ) -> None:
@@ -298,6 +440,7 @@ class ServiceDeskIntakeService:
         mailbox: ServiceDeskMailbox | None,
         source: str,
         automatic: bool = False,
+        suggestion: str | None = None,
     ) -> Ticket:
         domain = _domain_of(email.from_email)
         address = _address_of(email.from_email)
@@ -376,6 +519,22 @@ class ServiceDeskIntakeService:
             )
         )
         await self.db.flush()
+
+        # The model saw a possible home for this mail but was not sure enough to
+        # merge it. Opening a fresh ticket is the safe default, but staying silent
+        # would hide the near-miss, so the suggestion is recorded and a human is
+        # asked to look.
+        if suggestion:
+            sd.needs_triage = True
+            self.db.add(
+                TicketResponse(
+                    id=str(uuid4()),
+                    ticket_id=ticket.id,
+                    content=suggestion,
+                    is_internal=True,
+                )
+            )
+            await self.db.flush()
 
         # best-effort enrichment + receipt (never block intake).
         # AI reading/categorisation is opt-in per workspace (default off), and an

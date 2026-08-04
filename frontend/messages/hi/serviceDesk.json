@@ -94,7 +94,9 @@
       "emailConfirmTitle": "भेजने से पहले जाँच लें",
       "emailConfirmHint": "यह डेस्क मेलबॉक्स से भेजा जाता है और वापस नहीं लिया जा सकता।",
       "emailConfirmSend": "पुष्टि करें और भेजें",
-      "emailCancel": "रद्द करें"
+      "emailCancel": "रद्द करें",
+      "sentBy": "{name} द्वारा भेजा गया",
+      "emailMoveStage": "भेजने पर इस टिकट को {stage} पर ले जाएँ"
     },
     "ai": {
       "title": "AI ईमेल वर्गीकरण",

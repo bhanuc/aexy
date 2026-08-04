@@ -327,6 +327,8 @@ async def test_email_goes_out_as_the_watched_mailbox_and_keeps_the_ticket_identi
     outgoing = [c for c in detail.correspondence if c.direction == "outgoing"]
     assert len(outgoing) == 1
     assert outgoing[0].author_email == "august@capbumpy.in"
+    # The shared mailbox is the sender; the ticket must still name the person.
+    assert outgoing[0].author_name == "paimon"
     assert "claims@insurer-one.example" in outgoing[0].content
 
     stored = (
@@ -334,8 +336,11 @@ async def test_email_goes_out_as_the_watched_mailbox_and_keeps_the_ticket_identi
             select(TicketResponse).where(TicketResponse.ticket_id == desk["ticket"])
         )
     ).scalars().all()
-    assert [r.is_internal for r in stored] == [False]
-    assert stored[0].author_id == desk["kam"]
+    # One public message (the email) plus the internal timeline line the
+    # auto-move writes. Only the first is stakeholder correspondence.
+    public = [r for r in stored if not r.is_internal]
+    assert len(public) == 1
+    assert public[0].author_id == desk["kam"]
 
 
 @pytest.mark.asyncio
@@ -555,3 +560,153 @@ async def test_answering_the_requester_stays_in_their_conversation(db_session, d
         scope_developer_id=desk["kam"],
     )
     assert sent[0]["thread_id"] == "gmail-thread-1"
+
+
+# ------------------------------------------------- emailing moves the stage
+
+
+@pytest.mark.asyncio
+async def test_emailing_an_insurer_moves_the_ticket_the_same_way_move_to_does(
+    db_session, desk, sent
+):
+    svc = ServiceDeskTicketService(db_session)
+    detail = await svc.email_stakeholder(
+        desk["ws"],
+        desk["ticket"],
+        "claims@insurer-one.example",
+        "Please confirm",
+        "Body",
+        sender_id=desk["kam"],
+        scope_developer_id=desk["kam"],
+    )
+    await db_session.commit()
+
+    assert detail.pending_with == "insurer"
+    # The ledger must be indistinguishable from a Move to click: the KAM segment
+    # closed and an insurer segment opened, attributed and annotated.
+    segments = (
+        await db_session.execute(
+            select(TicketPendingSegment)
+            .where(TicketPendingSegment.ticket_id == desk["ticket"])
+            .order_by(TicketPendingSegment.entered_at)
+        )
+    ).scalars().all()
+    assert [s.pending_with for s in segments] == ["kam", "insurer"]
+    assert segments[0].exited_at is not None
+    assert segments[1].changed_by_id == desk["kam"]
+    assert "Insurer I1" in (segments[1].note or "")
+
+
+@pytest.mark.asyncio
+async def test_the_kam_can_send_without_moving_the_ticket(db_session, desk, sent):
+    """An update to the insurer is not a hand-off to them."""
+    detail = await ServiceDeskTicketService(db_session).email_stakeholder(
+        desk["ws"],
+        desk["ticket"],
+        "claims@insurer-one.example",
+        "Just so you know",
+        "Body",
+        sender_id=desk["kam"],
+        move_ticket=False,
+        scope_developer_id=desk["kam"],
+    )
+    assert detail.pending_with == "kam"
+
+
+@pytest.mark.asyncio
+async def test_recipients_carry_the_stage_they_imply(db_session, desk):
+    detail = await ServiceDeskTicketService(db_session).get_detail(
+        desk["ws"], desk["ticket"], scope_developer_id=desk["kam"]
+    )
+    stages = {r.email: r.stage for r in detail.email_recipients}
+    assert stages["claims@insurer-one.example"] == "insurer"
+    # The requester is also P1's configured address, so it keeps the partner
+    # stage rather than being downgraded when added as the requester.
+    assert stages["paimonking@runbox.com"] == "partner"
+
+
+@pytest.mark.asyncio
+async def test_a_full_kam_insurer_kam_partner_round_trip_is_recorded_in_order(
+    db_session, desk, sent
+):
+    """The ledger must read as the real sequence, mixing emails and manual moves."""
+    svc = ServiceDeskTicketService(db_session)
+
+    # KAM writes to the insurer -> ticket moves to Insurer.
+    await svc.email_stakeholder(
+        desk["ws"], desk["ticket"], "claims@insurer-one.example",
+        "Claim query", "Body", sender_id=desk["kam"], scope_developer_id=desk["kam"],
+    )
+    # Insurer answers; the KAM takes it back by hand.
+    await svc.change_pending_with(
+        desk["ws"], desk["ticket"], "kam",
+        changed_by_id=desk["kam"], note="Insurer replied", scope_developer_id=desk["kam"],
+    )
+    # KAM then writes to the partner -> ticket moves to Partner.
+    detail = await svc.email_stakeholder(
+        desk["ws"], desk["ticket"], "paimonking@runbox.com",
+        "Update for you", "Body", sender_id=desk["kam"], scope_developer_id=desk["kam"],
+    )
+    await db_session.commit()
+
+    assert detail.pending_with == "partner"
+    assert [s.pending_with for s in detail.segments] == ["kam", "insurer", "kam", "partner"]
+    # Every closed segment carries a duration, so stakeholder TAT stays computable.
+    assert all(s.duration_seconds is not None for s in detail.segments[:-1])
+    assert detail.segments[-1].exited_at is None
+
+    # Both emails are on the ticket, in order, attributed, and outgoing.
+    outgoing = [c for c in detail.correspondence if c.direction == "outgoing"]
+    assert len(outgoing) == 2
+    assert all(c.author_name == "paimon" for c in outgoing)
+    assert "claims@insurer-one.example" in outgoing[0].content
+    assert "paimonking@runbox.com" in outgoing[1].content
+    # Each send left as the desk mailbox, never as the KAM.
+    assert [c["to"] for c in sent] == ["claims@insurer-one.example", "paimonking@runbox.com"]
+    assert {c["from"] for c in sent} == {"august@capbumpy.in"}
+
+
+@pytest.mark.asyncio
+async def test_the_breach_clock_restarts_on_the_stage_the_email_moved_it_to(
+    db_session, desk, sent
+):
+    """SLA is measured per stage, so an emailed hand-off must reset the clock.
+
+    If the email moved the ticket but the ledger kept the old segment open, the
+    insurer's stage would inherit the KAM's age and show a breach the insurer
+    never caused, or hide one they did.
+    """
+    svc = ServiceDeskTicketService(db_session)
+
+    # The ticket has already been sitting with the KAM for a week.
+    opened = (
+        await db_session.execute(
+            select(TicketPendingSegment).where(
+                TicketPendingSegment.ticket_id == desk["ticket"],
+                TicketPendingSegment.exited_at.is_(None),
+            )
+        )
+    ).scalar_one()
+    opened.entered_at = datetime.now(timezone.utc) - timedelta(days=7)
+    await db_session.flush()
+
+    ticket = await db_session.get(Ticket, desk["ticket"])
+    breached = await svc.compute_tat(desk["ticket"], ticket)
+    assert breached.current_pending_with == "kam"
+    assert breached.breach_level == "red"
+
+    # Emailing the insurer hands it over, so the stage clock starts again.
+    detail = await svc.email_stakeholder(
+        desk["ws"], desk["ticket"], "claims@insurer-one.example",
+        "Over to you", "Body", sender_id=desk["kam"], scope_developer_id=desk["kam"],
+    )
+    await db_session.commit()
+
+    assert detail.pending_with == "insurer"
+    assert detail.tat.current_pending_with == "insurer"
+    assert detail.tat.breach_level == "green"
+    assert detail.tat.current_stage_seconds < 60
+    # The week with the KAM is not lost, it is attributed to the KAM.
+    assert detail.tat.stakeholder_seconds["kam"] > 0
+    # Overall wall-clock keeps running across the hand-off.
+    assert detail.tat.overall_seconds >= breached.overall_seconds
