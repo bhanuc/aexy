@@ -211,6 +211,7 @@ class TicketService:
                 selectinload(Ticket.team),
                 selectinload(Ticket.responses),
             )
+            .execution_options(populate_existing=True)
         )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
@@ -244,6 +245,7 @@ class TicketService:
         filters: TicketFilters | None = None,
         limit: int = 50,
         offset: int = 0,
+        visibility_clause=None,
     ) -> tuple[list[Ticket], int]:
         """List tickets for a workspace with filters.
 
@@ -252,11 +254,15 @@ class TicketService:
             filters: Optional filters.
             limit: Maximum number of tickets to return.
             offset: Number of tickets to skip.
+            visibility_clause: Optional row-level restriction from the caller's
+                scope (see service_desk_service.generic_ticket_scope_clause).
 
         Returns:
             Tuple of (tickets, total_count).
         """
         base_stmt = select(Ticket).where(Ticket.workspace_id == workspace_id)
+        if visibility_clause is not None:
+            base_stmt = base_stmt.where(visibility_clause)
 
         if filters:
             if filters.form_id:
@@ -329,6 +335,19 @@ class TicketService:
         old_status = ticket.status
         old_priority = ticket.priority
         data = update_data.model_dump(exclude_unset=True)
+
+        if "assignee_id" in data:
+            from aexy.services.service_desk_ticket_service import (
+                reassign_service_desk_ticket_family,
+            )
+
+            family = await reassign_service_desk_ticket_family(
+                self.db,
+                str(ticket.workspace_id),
+                str(ticket.id),
+                data.pop("assignee_id"),
+            )
+            ticket = next(member for member in family if str(member.id) == ticket_id)
 
         for field, value in data.items():
             setattr(ticket, field, value)
@@ -472,7 +491,7 @@ class TicketService:
                 changes=changes,
             )
 
-        return ticket
+        return await self.get_ticket(ticket_id)
 
     async def assign_ticket(
         self,
@@ -497,7 +516,17 @@ class TicketService:
             return None
 
         old_assignee = ticket.assignee_id
-        ticket.assignee_id = assignee_id
+        from aexy.services.service_desk_ticket_service import (
+            reassign_service_desk_ticket_family,
+        )
+
+        family = await reassign_service_desk_ticket_family(
+            self.db,
+            str(ticket.workspace_id),
+            str(ticket.id),
+            assignee_id,
+        )
+        ticket = next(member for member in family if str(member.id) == ticket_id)
         ticket.team_id = team_id
 
         # Create assignment response
@@ -550,7 +579,7 @@ class TicketService:
                 changes={"assignee_id": {"old": old_assignee, "new": assignee_id}},
             )
 
-        return ticket
+        return await self.get_ticket(ticket_id)
 
     async def delete_ticket(self, ticket_id: str) -> bool:
         """Delete a ticket."""

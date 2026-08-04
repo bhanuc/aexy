@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone
+from typing import Mapping
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -40,6 +41,38 @@ DEFAULT_WORK_END = time(18, 30)
 # Thresholds for the CURRENT STAGE age, in working days.
 BREACH_RED_DAYS = 2.0
 BREACH_AMBER_DAYS = 1.0
+TEST_SLA_STAGES = frozenset({"kam", "insurer", "partner"})
+
+
+def _active_test_stage_slas(value: object) -> dict[str, tuple[int, int]]:
+    """Read a safely ignorable test override from persisted workspace settings.
+
+    Validation occurs at the API boundary. This defensive reader means a stale
+    or hand-edited JSON setting cannot break ticket listing, and expiry alone is
+    enough for the regular SLA to become active again.
+    """
+    if not isinstance(value, dict):
+        return {}
+    raw_expiry = value.get("expires_at")
+    if not isinstance(raw_expiry, str):
+        return {}
+    try:
+        expires_at = datetime.fromisoformat(raw_expiry.replace("Z", "+00:00"))
+        if expires_at.tzinfo is None or expires_at <= datetime.now(timezone.utc):
+            return {}
+    except ValueError:
+        return {}
+
+    stages: dict[str, tuple[int, int]] = {}
+    for stage in TEST_SLA_STAGES:
+        rule = value.get(stage)
+        if not isinstance(rule, dict):
+            return {}
+        amber, red = rule.get("amber_minutes"), rule.get("red_minutes")
+        if not isinstance(amber, int) or not isinstance(red, int) or amber < 1 or red <= amber:
+            return {}
+        stages[stage] = (amber, red)
+    return stages
 
 
 def _aware(dt: datetime) -> datetime:
@@ -65,6 +98,9 @@ class Clock:
     work_start: time = DEFAULT_WORK_START
     work_end: time = DEFAULT_WORK_END
     holidays: frozenset[date] = field(default_factory=frozenset)
+    # These rules exist only for a short, explicitly configured test window.
+    # Missing, malformed, or expired data falls back to the normal day targets.
+    test_stage_slas: Mapping[str, tuple[int, int]] = field(default_factory=dict)
 
     @property
     def working_day_seconds(self) -> float:
@@ -102,7 +138,14 @@ class Clock:
         """Working seconds as working days — 1.0 means one full shift went by."""
         return round(working_seconds / self.working_day_seconds, 2)
 
-    def breach_level(self, stage_working_seconds: int) -> str:
+    def breach_level(self, stage_working_seconds: int, pending_with: str | None = None) -> str:
+        if pending_with in self.test_stage_slas:
+            amber_minutes, red_minutes = self.test_stage_slas[pending_with]
+            if stage_working_seconds > red_minutes * 60:
+                return "red"
+            if stage_working_seconds >= amber_minutes * 60:
+                return "amber"
+            return "green"
         days = stage_working_seconds / self.working_day_seconds
         if days > BREACH_RED_DAYS:
             return "red"
@@ -110,7 +153,10 @@ class Clock:
             return "amber"
         return "green"
 
-    def is_breaching(self, stage_working_seconds: int) -> bool:
+    def is_breaching(self, stage_working_seconds: int, pending_with: str | None = None) -> bool:
+        if pending_with in self.test_stage_slas:
+            _, red_minutes = self.test_stage_slas[pending_with]
+            return stage_working_seconds > red_minutes * 60
         return stage_working_seconds / self.working_day_seconds > BREACH_RED_DAYS
 
 
@@ -138,9 +184,11 @@ async def load_clock(db: AsyncSession, workspace_id: str) -> Clock:
     )
 
     ws = await db.get(Workspace, workspace_id)
-    hours = (((ws.settings or {}).get("service_desk") or {}).get("working_hours") or {}) if ws else {}
+    service_desk = ((ws.settings or {}).get("service_desk") or {}) if ws else {}
+    hours = service_desk.get("working_hours") or {}
     return Clock(
         work_start=_parse_hhmm(hours.get("start"), DEFAULT_WORK_START),
         work_end=_parse_hhmm(hours.get("end"), DEFAULT_WORK_END),
         holidays=holidays,
+        test_stage_slas=_active_test_stage_slas(service_desk.get("test_sla")),
     )

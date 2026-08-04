@@ -15,6 +15,8 @@ from aexy.schemas.service_desk import (
     InsurerCreate,
     InsurerResponse,
     InsurerUpdate,
+    HumanSplitRequest,
+    HumanSplitResponse,
     LOBCreate,
     LOBResponse,
     MailboxCreate,
@@ -33,6 +35,7 @@ from aexy.schemas.service_desk import (
     ServiceDeskTemplate,
     ServiceDeskTemplateUpdate,
     ServiceDeskTicketDetail,
+    StakeholderEmailRequest,
     ServiceDeskTicketResponse,
     TicketFieldsUpdate,
 )
@@ -78,8 +81,11 @@ async def update_settings(workspace_id: str, data: ServiceDeskSettingsUpdate, db
     return await ServiceDeskService(db).update_settings(
         workspace_id,
         ai_classification_enabled=data.ai_classification_enabled,
+        auto_split_enabled=data.auto_split_enabled,
         working_hours_start=data.working_hours_start,
         working_hours_end=data.working_hours_end,
+        test_sla=data.test_sla,
+        clear_test_sla=data.clear_test_sla,
         developer_id=str(current.id),
     )
 
@@ -215,6 +221,23 @@ async def get_ticket(workspace_id: str, ticket_id: str, db: AsyncSession = Depen
     )
 
 
+@router.post("/tickets/{ticket_id}/split", response_model=HumanSplitResponse)
+async def split_detected_issues(
+    workspace_id: str,
+    ticket_id: str,
+    data: HumanSplitRequest,
+    db: AsyncSession = Depends(get_db),
+    current: Developer = Depends(get_current_developer),
+):
+    return await ServiceDeskTicketService(db).split_detected_issues(
+        workspace_id,
+        ticket_id,
+        data.issue_indexes,
+        split_by_id=current.id,
+        scope_developer_id=current.id,
+    )
+
+
 @router.patch("/tickets/{ticket_id}/pending-with", response_model=ServiceDeskTicketDetail)
 async def change_pending_with(
     workspace_id: str,
@@ -229,6 +252,26 @@ async def change_pending_with(
         data.pending_with,
         changed_by_id=current.id,
         note=data.note,
+        scope_developer_id=current.id,
+    )
+
+
+@router.post("/tickets/{ticket_id}/email", response_model=ServiceDeskTicketDetail)
+async def email_stakeholder(
+    workspace_id: str,
+    ticket_id: str,
+    data: StakeholderEmailRequest,
+    db: AsyncSession = Depends(get_db),
+    current: Developer = Depends(get_current_developer),
+):
+    """Send a ticket email from the watched mailbox (assigned KAM or manager only)."""
+    return await ServiceDeskTicketService(db).email_stakeholder(
+        workspace_id,
+        ticket_id,
+        data.to,
+        data.subject,
+        data.body,
+        sender_id=str(current.id),
         scope_developer_id=current.id,
     )
 

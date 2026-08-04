@@ -13,9 +13,12 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from pydantic import ValidationError
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
+from aexy.models.developer import Developer
 from aexy.models.service_desk import (
     PendingWith,
     ServiceDeskPartner,
@@ -24,7 +27,9 @@ from aexy.models.service_desk import (
 )
 from aexy.models.ticketing import Ticket, TicketResponse, TicketStatus
 from aexy.schemas.service_desk import (
+    DetectedIssue,
     SegmentResponse,
+    ServiceDeskCorrespondence,
     ServiceDeskTicketDetail,
     TicketFieldsUpdate,
     TicketTAT,
@@ -43,7 +48,142 @@ def _aware(dt: datetime) -> datetime:
     return dt
 
 
+def _split_done_indexes(field_values: dict, issue_count: int) -> list[int]:
+    """Return one-based candidate indexes already represented by child tickets."""
+    raw = field_values.get("split_done_indexes")
+    raw_indexes = raw if isinstance(raw, list) else []
+    done = {
+        value
+        for value in raw_indexes
+        if isinstance(value, int) and not isinstance(value, bool) and 2 <= value <= issue_count
+    }
+    # A1 predates split_done_indexes and can only auto-create candidate two.
+    if not done and field_values.get("split_children") and issue_count >= 2:
+        done.add(2)
+    return sorted(done)
+
+
 from aexy.services.service_desk_clock import load_clock  # noqa: E402
+
+
+async def reassign_service_desk_ticket_family(
+    db: AsyncSession,
+    workspace_id: str,
+    ticket_id: str,
+    assignee_id: str | None,
+) -> list[Ticket]:
+    """Assign one Service Desk split family under deterministic row locks.
+
+    Non-Service-Desk tickets remain single-row assignments. For a split child,
+    the canonical parent link selects the same family as assigning the primary.
+    JSON metadata is deliberately ignored because it is not constrained.
+    """
+    sd = (
+        await db.execute(
+            select(ServiceDeskTicket).where(
+                ServiceDeskTicket.ticket_id == ticket_id,
+                ServiceDeskTicket.workspace_id == workspace_id,
+            )
+        )
+    ).scalar_one_or_none()
+
+    if sd is None:
+        ticket = (
+            await db.execute(
+                select(Ticket)
+                .where(Ticket.id == ticket_id, Ticket.workspace_id == workspace_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one_or_none()
+        if ticket is None:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        ticket.assignee_id = assignee_id
+        return [ticket]
+
+    root_id = sd.split_parent_ticket_id or ticket_id
+    family = list(
+        (
+            await db.execute(
+                select(Ticket)
+                .join(ServiceDeskTicket, ServiceDeskTicket.ticket_id == Ticket.id)
+                .where(
+                    Ticket.workspace_id == workspace_id,
+                    ServiceDeskTicket.workspace_id == workspace_id,
+                    or_(
+                        ServiceDeskTicket.ticket_id == root_id,
+                        ServiceDeskTicket.split_parent_ticket_id == root_id,
+                    ),
+                )
+                .order_by(Ticket.id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).scalars().all()
+    )
+    family_ids = {str(ticket.id) for ticket in family}
+    if root_id not in family_ids or ticket_id not in family_ids:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Split ticket relationship is inconsistent; assignment was not changed",
+        )
+
+    for member in family:
+        member.assignee_id = assignee_id
+    return family
+
+
+def reassign_service_desk_ticket_family_sync(
+    db: Session,
+    workspace_id: str,
+    ticket_id: str,
+    assignee_id: str | None,
+) -> list[Ticket]:
+    """Synchronous counterpart for the legacy workflow action executor."""
+    sd = db.execute(
+        select(ServiceDeskTicket).where(
+            ServiceDeskTicket.ticket_id == ticket_id,
+            ServiceDeskTicket.workspace_id == workspace_id,
+        )
+    ).scalar_one_or_none()
+
+    if sd is None:
+        ticket = db.execute(
+            select(Ticket)
+            .where(Ticket.id == ticket_id, Ticket.workspace_id == workspace_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).scalar_one_or_none()
+        if ticket is None:
+            raise ValueError("Ticket not found")
+        ticket.assignee_id = assignee_id
+        return [ticket]
+
+    root_id = sd.split_parent_ticket_id or ticket_id
+    family = list(
+        db.execute(
+            select(Ticket)
+            .join(ServiceDeskTicket, ServiceDeskTicket.ticket_id == Ticket.id)
+            .where(
+                Ticket.workspace_id == workspace_id,
+                ServiceDeskTicket.workspace_id == workspace_id,
+                or_(
+                    ServiceDeskTicket.ticket_id == root_id,
+                    ServiceDeskTicket.split_parent_ticket_id == root_id,
+                ),
+            )
+            .order_by(Ticket.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).scalars().all()
+    )
+    family_ids = {str(ticket.id) for ticket in family}
+    if root_id not in family_ids or ticket_id not in family_ids:
+        raise ValueError("Split ticket relationship is inconsistent; assignment was not changed")
+
+    for member in family:
+        member.assignee_id = assignee_id
+    return family
 
 
 class ServiceDeskTicketService:
@@ -53,7 +193,11 @@ class ServiceDeskTicketService:
     # ------------------------------------------------------------------ loads
 
     async def _sd(
-        self, workspace_id: str, ticket_id: str, developer_id: str | None = None
+        self,
+        workspace_id: str,
+        ticket_id: str,
+        developer_id: str | None = None,
+        for_edit: bool = False,
     ) -> ServiceDeskTicket:
         """Load a ticket's SD extension, enforcing row-level visibility.
 
@@ -61,6 +205,11 @@ class ServiceDeskTicketService:
         Without it, a KAM restricted to their own queue could still read or mutate
         any ticket in the workspace by id — the list was scoped but the by-id
         paths were not. 404 (not 403) so ids outside scope stay unenumerable.
+
+        ``for_edit`` additionally requires write authority (see ``_require_edit``).
+        Visibility is not authority: an Ops Lead holds ``can_view_all_service_desk``
+        so the scope clause admits every row, and without this second check that
+        read-only role could reclassify or hand off anyone's ticket.
         """
         query = select(ServiceDeskTicket).where(
             ServiceDeskTicket.ticket_id == ticket_id,
@@ -75,7 +224,35 @@ class ServiceDeskTicketService:
         sd = (await self.db.execute(query)).scalar_one_or_none()
         if sd is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Service desk ticket not found")
+        if for_edit and developer_id is not None:
+            await self._require_edit(workspace_id, sd, developer_id)
         return sd
+
+    async def _require_edit(
+        self, workspace_id: str, sd: ServiceDeskTicket, developer_id: str
+    ) -> None:
+        """403 unless ``can_edit_ticket`` grants this caller write authority."""
+        from aexy.services.service_desk_service import can_edit_ticket
+
+        assignee_id = (
+            await self.db.execute(select(Ticket.assignee_id).where(Ticket.id == sd.ticket_id))
+        ).scalar_one_or_none()
+        if await can_edit_ticket(
+            self.db,
+            workspace_id,
+            str(developer_id),
+            assignee_id=assignee_id,
+            pending_with=sd.pending_with,
+        ):
+            return
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "You can view this Service Desk ticket but not change it. Only the "
+                "assigned KAM, the queue it is currently with, or a Service Desk "
+                "manager can."
+            ),
+        )
 
     async def _open_segment(self, ticket_id: str) -> TicketPendingSegment | None:
         # Defensive ordering: the partial unique index guarantees one open segment
@@ -103,7 +280,9 @@ class ServiceDeskTicketService:
         note: str | None = None,
         scope_developer_id: str | None = None,
     ) -> ServiceDeskTicketDetail:
-        sd = await self._sd(workspace_id, ticket_id, developer_id=scope_developer_id)
+        sd = await self._sd(
+            workspace_id, ticket_id, developer_id=scope_developer_id, for_edit=True
+        )
         ticket = await self.db.get(Ticket, ticket_id)
         if ticket is None:
             raise HTTPException(status_code=404, detail="Ticket not found")
@@ -179,7 +358,9 @@ class ServiceDeskTicketService:
         data: TicketFieldsUpdate,
         scope_developer_id: str | None = None,
     ) -> ServiceDeskTicketDetail:
-        sd = await self._sd(workspace_id, ticket_id, developer_id=scope_developer_id)
+        sd = await self._sd(
+            workspace_id, ticket_id, developer_id=scope_developer_id, for_edit=True
+        )
         payload = data.model_dump(exclude_unset=True)
         assigned = payload.pop("assigned_kam_id", None)
 
@@ -192,9 +373,291 @@ class ServiceDeskTicketService:
         for k, v in payload.items():
             setattr(sd, k, v)
         if assigned is not None:
-            ticket = await self.db.get(Ticket, ticket_id)
-            if ticket is not None:
-                ticket.assignee_id = assigned
+            await reassign_service_desk_ticket_family(
+                self.db, workspace_id, ticket_id, assigned
+            )
+        await self.db.flush()
+        return await self.get_detail(workspace_id, ticket_id)
+
+    async def split_detected_issues(
+        self,
+        workspace_id: str,
+        ticket_id: str,
+        issue_indexes: list[int],
+        split_by_id: str,
+        scope_developer_id: str | None = None,
+    ) -> dict[str, list[str]]:
+        """Create selected detected issues as children without replacing the primary."""
+        sd = await self._sd(
+            workspace_id, ticket_id, developer_id=scope_developer_id, for_edit=True
+        )
+        primary = (
+            await self.db.execute(
+                select(Ticket)
+                .where(Ticket.id == ticket_id, Ticket.workspace_id == workspace_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one_or_none()
+        if primary is None:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+
+        field_values = dict(primary.field_values or {})
+        raw_issues = field_values.get("detected_issues")
+        if not isinstance(raw_issues, list) or len(raw_issues) < 2:
+            raise HTTPException(status_code=400, detail="Ticket has no detected issues to split")
+        if not issue_indexes:
+            raise HTTPException(status_code=400, detail="Select at least one issue to split")
+        if len(issue_indexes) != len(set(issue_indexes)):
+            raise HTTPException(status_code=400, detail="Issue indexes must be unique")
+        if any(index < 2 or index > len(raw_issues) for index in issue_indexes):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Issue indexes must be between 2 and {len(raw_issues)}",
+            )
+
+        done_indexes = _split_done_indexes(field_values, len(raw_issues))
+        reused = sorted(set(issue_indexes).intersection(done_indexes))
+        if reused:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Issue indexes already split: {reused}",
+            )
+
+        try:
+            selected = [
+                (index, DetectedIssue.model_validate(raw_issues[index - 1]).model_dump())
+                for index in sorted(issue_indexes)
+            ]
+        except ValidationError as exc:
+            raise HTTPException(status_code=400, detail="Selected detected issue is invalid") from exc
+
+        from aexy.models.service_desk import ServiceDeskMailbox
+        from aexy.schemas.service_desk import InboundEmail
+        from aexy.services.service_desk_intake_service import ServiceDeskIntakeService
+
+        mailbox = await self.db.get(ServiceDeskMailbox, sd.mailbox_id) if sd.mailbox_id else None
+        source_email = InboundEmail(
+            to=mailbox.address if mailbox else "",
+            from_email=primary.submitter_email or "",
+            from_name=primary.submitter_name,
+            subject=str(field_values.get("subject") or ""),
+            body_text=str(field_values.get("body") or ""),
+            message_id=sd.source_message_id,
+        )
+        actor = await self.db.get(Developer, split_by_id)
+        actor_label = (actor.name or actor.email or split_by_id) if actor else split_by_id
+        primary_display_id = f"{TICKET_PREFIX}-{primary.ticket_number}"
+        intake = ServiceDeskIntakeService(self.db)
+
+        try:
+            async with self.db.begin_nested():
+                children: list[Ticket] = []
+                for _, issue in selected:
+                    child = await intake._create_child_ticket(
+                        workspace_id,
+                        primary,
+                        sd,
+                        source_email,
+                        issue,
+                        mailbox,
+                    )
+                    child_segment = (
+                        await self.db.execute(
+                            select(TicketPendingSegment).where(
+                                TicketPendingSegment.ticket_id == child.id,
+                                TicketPendingSegment.exited_at.is_(None),
+                            )
+                        )
+                    ).scalar_one()
+                    child_segment.changed_by_id = split_by_id
+                    child_segment.note = f"Split by {actor_label} from {primary_display_id}"
+                    children.append(child)
+
+                created = [
+                    {"ticket_id": child.id, "display_id": f"{TICKET_PREFIX}-{child.ticket_number}"}
+                    for child in children
+                ]
+                updated_values = dict(primary.field_values or {})
+                existing_children = updated_values.get("split_children")
+                updated_values["split_children"] = (
+                    list(existing_children) if isinstance(existing_children, list) else []
+                ) + created
+                updated_values["split_done_indexes"] = sorted(
+                    set(done_indexes).union(issue_indexes)
+                )
+                primary.field_values = updated_values
+                self.db.add(
+                    TicketResponse(
+                        id=str(uuid4()),
+                        ticket_id=primary.id,
+                        author_id=split_by_id,
+                        content=(
+                            f"Split issues {', '.join(str(index) for index, _ in selected)} into "
+                            f"{', '.join(item['display_id'] for item in created)} by {actor_label}"
+                        ),
+                        is_internal=True,
+                    )
+                )
+                await self.db.flush()
+        except Exception as exc:  # noqa: BLE001 — the savepoint guarantees no partial split
+            logger.warning("Service desk: human split rolled back (%s)", exc)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Ticket split failed; no child tickets were created",
+            ) from exc
+
+        return {
+            "created_ticket_ids": [child.id for child in children],
+            "created_ticket_display_ids": [
+                f"{TICKET_PREFIX}-{child.ticket_number}" for child in children
+            ],
+        }
+
+    # ------------------------------------------------- outbound stakeholder mail
+
+    async def _email_recipients(
+        self, workspace_id: str, sd: ServiceDeskTicket, ticket: Ticket
+    ) -> list["TicketEmailRecipient"]:
+        """The closed set of addresses this ticket may be emailed.
+
+        Master data holds exact addresses as well as bare domains; only exact
+        addresses can be written to, so domain rows are skipped. The ticket's own
+        partner is offered (not every partner — a KAM has no business seeing
+        another partner's contacts), every configured insurer is offered because
+        a claim usually has to go to an insurer that intake never linked, and the
+        requester is offered so the original thread can be answered.
+
+        This is an allowlist, not a convenience: the send goes out of the
+        workspace's real Gmail account, so a free-text recipient would turn a
+        ticket action into an open relay for whoever holds a KAM login.
+        """
+        from aexy.models.service_desk import (
+            ServiceDeskInsurer,
+            ServiceDeskInsurerDomain,
+            ServiceDeskPartnerDomain,
+        )
+        from aexy.schemas.service_desk import TicketEmailRecipient
+
+        out: list[TicketEmailRecipient] = []
+        seen: set[str] = set()
+
+        def add(address: str | None, label: str) -> None:
+            key = (address or "").strip().lower()
+            if "@" not in key or key in seen:
+                return
+            seen.add(key)
+            out.append(TicketEmailRecipient(email=key, label=label))
+
+        if sd.partner_id:
+            rows = (
+                await self.db.execute(
+                    select(ServiceDeskPartner.name, ServiceDeskPartnerDomain.domain)
+                    .join(
+                        ServiceDeskPartnerDomain,
+                        ServiceDeskPartnerDomain.partner_id == ServiceDeskPartner.id,
+                    )
+                    .where(
+                        ServiceDeskPartner.id == sd.partner_id,
+                        ServiceDeskPartner.workspace_id == workspace_id,
+                    )
+                    .order_by(ServiceDeskPartnerDomain.domain)
+                )
+            ).all()
+            for name, domain in rows:
+                add(domain, f"{name} (partner)")
+
+        rows = (
+            await self.db.execute(
+                select(ServiceDeskInsurer.name, ServiceDeskInsurerDomain.domain)
+                .join(
+                    ServiceDeskInsurerDomain,
+                    ServiceDeskInsurerDomain.insurer_id == ServiceDeskInsurer.id,
+                )
+                .where(
+                    ServiceDeskInsurer.workspace_id == workspace_id,
+                    ServiceDeskInsurer.is_active.is_(True),
+                )
+                .order_by(ServiceDeskInsurer.name, ServiceDeskInsurerDomain.domain)
+            )
+        ).all()
+        for name, domain in rows:
+            add(domain, f"{name} (insurer)")
+
+        add(ticket.submitter_email, ticket.submitter_name or "Requester")
+        return out
+
+    async def email_stakeholder(
+        self,
+        workspace_id: str,
+        ticket_id: str,
+        to_email: str,
+        subject: str,
+        body: str,
+        sender_id: str,
+        scope_developer_id: str | None = None,
+    ) -> ServiceDeskTicketDetail:
+        """Send a ticket email as the watched mailbox and log it on the ticket.
+
+        The BSD number is forced into the subject and the ticket's Gmail thread
+        is passed through, because those are the two things the deterministic
+        inbound matcher looks at — an outbound message without them produces a
+        reply that opens a second ticket instead of continuing this one.
+        """
+        from aexy.models.service_desk import ServiceDeskMailbox
+        from aexy.services.service_desk_intake_service import _BSD_RE
+        from aexy.services.service_desk_mailer import send_stakeholder_email
+
+        sd = await self._sd(
+            workspace_id, ticket_id, developer_id=scope_developer_id, for_edit=True
+        )
+        ticket = await self.db.get(Ticket, ticket_id)
+        if ticket is None:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+
+        recipient = to_email.strip().lower()
+        allowed = {
+            option.email
+            for option in await self._email_recipients(workspace_id, sd, ticket)
+        }
+        if recipient not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Recipient must be an exact address configured for this ticket's "
+                    "partner or an insurer, or the ticket's requester"
+                ),
+            )
+
+        display_id = f"{TICKET_PREFIX}-{ticket.ticket_number}"
+        match = _BSD_RE.search(subject)
+        if match is None or int(match.group(1)) != ticket.ticket_number:
+            subject = f"[{display_id}] {subject}"
+
+        mailbox = await self.db.get(ServiceDeskMailbox, sd.mailbox_id) if sd.mailbox_id else None
+        try:
+            await send_stakeholder_email(
+                self.db, mailbox, recipient, subject, body, thread_id=sd.thread_ref
+            )
+        except Exception as exc:  # noqa: BLE001 — the user is waiting on this send
+            logger.warning("Service desk: stakeholder email failed for %s (%s)", display_id, exc)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"The email could not be sent: {exc}",
+            ) from exc
+
+        # author_id is what marks this correspondence outgoing; inbound replies
+        # are stored with only an author_email.
+        self.db.add(
+            TicketResponse(
+                id=str(uuid4()),
+                ticket_id=ticket_id,
+                author_id=sender_id,
+                author_email=mailbox.address if mailbox else None,
+                content=f"To: {recipient}\nSubject: {subject}\n\n{body}",
+                is_internal=False,
+            )
+        )
         await self.db.flush()
         return await self.get_detail(workspace_id, ticket_id)
 
@@ -284,7 +747,7 @@ class ServiceDeskTicketService:
             current_pending_with=current_pending,
             current_stage_seconds=current_seconds,
             current_stage_days=clock.to_days(current_seconds),
-            breach_level=clock.breach_level(current_seconds) if current_pending else "green",
+            breach_level=clock.breach_level(current_seconds, current_pending) if current_pending else "green",
             stakeholder_seconds=dict(stakeholder),
         )
 
@@ -316,6 +779,22 @@ class ServiceDeskTicketService:
 
         tat = await self.compute_tat(ticket_id, ticket)
         fv = ticket.field_values or {}
+        raw_detected_issues = fv.get("detected_issues")
+        detected_issues = (
+            [DetectedIssue.model_validate(issue) for issue in raw_detected_issues]
+            if isinstance(raw_detected_issues, list)
+            else []
+        )
+        correspondence = (
+            await self.db.execute(
+                select(TicketResponse)
+                .where(
+                    TicketResponse.ticket_id == ticket_id,
+                    TicketResponse.is_internal.is_(False),
+                )
+                .order_by(TicketResponse.created_at)
+            )
+        ).scalars().all()
 
         return ServiceDeskTicketDetail(
             id=sd.id,
@@ -340,7 +819,20 @@ class ServiceDeskTicketService:
             ai_confidence=sd.ai_confidence,
             created_at=sd.created_at,
             linked_task_id=ticket.linked_task_id,
+            detected_issues=detected_issues,
+            split_done_indexes=_split_done_indexes(fv, len(detected_issues)),
             segments=[SegmentResponse.model_validate(s) for s in segments],
+            correspondence=[
+                ServiceDeskCorrespondence(
+                    id=response.id,
+                    author_email=response.author_email,
+                    content=response.content,
+                    created_at=response.created_at,
+                    direction="outgoing" if response.author_id else "incoming",
+                )
+                for response in correspondence
+            ],
+            email_recipients=await self._email_recipients(workspace_id, sd, ticket),
             tat=tat,
         )
 
@@ -367,7 +859,9 @@ class ServiceDeskTicketService:
         from aexy.models.team import Team
 
         ticket = await self.db.get(Ticket, ticket_id)
-        sd = await self._sd(workspace_id, ticket_id, developer_id=scope_developer_id)
+        sd = await self._sd(
+            workspace_id, ticket_id, developer_id=scope_developer_id, for_edit=True
+        )
         if ticket is None or ticket.workspace_id != workspace_id:
             raise HTTPException(status_code=404, detail="Ticket not found")
         if ticket.linked_task_id:
@@ -486,7 +980,7 @@ class ServiceDeskTicketService:
             stage_days = clock.to_days(stage_seconds)
             # Overall stays wall clock: that is how long the requester waited.
             overall_days = round(int((now - _aware(ticket.created_at)).total_seconds()) / _DAY, 2)
-            level = clock.breach_level(stage_seconds)
+            level = clock.breach_level(stage_seconds, sd.pending_with)
 
             bucket = buckets.setdefault(sd.pending_with, StakeholderBucket(pending_with=sd.pending_with))
             setattr(bucket, level, getattr(bucket, level) + 1)

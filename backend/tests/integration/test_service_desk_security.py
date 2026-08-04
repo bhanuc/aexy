@@ -14,7 +14,7 @@ at one point and is easy to lose again in a refactor:
    could reach any ticket by id.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from aexy.core.config import get_settings
 from aexy.models.developer import Developer
 from aexy.models.organization import Department, DepartmentMember
+from aexy.models.ticketing import Ticket
 from aexy.models.workspace import Workspace, WorkspaceMember
 
 settings = get_settings()
@@ -128,6 +129,9 @@ async def test_outsider_is_locked_out_of_another_workspace(client, tenants, seed
         "settings write": await client.patch(f"{b}/settings", headers=h, json={"ai_classification_enabled": True}),
         "template write": await client.patch(f"{b}/templates/receipt", headers=h, json={"subject": "x", "body": "y"}),
         "pending-with": await client.patch(f"{b}/tickets/{seeded_ticket}/pending-with", headers=h, json={"pending_with": "closed"}),
+        "human split": await client.post(
+            f"{b}/tickets/{seeded_ticket}/split", headers=h, json={"issue_indexes": [2]}
+        ),
         "manual ticket": await client.post(f"{b}/tickets/manual", headers=h, json={"subject": "x", "request_type": "query"}),
         "org departments": await client.get(f"/api/v1/workspaces/{ws}/organization/departments", headers=h),
         "org create": await client.post(f"/api/v1/workspaces/{ws}/organization/departments", headers=h, json={"name": "Injected"}),
@@ -135,6 +139,7 @@ async def test_outsider_is_locked_out_of_another_workspace(client, tenants, seed
     }
     for label, resp in attempts.items():
         assert resp.status_code == 403, f"outsider reached {label}: {resp.status_code} {resp.text[:120]}"
+    assert len((await client.get(f"{b}/tickets", headers=tenants["admin"])).json()) == 1
 
 
 @pytest.mark.asyncio
@@ -266,11 +271,58 @@ async def test_ops_can_change_the_working_hours_the_clock_runs_on(client, tenant
 
 
 @pytest.mark.asyncio
-async def test_row_scope_applies_to_by_id_paths_not_just_the_list(client, tenants, seeded_ticket):
+async def test_manager_can_run_and_clear_a_short_test_sla_but_member_cannot(client, tenants):
+    ws = tenants["ws_a"]
+    b = _sd(ws)
+    admin, plain = tenants["admin"], tenants["plain"]
+    test_sla = {
+        "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=30)).isoformat(),
+        "kam": {"amber_minutes": 5, "red_minutes": 10},
+        "insurer": {"amber_minutes": 6, "red_minutes": 12},
+        "partner": {"amber_minutes": 7, "red_minutes": 14},
+    }
+
+    denied = await client.patch(f"{b}/settings", headers=plain, json={"test_sla": test_sla})
+    assert denied.status_code == 403
+
+    started = await client.patch(f"{b}/settings", headers=admin, json={"test_sla": test_sla})
+    assert started.status_code == 200, started.text
+    assert started.json()["test_sla"]["kam"] == {"amber_minutes": 5, "red_minutes": 10}
+
+    cleared = await client.patch(f"{b}/settings", headers=admin, json={"clear_test_sla": True})
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["test_sla"] is None
+
+
+@pytest.mark.asyncio
+async def test_row_scope_applies_to_by_id_paths_not_just_the_list(
+    client, db_session, tenants, seeded_ticket
+):
     """A sales-scoped member sees only sales tickets — including by id."""
     ws = tenants["ws_a"]
     h_sales, h_admin = tenants["sales"], tenants["admin"]
     b = _sd(ws)
+    primary = await db_session.get(Ticket, seeded_ticket)
+    primary.field_values = {
+        **primary.field_values,
+        "detected_issues": [
+            {
+                "summary": "Keep this request on the primary",
+                "request_type": "claims",
+                "lob": None,
+                "confidence": 0.9,
+                "split_reason": None,
+            },
+            {
+                "summary": "Create a separate payout request",
+                "request_type": "payout",
+                "lob": None,
+                "confidence": 0.9,
+                "split_reason": "Separate finance workflow",
+            },
+        ],
+    }
+    await db_session.commit()
 
     # The seeded ticket is pending with kam, so it is out of scope for sales.
     assert (await client.get(f"{b}/tickets", headers=h_sales)).json() == []
@@ -281,12 +333,20 @@ async def test_row_scope_applies_to_by_id_paths_not_just_the_list(client, tenant
                                json={"request_type": "payout"})).status_code == 404
     assert (await client.post(f"{b}/tickets/{seeded_ticket}/convert-to-task", headers=h_sales,
                               json={"project_id": str(uuid4())})).status_code == 404
+    assert (await client.post(f"{b}/tickets/{seeded_ticket}/split", headers=h_sales,
+                              json={"issue_indexes": [2]})).status_code == 404
+    assert len((await client.get(f"{b}/tickets", headers=h_admin)).json()) == 1
 
     # Once the admin hands it to sales, it becomes visible to them.
     assert (await client.patch(f"{b}/tickets/{seeded_ticket}/pending-with", headers=h_admin,
                               json={"pending_with": "sales"})).status_code == 200
     assert (await client.get(f"{b}/tickets/{seeded_ticket}", headers=h_sales)).status_code == 200
     assert [t["ticket_id"] for t in (await client.get(f"{b}/tickets", headers=h_sales)).json()] == [seeded_ticket]
+    split = await client.post(
+        f"{b}/tickets/{seeded_ticket}/split", headers=h_sales, json={"issue_indexes": [2]}
+    )
+    assert split.status_code == 200, split.text
+    assert len(split.json()["created_ticket_ids"]) == 1
 
 
 @pytest.mark.asyncio

@@ -13,7 +13,8 @@ import {
   useServiceDeskSettings,
   useServiceDeskTemplates,
 } from "@/hooks/useServiceDesk";
-import { ServiceDeskTemplate } from "@/lib/service-desk-api";
+import { useWorkspace, useWorkspaceMembers } from "@/hooks/useWorkspace";
+import { ServiceDeskTemplate, TestSLAOverride, TestStageSLA } from "@/lib/service-desk-api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,6 +67,34 @@ function TemplateEditor({
           </Button>
         )}
       </div>
+    </div>
+  );
+}
+
+function ToggleRow({
+  description,
+  checked,
+  disabled,
+  onToggle,
+}: {
+  description: string;
+  checked: boolean;
+  disabled: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <p className="max-w-2xl text-sm text-muted-foreground">{description}</p>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        disabled={disabled}
+        onClick={onToggle}
+        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${checked ? "bg-primary" : "bg-muted-foreground/30"}`}
+      >
+        <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${checked ? "translate-x-5" : "translate-x-0.5"}`} />
+      </button>
     </div>
   );
 }
@@ -178,6 +207,124 @@ function hoursBetween(from: string, to: string): string {
   return (Math.max(mins, 0) / 60).toFixed(1);
 }
 
+function localDateTime(value?: string): string {
+  const date = value ? new Date(value) : new Date(Date.now() + 4 * 60 * 60 * 1000);
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function TestSLAEditor({
+  value,
+  canManage,
+  saving,
+  onSave,
+  onClear,
+}: {
+  value: TestSLAOverride | null | undefined;
+  canManage: boolean;
+  saving: boolean;
+  onSave: (value: TestSLAOverride) => void;
+  onClear: () => void;
+}) {
+  const t = useTranslations("serviceDesk");
+  const [expiresAt, setExpiresAt] = useState(() => localDateTime(value?.expires_at));
+  const [kamAmber, setKamAmber] = useState(value?.kam.amber_minutes ?? 8);
+  const [kamRed, setKamRed] = useState(value?.kam.red_minutes ?? 15);
+  const [insurerAmber, setInsurerAmber] = useState(value?.insurer.amber_minutes ?? 10);
+  const [insurerRed, setInsurerRed] = useState(value?.insurer.red_minutes ?? 20);
+  const [partnerAmber, setPartnerAmber] = useState(value?.partner.amber_minutes ?? 8);
+  const [partnerRed, setPartnerRed] = useState(value?.partner.red_minutes ?? 15);
+
+  useEffect(() => {
+    if (!value) return;
+    setExpiresAt(localDateTime(value.expires_at));
+    setKamAmber(value.kam.amber_minutes);
+    setKamRed(value.kam.red_minutes);
+    setInsurerAmber(value.insurer.amber_minutes);
+    setInsurerRed(value.insurer.red_minutes);
+    setPartnerAmber(value.partner.amber_minutes);
+    setPartnerRed(value.partner.red_minutes);
+  }, [value]);
+
+  const validRule = (amber: number, red: number) => amber >= 1 && red > amber && red <= 240;
+  const valid =
+    Number.isFinite(Date.parse(expiresAt)) &&
+    new Date(expiresAt).getTime() > Date.now() &&
+    validRule(kamAmber, kamRed) &&
+    validRule(insurerAmber, insurerRed) &&
+    validRule(partnerAmber, partnerRed);
+  const stageRows: Array<[string, TestStageSLA, (value: number) => void, (value: number) => void]> = [
+    [t("testSla.kam"), { amber_minutes: kamAmber, red_minutes: kamRed }, setKamAmber, setKamRed],
+    [t("testSla.insurer"), { amber_minutes: insurerAmber, red_minutes: insurerRed }, setInsurerAmber, setInsurerRed],
+    [t("testSla.partner"), { amber_minutes: partnerAmber, red_minutes: partnerRed }, setPartnerAmber, setPartnerRed],
+  ];
+
+  return (
+    <div className="space-y-3">
+      <p className="max-w-2xl text-sm text-muted-foreground">{t("testSla.description")}</p>
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem_8rem]">
+        <span className="text-xs text-muted-foreground">{t("testSla.stage")}</span>
+        <span className="text-xs text-muted-foreground">{t("testSla.amber")}</span>
+        <span className="text-xs text-muted-foreground">{t("testSla.red")}</span>
+        {stageRows.map(([label, rule, setAmber, setRed]) => (
+          <div className="contents" key={label}>
+            <span className="self-center text-sm font-medium">{label}</span>
+            <Input
+              type="number"
+              min={1}
+              max={240}
+              value={rule.amber_minutes}
+              disabled={!canManage}
+              onChange={(event) => setAmber(Number(event.target.value))}
+            />
+            <Input
+              type="number"
+              min={2}
+              max={240}
+              value={rule.red_minutes}
+              disabled={!canManage}
+              onChange={(event) => setRed(Number(event.target.value))}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-end gap-3">
+        <div>
+          <label className="mb-1 block text-xs text-muted-foreground">{t("testSla.expires")}</label>
+          <Input
+            type="datetime-local"
+            value={expiresAt}
+            disabled={!canManage}
+            onChange={(event) => setExpiresAt(event.target.value)}
+            className="w-60"
+          />
+        </div>
+        {canManage && (
+          <Button
+            size="sm"
+            disabled={!valid || saving}
+            onClick={() => onSave({
+              expires_at: new Date(expiresAt).toISOString(),
+              kam: { amber_minutes: kamAmber, red_minutes: kamRed },
+              insurer: { amber_minutes: insurerAmber, red_minutes: insurerRed },
+              partner: { amber_minutes: partnerAmber, red_minutes: partnerRed },
+            })}
+          >
+            {saving ? t("testSla.saving") : t("testSla.save")}
+          </Button>
+        )}
+        {canManage && value && (
+          <Button size="sm" variant="outline" disabled={saving} onClick={onClear}>
+            {t("testSla.clear")}
+          </Button>
+        )}
+      </div>
+      {!valid && <p className="text-xs text-destructive">{t("testSla.invalid")}</p>}
+      {value && <p className="text-xs text-amber-700 dark:text-amber-400">{t("testSla.active")}</p>}
+    </div>
+  );
+}
+
 export default function ServiceDeskSettingsPage() {
   const t = useTranslations("serviceDesk");
   const partners = usePartners();
@@ -187,6 +334,8 @@ export default function ServiceDeskSettingsPage() {
   const settings = useServiceDeskSettings();
   const templates = useServiceDeskTemplates();
   const m = useServiceDeskMutations();
+  const { currentWorkspace } = useWorkspace();
+  const { members, isLoading: membersLoading } = useWorkspaceMembers(currentWorkspace?.id ?? null);
 
   const [pName, setPName] = useState("");
   const [pDomains, setPDomains] = useState("");
@@ -219,23 +368,36 @@ export default function ServiceDeskSettingsPage() {
 
       {/* AI toggle (org level) */}
       <Section title={t("ai.title")}>
-        <div className="flex items-start justify-between gap-4">
-          <p className="max-w-2xl text-sm text-muted-foreground">{t("ai.description")}</p>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={!!settings.data?.ai_classification_enabled}
-            disabled={!canManage || m.updateSettings.isPending || settings.isLoading}
-            onClick={() =>
-              m.updateSettings.mutate({
-                ai_classification_enabled: !settings.data?.ai_classification_enabled,
-              })
-            }
-            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${settings.data?.ai_classification_enabled ? "bg-primary" : "bg-muted-foreground/30"}`}
-          >
-            <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${settings.data?.ai_classification_enabled ? "translate-x-5" : "translate-x-0.5"}`} />
-          </button>
-        </div>
+        <ToggleRow
+          description={t("ai.description")}
+          checked={!!settings.data?.ai_classification_enabled}
+          disabled={!canManage || m.updateSettings.isPending || settings.isLoading}
+          onToggle={() =>
+            m.updateSettings.mutate({
+              ai_classification_enabled: !settings.data?.ai_classification_enabled,
+            })
+          }
+        />
+      </Section>
+
+      {/* Auto-split (org level) — only ever acts on AI-read email */}
+      <Section title={t("autoSplit.title")}>
+        <ToggleRow
+          description={t("autoSplit.description")}
+          checked={!!settings.data?.auto_split_enabled}
+          disabled={
+            !canManage ||
+            !settings.data?.ai_classification_enabled ||
+            m.updateSettings.isPending ||
+            settings.isLoading
+          }
+          onToggle={() =>
+            m.updateSettings.mutate({ auto_split_enabled: !settings.data?.auto_split_enabled })
+          }
+        />
+        {!settings.isLoading && !settings.data?.ai_classification_enabled && (
+          <p className="text-xs text-muted-foreground">{t("autoSplit.requiresAi")}</p>
+        )}
       </Section>
 
       {/* Working hours — the shift the breach clock runs on */}
@@ -249,6 +411,16 @@ export default function ServiceDeskSettingsPage() {
           onSave={(start, end) =>
             m.updateSettings.mutate({ working_hours_start: start, working_hours_end: end })
           }
+        />
+      </Section>
+
+      <Section title={t("testSla.title")}>
+        <TestSLAEditor
+          value={settings.data?.test_sla}
+          canManage={canManage}
+          saving={m.updateSettings.isPending}
+          onSave={(test_sla) => m.updateSettings.mutate({ test_sla })}
+          onClear={() => m.updateSettings.mutate({ clear_test_sla: true })}
         />
       </Section>
 
@@ -276,7 +448,22 @@ export default function ServiceDeskSettingsPage() {
           <div className="flex flex-wrap items-end gap-2">
             <Input value={pName} onChange={(e) => setPName(e.target.value)} placeholder={t("settings.name")} className="max-w-[180px]" />
             <Input value={pDomains} onChange={(e) => setPDomains(e.target.value)} placeholder={t("settings.domainsHint")} className="max-w-[220px]" />
-            <Input value={pKam} onChange={(e) => setPKam(e.target.value)} placeholder={t("settings.assignedKam")} className="max-w-[200px]" />
+            <select
+              value={pKam}
+              onChange={(e) => setPKam(e.target.value)}
+              aria-label={t("settings.assignedKam")}
+              className="h-10 max-w-[240px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+            >
+              <option value="">{t("settings.noAssignedKam")}</option>
+              {members
+                .filter((member) => member.status === "active")
+                .map((member) => (
+                  <option key={member.developer_id} value={member.developer_id}>
+                    {member.developer_name || member.developer_email || member.developer_id}
+                  </option>
+                ))}
+            </select>
+            {membersLoading && <Spinner size="sm" />}
             <Button
               disabled={!pName.trim() || m.createPartner.isPending}
               onClick={async () => {

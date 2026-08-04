@@ -24,7 +24,8 @@ TEMPLATES: dict[str, dict] = {
         "body": (
             "Dear {{requester_name}},\n\n"
             "Thank you for writing to Bimaplan Operations. "
-            "Your request has been logged as Ticket #{{display_id}}.\n\n"
+            "Your request has been logged as Ticket #{{display_id}}. "
+            "{{additional_tickets}}\n\n"
             "Our team will review this and get back to you at the earliest. "
             "Please quote the Ticket ID in any further correspondence on this matter.\n\n"
             "Regards,\nBimaplan Operations"
@@ -33,6 +34,9 @@ TEMPLATES: dict[str, dict] = {
             {"name": "requester_name", "default": "there"},
             {"name": "display_id", "default": ""},
             {"name": "subject", "default": "Your request"},
+            # Filled only when one email produced more than one ticket; empty
+            # otherwise, so the ordinary receipt reads exactly as it always did.
+            {"name": "additional_tickets", "default": ""},
         ],
     },
     "closure": {

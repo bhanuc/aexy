@@ -19,6 +19,13 @@ from aexy.models.service_desk import MailboxChannel, ServiceDeskMailbox
 
 logger = logging.getLogger(__name__)
 
+# Stamped on every service-desk email we send through Gmail, and checked by
+# intake before a ticket is created. The synced mailbox is the same Google
+# account these receipts are sent from, so our own sent mail comes back through
+# the sync — without a deterministic marker every acknowledgement would be
+# ingested as a fresh ticket, which would then be acknowledged in turn.
+OUTBOUND_MARKER_HEADER = "X-Aexy-Service-Desk"
+
 
 async def _send_via_gmail(
     db: AsyncSession,
@@ -38,7 +45,12 @@ async def _send_via_gmail(
     mime = MIMEText(body_text)
     mime["To"] = to_email
     mime["From"] = from_address
+    # Keep the watched mailbox in the reply path explicitly. Gmail already sends
+    # as the connected account, but a stakeholder replying to a display name or
+    # a forwarded copy can otherwise answer somewhere the desk never sees.
+    mime["Reply-To"] = from_address
     mime["Subject"] = subject
+    mime[OUTBOUND_MARKER_HEADER] = "1"
     raw = base64.urlsafe_b64encode(mime.as_bytes()).decode()
 
     payload: dict = {"raw": raw}
@@ -47,6 +59,36 @@ async def _send_via_gmail(
 
     await GmailSyncService(db)._make_gmail_request(
         integration, "POST", "/users/me/messages/send", json=payload
+    )
+
+
+async def send_stakeholder_email(
+    db: AsyncSession,
+    mailbox: ServiceDeskMailbox | None,
+    to_email: str,
+    subject: str,
+    body_text: str,
+    thread_id: str | None = None,
+) -> None:
+    """Send a KAM-composed ticket email AS the watched mailbox. Raises on failure.
+
+    Deliberately not best-effort, unlike the automatic receipts. This is a
+    person clicking Send, and the transactional fallback would deliver from a
+    system address the stakeholder cannot reply to — their answer would never
+    reach the watched mailbox and so never reach the ticket. Failing loudly
+    lets the UI say so instead of logging an outbound message that never left.
+    """
+    if (
+        mailbox is None
+        or mailbox.channel != MailboxChannel.GMAIL_SYNC.value
+        or not mailbox.integration_id
+    ):
+        raise RuntimeError(
+            "This ticket's mailbox is not linked to a connected Gmail account, "
+            "so outbound stakeholder email cannot be sent from it"
+        )
+    await _send_via_gmail(
+        db, mailbox.integration_id, mailbox.address, to_email, subject, body_text, thread_id
     )
 
 
