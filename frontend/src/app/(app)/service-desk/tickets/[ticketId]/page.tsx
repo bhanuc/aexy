@@ -8,11 +8,9 @@ import { useTranslations } from "next-intl";
 import {
   useServiceDeskTicket,
   useServiceDeskMutations,
-  useServiceDeskSettings,
   useLobs,
   usePartners,
 } from "@/hooks/useServiceDesk";
-import { useAuth } from "@/hooks/useAuth";
 import { useProjects } from "@/hooks/useProjects";
 import { useWorkspace, useWorkspaceMembers } from "@/hooks/useWorkspace";
 import { PendingWith, RequestType } from "@/lib/service-desk-api";
@@ -51,8 +49,6 @@ export default function ServiceDeskTicketDetailPage() {
   const { data: ticket, isLoading } = useServiceDeskTicket(ticketId);
   const { changePendingWith, convertToTask, splitDetectedIssues, updateTicket, emailStakeholder } =
     useServiceDeskMutations();
-  const { data: settings } = useServiceDeskSettings();
-  const { user } = useAuth();
   const { currentWorkspace } = useWorkspace();
   const { projects } = useProjects(currentWorkspace?.id ?? null);
   const { data: lobs } = useLobs();
@@ -79,11 +75,10 @@ export default function ServiceDeskTicketDetailPage() {
   if (isLoading) return <div className="flex justify-center py-16"><Spinner /></div>;
   if (!ticket) return <div className="p-6 text-muted-foreground">Not found.</div>;
 
-  // Write authority, mirroring the server: a Service Desk Manager may act on any
-  // ticket, a KAM only on their own. An Ops Lead sees every ticket and edits
-  // none, so visibility alone must not unlock a single control here.
-  const canEdit =
-    !!settings?.can_manage || (!!user?.id && ticket.assigned_kam_id === user.id);
+  // Write authority as the server computed it for this caller — manager, the
+  // assigned KAM, or a member of the queue the ticket is pending with. The rule
+  // lives only in the backend (can_edit_ticket); the UI must not re-derive it.
+  const canEdit = ticket.can_edit;
 
   const mailStageRaw = ticket.email_recipients.find((r) => r.email === mailTo)?.stage ?? null;
   // Already there? Then there is nothing to move and no choice to offer.

@@ -131,6 +131,23 @@ async def can_edit_ticket(
     return function_key in await _caller_functions(db, workspace_id, developer_id)
 
 
+async def can_create_manual_ticket(db: AsyncSession, workspace_id: str, developer_id: str) -> bool:
+    """Whether the caller may log a phone/WhatsApp request as a ticket.
+
+    Manual logging is KAM/manager work. The same visibility-is-not-authority
+    split as ``can_edit_ticket``: an Ops Lead's ``can_view_all_service_desk``
+    is deliberately read-only, and plain module-view is weaker still, so
+    neither may create tickets.
+    """
+    from aexy.services.permission_service import PermissionService
+
+    if await PermissionService(db).check_permission(
+        workspace_id, developer_id, "can_manage_service_desk"
+    ):
+        return True
+    return _ASSIGNMENT_ONLY_FUNCTION in await _caller_functions(db, workspace_id, developer_id)
+
+
 async def resolve_scope_clause(db: AsyncSession, workspace_id: str, developer_id: str):
     """Row-level visibility for the caller (BRD §11 / plan §10).
 

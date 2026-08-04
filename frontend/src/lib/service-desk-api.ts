@@ -143,6 +143,8 @@ export interface ServiceDeskTicketDetail extends ServiceDeskTicket {
   email_recipients: TicketEmailRecipient[];
   attachments: TicketAttachment[];
   tat: TicketTAT;
+  /** Server-computed write authority for the requesting caller. */
+  can_edit: boolean;
 }
 
 export interface StakeholderBucket {

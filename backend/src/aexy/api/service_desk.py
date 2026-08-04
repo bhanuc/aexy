@@ -209,7 +209,14 @@ async def list_tickets(workspace_id: str, db: AsyncSession = Depends(get_db), cu
 
 
 @router.post("/tickets/manual", status_code=status.HTTP_201_CREATED)
-async def create_manual_ticket(workspace_id: str, data: ManualTicketCreate, db: AsyncSession = Depends(get_db), _: Developer = Depends(get_current_developer)):
+async def create_manual_ticket(workspace_id: str, data: ManualTicketCreate, db: AsyncSession = Depends(get_db), current: Developer = Depends(get_current_developer)):
+    from aexy.services.service_desk_service import can_create_manual_ticket
+
+    if not await can_create_manual_ticket(db, workspace_id, str(current.id)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only a KAM or a Service Desk manager can log a manual ticket",
+        )
     ticket_id = await ServiceDeskService(db).create_manual_ticket(workspace_id, data)
     return {"ticket_id": ticket_id}
 

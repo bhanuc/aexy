@@ -222,4 +222,3 @@ async def test_attachments_are_listed_but_never_opened_without_ai():
     assert context[0]["filename"] == "claims.xlsx"
     assert context[0]["size_bytes"] == 4096
     assert "preview" not in context[0], "no file contents are read in free mode"
-

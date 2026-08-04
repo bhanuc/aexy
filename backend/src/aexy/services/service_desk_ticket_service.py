@@ -889,6 +889,18 @@ class ServiceDeskTicketService:
         if ticket is None:
             raise HTTPException(status_code=404, detail="Ticket not found")
 
+        can_edit = False
+        if scope_developer_id is not None:
+            from aexy.services.service_desk_service import can_edit_ticket
+
+            can_edit = await can_edit_ticket(
+                self.db,
+                workspace_id,
+                str(scope_developer_id),
+                assignee_id=ticket.assignee_id,
+                pending_with=sd.pending_with,
+            )
+
         partner_name = None
         if sd.partner_id:
             partner_name = (
@@ -975,6 +987,7 @@ class ServiceDeskTicketService:
                 for item in self._ticket_attachments(ticket)
             ],
             tat=tat,
+            can_edit=can_edit,
         )
 
     # ------------------------------------------------------- convert to task

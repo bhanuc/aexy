@@ -380,3 +380,40 @@ async def test_master_data_ids_must_belong_to_the_workspace(client, tenants, see
     r = await client.post(f"{b}/tickets/manual", headers=h,
                           json={"subject": "x", "request_type": "query", "partner_id": str(uuid4())})
     assert r.status_code == 404, r.text
+
+
+@pytest.mark.asyncio
+async def test_manual_logging_is_kam_or_manager_work(client, tenants, db_session):
+    """Visibility is not authority on the create path either: a view-only Ops
+    Lead (and a plain viewer) gets 403, while a KAM — a plain member placed in
+    the Operations-KAM function — gets 201. Managers are covered by the admin
+    in ``seeded_ticket``."""
+    ws = tenants["ws_a"]
+
+    kam = await _developer(db_session, "kam-member")
+    db_session.add(WorkspaceMember(workspace_id=ws, developer_id=kam.id, role="member", status="active"))
+    dept = Department(
+        id=str(uuid4()), workspace_id=ws, name="Operations-KAM",
+        slug=f"ops-kam-{uuid4().hex[:6]}", function_key="ops_kam", path="/ops_kam/", depth=0,
+    )
+    db_session.add(dept)
+    await db_session.flush()
+    db_session.add(
+        DepartmentMember(id=str(uuid4()), workspace_id=ws, department_id=dept.id, developer_id=kam.id)
+    )
+    lead = await _developer(db_session, "lead-member")
+    db_session.add(
+        WorkspaceMember(
+            workspace_id=ws, developer_id=lead.id, role="member", status="active",
+            permission_overrides={"can_view_all_service_desk": True},
+        )
+    )
+    await db_session.commit()
+
+    payload = {"subject": "phoned in", "request_type": "query"}
+    r = await client.post(_sd(ws) + "/tickets/manual", headers=_auth(lead.id), json=payload)
+    assert r.status_code == 403, r.text
+    r = await client.post(_sd(ws) + "/tickets/manual", headers=tenants["plain"], json=payload)
+    assert r.status_code == 403, r.text
+    r = await client.post(_sd(ws) + "/tickets/manual", headers=_auth(kam.id), json=payload)
+    assert r.status_code == 201, r.text

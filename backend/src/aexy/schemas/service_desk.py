@@ -328,6 +328,9 @@ class ServiceDeskTicketDetail(ServiceDeskTicketResponse):
     email_recipients: list[TicketEmailRecipient] = Field(default_factory=list)
     attachments: list[TicketAttachment] = Field(default_factory=list)
     tat: TicketTAT
+    # Server-computed write authority for the requesting caller, so the UI never
+    # re-derives (and drifts from) the ``can_edit_ticket`` rule.
+    can_edit: bool = False
 
 
 # ==================== Dashboard (stakeholder × age) ====================
