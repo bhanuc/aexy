@@ -267,3 +267,34 @@ async def test_only_first_three_supported_attachments_receive_previews():
         "preview-2",
         None,
     ]
+
+
+def test_attachment_still_base64_after_transfer_decode_is_decoded_again():
+    """Some senders leave the transfer encoding on, so one decode is not enough.
+
+    Without this the classifier reads an unintelligible blob instead of the
+    claim rows, and the file forwarded to an insurer cannot be opened.
+    """
+    real = b"claim_ref,member_name\nCLM-1,Asha\nCLM-2,Ravi\n"
+    still_encoded = base64.b64encode(real)
+
+    assert GmailSyncService._decode_if_still_base64(still_encoded) == real
+
+
+def test_ordinary_file_is_never_decoded_a_second_time():
+    for raw in (
+        b"policy_no,member_name\nP-1,Asha\n",   # commas and newlines
+        b"Office notes for September team.",    # spaces and a full stop
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR", # binary signature
+        b"short",                               # below the minimum length
+    ):
+        assert GmailSyncService._decode_if_still_base64(raw) == raw
+
+
+def test_double_encoded_csv_previews_as_readable_rows():
+    real = b"claim_ref,member_name\nCLM-1,Asha\nCLM-2,Ravi\nCLM-3,Neha\n"
+    decoded = GmailSyncService._decode_if_still_base64(base64.b64encode(real))
+
+    preview = GmailSyncService._service_desk_preview("claims.csv", "text/csv", decoded)
+
+    assert json.loads(preview or "[]")[0] == ["claim_ref", "member_name"]

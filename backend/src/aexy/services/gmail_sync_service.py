@@ -5,6 +5,7 @@ import csv
 import io
 import json
 import logging
+import re
 import zipfile
 from datetime import datetime, timedelta, timezone
 from email.utils import parseaddr
@@ -28,6 +29,11 @@ from aexy.models.crm import CRMRecord, CRMObject, CRMObjectType, CRMRecordRelati
 
 logger = logging.getLogger(__name__)
 
+
+# Payloads made of nothing but base64 characters are the ones some senders leave
+# still encoded. Commas, spaces and most binary bytes fall outside this, so a
+# genuine CSV, text file or document can never match.
+_BASE64_ONLY_RE = re.compile(rb"[A-Za-z0-9+/]+={0,2}")
 
 _SERVICE_DESK_ATTACHMENT_RAW_BYTE_LIMIT = 2 * 1024 * 1024
 _SERVICE_DESK_XLSX_EXPANDED_BYTE_LIMIT = 16 * 1024 * 1024
@@ -1162,7 +1168,32 @@ class GmailSyncService:
         )
         if len(raw) > _SERVICE_DESK_ATTACHMENT_RAW_BYTE_LIMIT:
             raise ValueError("decoded attachment exceeds the Service Desk raw-byte limit")
-        return raw
+        return self._decode_if_still_base64(raw)
+
+    @staticmethod
+    def _decode_if_still_base64(raw: bytes) -> bytes:
+        """Undo a second layer of base64 left by some senders' MIME parts.
+
+        Gmail normally hands back the part's decoded content, but for some
+        clients the transfer encoding survives and what arrives is the base64
+        text itself. Everything downstream then breaks in the same way: the
+        classifier reads an unintelligible blob instead of the claim rows, and
+        the file the desk forwards to an insurer cannot be opened. Decoding here
+        fixes both, because every caller loads its bytes through this method.
+
+        Only applied when the payload is nothing but base64 characters, so real
+        files are untouched: any CSV has commas, any prose has spaces, and any
+        binary format has bytes outside the alphabet.
+        """
+        compact = raw.translate(None, b"\r\n")
+        if len(compact) < 8 or len(compact) % 4 != 0:
+            return raw
+        if not _BASE64_ONLY_RE.fullmatch(compact):
+            return raw
+        try:
+            return base64.b64decode(compact, validate=True)
+        except Exception:  # noqa: BLE001 — an undecodable payload is just not double-encoded
+            return raw
 
     @staticmethod
     def _declared_attachment_size(body: dict) -> int | None:
