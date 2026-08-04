@@ -46,8 +46,10 @@ def _no_ai_no_mail(monkeypatch):
     monkeypatch.setattr(ServiceDeskIntakeService, "_send_receipt", _noop)
 
 
-async def _desk(db: AsyncSession, slug: str) -> tuple[Workspace, ServiceDeskMailbox, list[str]]:
-    """A workspace with a shared mailbox and a two-person KAM pool. No AI opt-in."""
+async def _desk(
+    db: AsyncSession, slug: str, kam_count: int = 2
+) -> tuple[Workspace, ServiceDeskMailbox, list[str]]:
+    """A workspace with a shared mailbox and optional KAM pool. No AI opt-in."""
     owner = Developer(email=f"owner-{slug}@bimaplan.co", name="Owner")
     db.add(owner)
     await db.flush()
@@ -67,7 +69,7 @@ async def _desk(db: AsyncSession, slug: str) -> tuple[Workspace, ServiceDeskMail
     await db.flush()
 
     kam_ids: list[str] = []
-    for i in range(2):
+    for i in range(kam_count):
         kam = Developer(email=f"kam{i}-{slug}@bimaplan.co", name=f"KAM{i}")
         db.add(kam)
         await db.flush()
@@ -149,6 +151,21 @@ async def test_unknown_domain_falls_back_to_the_kam_pool_and_is_never_left_unown
     sd = await _sd(db_session, ticket.id)
     assert sd.partner_id is None
     assert sd.needs_triage is True, "the Ops Head needs to see that the mapping is missing"
+
+
+@pytest.mark.asyncio
+async def test_workspace_owner_is_assigned_when_the_kam_pool_is_empty(
+    db_session: AsyncSession,
+):
+    ws, mailbox, _ = await _desk(db_session, "noai-owner", kam_count=0)
+
+    ticket = await ServiceDeskIntakeService(db_session).ingest(
+        _email(from_email="contact@newpartner.io"), mailbox, source="test"
+    )
+    await db_session.commit()
+
+    assert ticket is not None
+    assert ticket.assignee_id == ws.owner_id
 
 
 @pytest.mark.asyncio

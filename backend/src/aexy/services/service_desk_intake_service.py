@@ -564,6 +564,11 @@ class ServiceDeskIntakeService:
                 needs_triage = True
                 assigned_kam_id = await self._random_kam(workspace_id)
 
+        if assigned_kam_id is None:
+            assigned_kam_id = (
+                await self.db.execute(select(Workspace.owner_id).where(Workspace.id == workspace_id))
+            ).scalar_one_or_none()
+
         form_id = await self._ensure_form(workspace_id)
 
         ticket = await self._insert_ticket(
