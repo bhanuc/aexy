@@ -19,6 +19,8 @@ from aexy.models.service_desk import (
     ServiceDeskInsurer,
     ServiceDeskInsurerDomain,
     ServiceDeskMailbox,
+    ServiceDeskPartner,
+    ServiceDeskPartnerDomain,
     ServiceDeskTicket,
 )
 from aexy.models.ticketing import Ticket, TicketForm, TicketResponse
@@ -189,6 +191,118 @@ async def test_a_ticket_the_model_invented_is_ignored(db_session, desk, monkeypa
     )
     await db_session.commit()
     assert result.id != desk["ticket"].id
+
+
+@pytest.mark.asyncio
+async def test_an_insurer_match_never_sees_another_insurers_open_ticket(
+    db_session, desk, monkeypatch
+):
+    other = ServiceDeskInsurer(
+        id=str(uuid4()), workspace_id=desk["ws"].id, name="Insurer I2"
+    )
+    db_session.add(other)
+    await db_session.flush()
+    form_id = desk["ticket"].form_id
+    other_ticket = Ticket(
+        id=str(uuid4()),
+        workspace_id=desk["ws"].id,
+        form_id=form_id,
+        ticket_number=8,
+        field_values={"subject": "Unrelated claim C-10"},
+        status="new",
+        source="service_desk_gmail",
+    )
+    db_session.add(other_ticket)
+    await db_session.flush()
+    db_session.add(
+        ServiceDeskTicket(
+            id=str(uuid4()),
+            workspace_id=desk["ws"].id,
+            ticket_id=other_ticket.id,
+            insurer_id=other.id,
+            request_type="claims",
+            pending_with="insurer",
+            origin="email",
+            mailbox_id=desk["mailbox"].id,
+        )
+    )
+    await db_session.commit()
+
+    prompts: list[str] = []
+    _gateway(
+        monkeypatch,
+        '{"ticket":"BSD-8","confidence":0.99,"reason":"Looks similar"}',
+        seen=prompts,
+    )
+
+    result = await ServiceDeskIntakeService(db_session).ingest(
+        _stray(), desk["mailbox"], "service_desk_gmail"
+    )
+
+    assert result.id != other_ticket.id
+    matcher_prompt = next(prompt for prompt in prompts if "Open tickets for this company" in prompt)
+    assert "BSD-7" in matcher_prompt
+    assert "BSD-8" not in matcher_prompt
+
+
+@pytest.mark.asyncio
+async def test_matcher_failure_marks_the_new_partner_ticket_for_human_review(
+    db_session, desk, monkeypatch
+):
+    owner_id = desk["ws"].owner_id
+    partner = ServiceDeskPartner(
+        id=str(uuid4()),
+        workspace_id=desk["ws"].id,
+        name="Partner P1",
+        assigned_kam_id=owner_id,
+    )
+    db_session.add(partner)
+    await db_session.flush()
+    db_session.add(
+        ServiceDeskPartnerDomain(
+            id=str(uuid4()),
+            workspace_id=desk["ws"].id,
+            partner_id=partner.id,
+            domain="requests@partner.example",
+        )
+    )
+    existing_sd = (
+        await db_session.execute(
+            select(ServiceDeskTicket).where(
+                ServiceDeskTicket.ticket_id == desk["ticket"].id
+            )
+        )
+    ).scalar_one()
+    existing_sd.partner_id = partner.id
+    existing_sd.insurer_id = None
+    await db_session.commit()
+
+    class Gateway:
+        async def call_llm(self, system, user, **kwargs):
+            if "match an incoming insurance email" in system:
+                raise RuntimeError("matcher unavailable")
+            return (
+                '{"issues":[{"summary":"Check status","request_type":"claims",'
+                '"lob":null,"confidence":0.99,"split_reason":null}]}',
+            )
+
+    monkeypatch.setattr("aexy.llm.gateway.get_llm_gateway", lambda: Gateway())
+
+    result = await ServiceDeskIntakeService(db_session).ingest(
+        _stray(from_email="requests@partner.example"),
+        desk["mailbox"],
+        "service_desk_gmail",
+    )
+    await db_session.commit()
+
+    assert result.id != desk["ticket"].id
+    sd = (
+        await db_session.execute(
+            select(ServiceDeskTicket).where(ServiceDeskTicket.ticket_id == result.id)
+        )
+    ).scalar_one()
+    assert sd.ai_confidence == 0.99, "classification still succeeded after matching failed"
+    assert sd.needs_triage is True
 
 
 @pytest.mark.asyncio

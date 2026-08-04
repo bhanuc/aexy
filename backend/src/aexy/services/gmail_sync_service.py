@@ -30,9 +30,8 @@ from aexy.models.crm import CRMRecord, CRMObject, CRMObjectType, CRMRecordRelati
 logger = logging.getLogger(__name__)
 
 
-# Payloads made of nothing but base64 characters are the ones some senders leave
-# still encoded. Commas, spaces and most binary bytes fall outside this, so a
-# genuine CSV, text file or document can never match.
+# Payloads made of nothing but base64 characters may still be encoded, but the
+# alphabet alone is ambiguous because legitimate text can also match it.
 _BASE64_ONLY_RE = re.compile(rb"[A-Za-z0-9+/]+={0,2}")
 
 _SERVICE_DESK_ATTACHMENT_RAW_BYTE_LIMIT = 2 * 1024 * 1024
@@ -1101,6 +1100,8 @@ class GmailSyncService:
                         integration,
                         message_id,
                         body,
+                        filename=filename,
+                        content_type=content_type,
                     )
                     item["preview"] = self._service_desk_preview(
                         filename,
@@ -1126,6 +1127,8 @@ class GmailSyncService:
         message_id: str,
         body: dict,
         max_bytes: int | None = None,
+        filename: str | None = None,
+        content_type: str | None = None,
     ) -> bytes:
         """Load attachment bytes only when every pre-decode size check is safe.
 
@@ -1166,12 +1169,19 @@ class GmailSyncService:
         raw = base64.urlsafe_b64decode(
             encoded_text + "=" * (-len(encoded_text) % 4)
         )
-        if len(raw) > _SERVICE_DESK_ATTACHMENT_RAW_BYTE_LIMIT:
+        if len(raw) > limit:
             raise ValueError("decoded attachment exceeds the Service Desk raw-byte limit")
-        return self._decode_if_still_base64(raw)
+        return self._decode_if_still_base64(
+            raw, filename=filename, content_type=content_type
+        )
 
     @staticmethod
-    def _decode_if_still_base64(raw: bytes) -> bytes:
+    def _decode_if_still_base64(
+        raw: bytes,
+        *,
+        filename: str | None = None,
+        content_type: str | None = None,
+    ) -> bytes:
         """Undo a second layer of base64 left by some senders' MIME parts.
 
         Gmail normally hands back the part's decoded content, but for some
@@ -1181,9 +1191,10 @@ class GmailSyncService:
         the file the desk forwards to an insurer cannot be opened. Decoding here
         fixes both, because every caller loads its bytes through this method.
 
-        Only applied when the payload is nothing but base64 characters, so real
-        files are untouched: any CSV has commas, any prose has spaces, and any
-        binary format has bytes outside the alphabet.
+        Base64-looking text is a legitimate file in its own right, so alphabet
+        membership alone is not enough evidence. Decode only when the resulting
+        bytes have the tabular structure expected for a CSV attachment. Unknown
+        and plain-text formats keep the exact bytes Gmail returned.
         """
         compact = raw.translate(None, b"\r\n")
         if len(compact) < 8 or len(compact) % 4 != 0:
@@ -1191,9 +1202,21 @@ class GmailSyncService:
         if not _BASE64_ONLY_RE.fullmatch(compact):
             return raw
         try:
-            return base64.b64decode(compact, validate=True)
+            decoded = base64.b64decode(compact, validate=True)
         except Exception:  # noqa: BLE001 — an undecodable payload is just not double-encoded
             return raw
+
+        name = (filename or "").lower()
+        kind = (content_type or "").lower()
+        if not (name.endswith(".csv") or kind in {"text/csv", "application/csv"}):
+            return raw
+        try:
+            rows = list(islice(csv.reader(io.StringIO(decoded.decode("utf-8"))), 2))
+        except (UnicodeDecodeError, csv.Error):
+            return raw
+        if len(rows) < 2 or not any(len(row) > 1 for row in rows):
+            return raw
+        return decoded
 
     @staticmethod
     def _declared_attachment_size(body: dict) -> int | None:

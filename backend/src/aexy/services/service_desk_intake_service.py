@@ -16,7 +16,7 @@ import secrets
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -330,12 +330,7 @@ class ServiceDeskIntakeService:
         else:
             # An insurer writes about claims the desk sent them, so the plausible
             # homes are tickets already handed to that insurer.
-            query = query.where(
-                or_(
-                    ServiceDeskTicket.insurer_id == insurer.id,
-                    ServiceDeskTicket.pending_with == PendingWith.INSURER.value,
-                )
-            )
+            query = query.where(ServiceDeskTicket.insurer_id == insurer.id)
         rows = (await self.db.execute(query)).all()
         if not rows:
             return None, None, None
@@ -370,11 +365,21 @@ class ServiceDeskIntakeService:
             )
             found = re.search(r"\{.*\}", text, re.DOTALL)
             if not found:
-                return None, None, None
+                return (
+                    None,
+                    None,
+                    "AI ticket matching returned an unreadable response, so this email "
+                    "was opened as a new ticket for a human to review.",
+                )
             data = json.loads(found.group(0))
         except Exception as exc:  # noqa: BLE001 — matching is best-effort
             logger.info("Service desk: AI match skipped (%s)", exc)
-            return None, None, None
+            return (
+                None,
+                None,
+                "AI ticket matching was unavailable, so this email was opened as a "
+                "new ticket for a human to review.",
+            )
 
         raw = data.get("ticket")
         reason = str(data.get("reason") or "")[:300]
@@ -386,6 +391,13 @@ class ServiceDeskIntakeService:
         matched = _BSD_RE.search(str(raw or ""))
         candidate = by_number.get(int(matched.group(1))) if matched else None
         if candidate is None:
+            if raw:
+                return (
+                    None,
+                    None,
+                    "AI ticket matching named a ticket outside the allowed candidates, "
+                    "so this email was opened as a new ticket for a human to review.",
+                )
             return None, None, None
 
         display = f"{TICKET_PREFIX}-{candidate.ticket_number}"

@@ -14,7 +14,7 @@ from uuid import uuid4
 
 from fastapi import HTTPException, status
 from pydantic import ValidationError
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
@@ -657,6 +657,8 @@ class ServiceDeskTicketService:
                     owning_message_id,
                     {"attachmentId": item["attachment_id"], "size": item.get("size_bytes")},
                     max_bytes=_SERVICE_DESK_ATTACHMENT_FORWARD_BYTE_LIMIT,
+                    filename=filename,
+                    content_type=item.get("content_type"),
                 )
             except Exception as exc:  # noqa: BLE001 — surfaced, never silently dropped
                 # Sending "please find attached" with nothing attached is worse
@@ -723,6 +725,18 @@ class ServiceDeskTicketService:
                     "partner or an insurer, or the ticket's requester"
                 ),
             )
+
+        if chosen.stage == PendingWith.INSURER.value:
+            from aexy.models.service_desk import ServiceDeskInsurerDomain
+
+            sd.insurer_id = (
+                await self.db.execute(
+                    select(ServiceDeskInsurerDomain.insurer_id).where(
+                        ServiceDeskInsurerDomain.workspace_id == workspace_id,
+                        func.lower(ServiceDeskInsurerDomain.domain) == recipient,
+                    )
+                )
+            ).scalar_one_or_none()
 
         display_id = f"{TICKET_PREFIX}-{ticket.ticket_number}"
         match = _BSD_RE.search(subject)

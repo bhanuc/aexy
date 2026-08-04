@@ -28,6 +28,7 @@ from aexy.models.service_desk import (
 from aexy.models.ticketing import Ticket, TicketForm, TicketResponse
 from aexy.models.workspace import Workspace, WorkspaceMember
 from aexy.schemas.service_desk import TicketFieldsUpdate
+from aexy.schemas.ticketing import TicketUpdate
 from aexy.services import service_desk_mailer
 from aexy.services.service_desk_ticket_service import ServiceDeskTicketService
 
@@ -256,6 +257,25 @@ async def test_view_all_does_not_grant_edit(db_session, desk):
 
 
 @pytest.mark.asyncio
+async def test_view_all_cannot_mutate_a_service_desk_ticket_through_generic_routes(
+    db_session, desk
+):
+    from aexy.api.tickets import update_ticket
+
+    lead = await db_session.get(Developer, desk["lead"])
+    with pytest.raises(HTTPException) as exc:
+        await update_ticket(
+            desk["ws"],
+            desk["ticket"],
+            TicketUpdate(priority="urgent"),
+            current_user=lead,
+            db=db_session,
+        )
+
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_assigned_kam_may_triage_and_hand_off_their_own_ticket(db_session, desk):
     svc = ServiceDeskTicketService(db_session)
 
@@ -323,6 +343,7 @@ async def test_email_goes_out_as_the_watched_mailbox_and_keeps_the_ticket_identi
     assert sent[0]["thread_id"] is None
     # The BSD number is what the deterministic inbound matcher reads.
     assert sent[0]["subject"].startswith("[BSD-1] ")
+    assert detail.insurer_id is not None, "later stray replies must stay scoped to this insurer"
 
     outgoing = [c for c in detail.correspondence if c.direction == "outgoing"]
     assert len(outgoing) == 1
@@ -466,7 +487,15 @@ async def test_attachments_are_listed_with_a_forwardable_flag(db_session, with_a
 async def test_a_chosen_file_is_refetched_and_attached(db_session, with_attachment, sent, monkeypatch):
     from aexy.services.gmail_sync_service import GmailSyncService
 
-    async def _bytes(self, integration, message_id, body, max_bytes=None):
+    async def _bytes(
+        self,
+        integration,
+        message_id,
+        body,
+        max_bytes=None,
+        filename=None,
+        content_type=None,
+    ):
         assert message_id == "gmail-msg-1"
         assert body["attachmentId"] == "att-1"
         return b"row1,row2"
@@ -512,7 +541,15 @@ async def test_a_failed_fetch_sends_nothing_rather_than_an_empty_promise(
     """"Please find attached" with nothing attached is worse than not sending."""
     from aexy.services.gmail_sync_service import GmailSyncService
 
-    async def _boom(self, integration, message_id, body, max_bytes=None):
+    async def _boom(
+        self,
+        integration,
+        message_id,
+        body,
+        max_bytes=None,
+        filename=None,
+        content_type=None,
+    ):
         raise ValueError("attachment exceeds the Service Desk raw-byte limit")
 
     monkeypatch.setattr(GmailSyncService, "_gmail_attachment_bytes", _boom)

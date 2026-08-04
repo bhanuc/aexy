@@ -278,7 +278,17 @@ def test_attachment_still_base64_after_transfer_decode_is_decoded_again():
     real = b"claim_ref,member_name\nCLM-1,Asha\nCLM-2,Ravi\n"
     still_encoded = base64.b64encode(real)
 
-    assert GmailSyncService._decode_if_still_base64(still_encoded) == real
+    assert GmailSyncService._decode_if_still_base64(
+        still_encoded, filename="claims.csv", content_type="text/csv"
+    ) == real
+
+
+def test_legitimate_base64_text_file_is_not_silently_rewritten():
+    raw = b"SGVsbG8gV29ybGQh"
+
+    assert GmailSyncService._decode_if_still_base64(
+        raw, filename="provider-token.txt", content_type="text/plain"
+    ) == raw
 
 
 def test_ordinary_file_is_never_decoded_a_second_time():
@@ -293,8 +303,27 @@ def test_ordinary_file_is_never_decoded_a_second_time():
 
 def test_double_encoded_csv_previews_as_readable_rows():
     real = b"claim_ref,member_name\nCLM-1,Asha\nCLM-2,Ravi\nCLM-3,Neha\n"
-    decoded = GmailSyncService._decode_if_still_base64(base64.b64encode(real))
+    decoded = GmailSyncService._decode_if_still_base64(
+        base64.b64encode(real), filename="claims.csv", content_type="text/csv"
+    )
 
     preview = GmailSyncService._service_desk_preview("claims.csv", "text/csv", decoded)
 
     assert json.loads(preview or "[]")[0] == ["claim_ref", "member_name"]
+
+
+@pytest.mark.asyncio
+async def test_forwarding_ceiling_is_used_after_gmail_transfer_decode(monkeypatch):
+    service = GmailSyncService(None)
+    raw = b"0123456789ab"
+
+    monkeypatch.setattr(gmail_sync, "_SERVICE_DESK_ATTACHMENT_RAW_BYTE_LIMIT", 8)
+
+    loaded = await service._gmail_attachment_bytes(
+        object(),
+        "gmail-message-forward",
+        {"data": base64.urlsafe_b64encode(raw).decode(), "size": len(raw)},
+        max_bytes=16,
+    )
+
+    assert loaded == raw
