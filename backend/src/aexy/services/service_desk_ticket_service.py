@@ -33,6 +33,7 @@ from aexy.schemas.service_desk import (
     ServiceDeskCorrespondence,
     ServiceDeskTicketDetail,
     TicketAttachment,
+    TicketEmailRecipient,
     TicketFieldsUpdate,
     TicketTAT,
 )
@@ -520,7 +521,7 @@ class ServiceDeskTicketService:
 
     async def _email_recipients(
         self, workspace_id: str, sd: ServiceDeskTicket, ticket: Ticket
-    ) -> list["TicketEmailRecipient"]:
+    ) -> list[TicketEmailRecipient]:
         """The closed set of addresses this ticket may be emailed.
 
         Master data holds exact addresses as well as bare domains; only exact
@@ -539,7 +540,6 @@ class ServiceDeskTicketService:
             ServiceDeskInsurerDomain,
             ServiceDeskPartnerDomain,
         )
-        from aexy.schemas.service_desk import TicketEmailRecipient
 
         out: list[TicketEmailRecipient] = []
         seen: set[str] = set()

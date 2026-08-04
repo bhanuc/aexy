@@ -23,10 +23,17 @@ vi.mock("next-intl", () => ({
 
 vi.mock("@/hooks/useWorkspace", () => ({
   useWorkspace: () => ({ currentWorkspace: { id: "workspace-1" } }),
+  useWorkspaceMembers: () => ({ members: [] }),
 }));
 
 vi.mock("@/hooks/useProjects", () => ({
   useProjects: () => ({ projects: [] }),
+}));
+
+// The signed-in user is the assigned KAM, which is what grants write authority
+// and therefore makes the split panel render at all.
+vi.mock("@/hooks/useAuth", () => ({
+  useAuth: () => ({ user: { id: "kam-1" } }),
 }));
 
 vi.mock("@/hooks/useServiceDesk", () => ({
@@ -80,6 +87,11 @@ vi.mock("@/hooks/useServiceDesk", () => ({
       ],
       split_done_indexes: [3],
       segments: [],
+      correspondence: [],
+      // Left empty on purpose: with no recipients the compose card does not
+      // render, so the checkboxes counted below are only the issue checkboxes.
+      email_recipients: [],
+      attachments: [],
       tat: {
         overall_seconds: 0,
         overall_days: 0,
@@ -100,7 +112,12 @@ vi.mock("@/hooks/useServiceDesk", () => ({
     },
     changePendingWith: { mutateAsync: vi.fn(), isPending: false },
     convertToTask: { mutate: vi.fn(), isPending: false },
+    updateTicket: { mutateAsync: vi.fn(), isPending: false, isError: false },
+    emailStakeholder: { mutateAsync: vi.fn(), isPending: false, isError: false },
   }),
+  useServiceDeskSettings: () => ({ data: { can_manage: false } }),
+  useLobs: () => ({ data: [] }),
+  usePartners: () => ({ data: [] }),
 }));
 
 describe("Service Desk detected issues panel", () => {
