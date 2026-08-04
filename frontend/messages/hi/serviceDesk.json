@@ -96,7 +96,8 @@
       "emailConfirmSend": "पुष्टि करें और भेजें",
       "emailCancel": "रद्द करें",
       "sentBy": "{name} द्वारा भेजा गया",
-      "emailMoveStage": "भेजने पर इस टिकट को {stage} पर ले जाएँ"
+      "emailMoveStage": "भेजने पर इस टिकट को {stage} पर ले जाएँ",
+      "confirmTriage": "सही के रूप में पुष्टि करें"
     },
     "ai": {
       "title": "AI ईमेल वर्गीकरण",

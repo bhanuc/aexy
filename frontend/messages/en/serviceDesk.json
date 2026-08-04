@@ -96,7 +96,8 @@
       "emailConfirmSend": "Confirm and send",
       "emailCancel": "Cancel",
       "sentBy": "Sent by {name}",
-      "emailMoveStage": "Move this ticket to {stage} when sent"
+      "emailMoveStage": "Move this ticket to {stage} when sent",
+      "confirmTriage": "Confirm as correct"
     },
     "ai": {
       "title": "AI email categorisation",

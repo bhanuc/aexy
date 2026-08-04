@@ -251,12 +251,23 @@ export default function ServiceDeskTicketDetailPage() {
 
         {canEdit && (
           <div className="flex items-center gap-2">
+            {/* Saving IS the triage, so a flagged ticket must be savable even with
+                nothing edited. When the model already got everything right the KAM
+                has nothing to change, and without this there is no way to confirm
+                it and the flag stays on forever. */}
             <Button
               size="sm"
-              disabled={Object.keys(draft).length === 0 || updateTicket.isPending}
+              disabled={
+                (Object.keys(draft).length === 0 && !ticket.needs_triage) ||
+                updateTicket.isPending
+              }
               onClick={saveFields}
             >
-              {updateTicket.isPending ? t("templates.saving") : t("templates.save")}
+              {updateTicket.isPending
+                ? t("templates.saving")
+                : Object.keys(draft).length === 0 && ticket.needs_triage
+                  ? t("detail.confirmTriage")
+                  : t("templates.save")}
             </Button>
             {updateTicket.isError && (
               <span className="text-sm text-destructive">{t("detail.saveFailed")}</span>

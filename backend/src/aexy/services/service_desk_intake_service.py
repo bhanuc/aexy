@@ -56,6 +56,8 @@ _SPLIT_MIN_CONFIDENCE = 0.85
 # ticket, because insurance correspondence about different claims reads almost
 # identically. So a content match must be both confident and unambiguous, and it
 # is only ever attempted for a sender already known to master data.
+# Below this the model is guessing, so a human is asked to confirm the fields.
+_LOW_CONFIDENCE = 0.6
 _AI_MATCH_MIN_CONFIDENCE = 0.85
 _AI_MATCH_MAX_CANDIDATES = 20
 
@@ -414,6 +416,7 @@ class ServiceDeskIntakeService:
             is_internal=False,
         )
         self.db.add(response)
+        self._absorb_attachments(ticket, email)
         await self.db.flush()
 
         # A reply to a closed ticket must reopen it — otherwise the requester's
@@ -485,6 +488,34 @@ class ServiceDeskIntakeService:
             return None
         return email.from_name or address
 
+    @staticmethod
+    def _absorb_attachments(ticket: Ticket, email: InboundEmail) -> None:
+        """Add a reply's files to the ticket's own attachment list.
+
+        A stakeholder answering with a corrected register is sending the desk a
+        file it needs; storing only the reply's text dropped it silently, so the
+        KAM could neither see it nor forward it. Files are keyed by name and
+        handle so the same message arriving twice cannot duplicate them.
+        """
+        if not email.attachments:
+            return
+        values = dict(ticket.field_values or {})
+        existing = values.get("attachments")
+        existing = [item for item in existing if isinstance(item, dict)] if isinstance(existing, list) else []
+        seen = {(item.get("filename"), item.get("attachment_id")) for item in existing}
+
+        added = False
+        for attachment in email.attachments:
+            key = (attachment.filename, attachment.attachment_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            existing.append({**attachment.model_dump(), "message_id": email.message_id})
+            added = True
+        if added:
+            values["attachments"] = existing
+            ticket.field_values = values
+
     # ------------------------------------------------------------- new ticket
 
     async def _create_ticket(
@@ -534,8 +565,12 @@ class ServiceDeskIntakeService:
                 "body": email.body_text,
                 "partner": partner.name if partner else None,
                 "insurer": insurer.name if insurer else None,
+                # The owning message is stamped on each file because the handle
+                # is only valid against the message it arrived on. A ticket
+                # accumulates files from replies too, each from a different one.
                 "attachments": [
-                    attachment.model_dump() for attachment in email.attachments
+                    {**attachment.model_dump(), "message_id": email.message_id}
+                    for attachment in email.attachments
                 ],
             },
             status=TicketStatus.NEW.value,
@@ -719,8 +754,17 @@ class ServiceDeskIntakeService:
         email: InboundEmail,
         issue: dict,
         mailbox: ServiceDeskMailbox | None,
+        human_split: bool = False,
     ) -> Ticket:
-        """The second request from one email, as its own tracked ticket."""
+        """The second request from one email, as its own tracked ticket.
+
+        ``human_split`` decides whether the child inherits the parent's triage
+        flag. The parent is flagged when one email carried several requests and
+        nobody separated them — so once a person has done exactly that, the
+        reason no longer applies to the child they deliberately created, and
+        carrying it over asks them to confirm work they just did. An auto-split
+        child keeps inheriting, because there nobody has looked at all.
+        """
         primary_values = primary.field_values or {}
         child = await self._insert_ticket(
             workspace_id,
@@ -757,7 +801,10 @@ class ServiceDeskIntakeService:
                 request_type=issue["request_type"],
                 pending_with=PendingWith.KAM.value,
                 origin=sd.origin,
-                needs_triage=sd.needs_triage,
+                # A human-split child is judged on its own classification.
+                needs_triage=(
+                    issue["confidence"] < _LOW_CONFIDENCE if human_split else sd.needs_triage
+                ),
                 ai_confidence=issue["confidence"],
                 mailbox_id=mailbox.id if mailbox is not None else None,
                 # No thread_ref: replies must thread onto the primary, and two
@@ -1058,7 +1105,7 @@ class ServiceDeskIntakeService:
         """Apply only configured classification values to the primary ticket."""
         sd.request_type = issue["request_type"]
         sd.ai_confidence = issue["confidence"]
-        if issue["confidence"] < 0.6:
+        if issue["confidence"] < _LOW_CONFIDENCE:
             sd.needs_triage = True
         if issue.get("lob"):
             sd.lob_id = lob_ids.get(str(issue["lob"]).lower())

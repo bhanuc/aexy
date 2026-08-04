@@ -280,3 +280,100 @@ async def test_an_internal_queue_is_never_emptied_by_an_external_reply(db_sessio
     await db_session.commit()
 
     assert await _stage(db_session, desk["ticket"].id) == "finance"
+
+
+@pytest.mark.asyncio
+async def test_a_human_split_child_is_not_flagged_for_triage_the_human_just_did(
+    db_session, desk, monkeypatch
+):
+    """The parent's flag means "nobody separated these requests". Someone just did.
+
+    Carrying it onto the child asks the KAM to confirm the work they performed one
+    click earlier, and the flag then has no way to clear.
+    """
+    from aexy.services.service_desk_ticket_service import ServiceDeskTicketService
+
+    ticket = desk["ticket"]
+    values = dict(ticket.field_values or {})
+    values["detected_issues"] = [
+        {"summary": "Claim status", "request_type": "claims", "lob": None,
+         "confidence": 0.9, "split_reason": None},
+        {"summary": "Register reconciliation", "request_type": "query", "lob": None,
+         "confidence": 0.85, "split_reason": "Different workflow"},
+    ]
+    ticket.field_values = values
+    sd = (
+        await db_session.execute(
+            select(ServiceDeskTicket).where(ServiceDeskTicket.ticket_id == ticket.id)
+        )
+    ).scalar_one()
+    sd.needs_triage = True
+    await db_session.commit()
+
+    result = await ServiceDeskTicketService(db_session).split_detected_issues(
+        desk["ws"].id, ticket.id, [2], split_by_id=desk["ws"].owner_id
+    )
+    await db_session.commit()
+
+    child_sd = (
+        await db_session.execute(
+            select(ServiceDeskTicket).where(
+                ServiceDeskTicket.ticket_id == result["created_ticket_ids"][0]
+            )
+        )
+    ).scalar_one()
+    assert child_sd.needs_triage is False
+    assert child_sd.request_type == "query"
+
+
+@pytest.mark.asyncio
+async def test_a_reply_with_a_file_puts_that_file_on_the_ticket(db_session, desk):
+    """A corrected register sent as a reply must not vanish into the body text."""
+    from aexy.schemas.service_desk import InboundAttachment
+
+    await ServiceDeskIntakeService(db_session).ingest(
+        _reply_from(
+            "claims@i1.example",
+            attachments=[
+                InboundAttachment(
+                    filename="revised_register.csv",
+                    content_type="text/csv",
+                    size_bytes=512,
+                    attachment_id="att-reply-1",
+                )
+            ],
+        ),
+        desk["mailbox"],
+        "service_desk_gmail",
+    )
+    await db_session.commit()
+
+    ticket = await db_session.get(Ticket, desk["ticket"].id)
+    files = (ticket.field_values or {}).get("attachments") or []
+    assert [f["filename"] for f in files] == ["revised_register.csv"]
+    # Stamped with the message it arrived on, because the handle is only valid
+    # against that message and the ticket's first email is a different one.
+    assert files[0]["attachment_id"] == "att-reply-1"
+    assert files[0]["message_id"] is not None
+
+
+@pytest.mark.asyncio
+async def test_the_same_reply_arriving_twice_does_not_duplicate_the_file(db_session, desk):
+    from aexy.schemas.service_desk import InboundAttachment
+
+    attachment = InboundAttachment(
+        filename="revised_register.csv", content_type="text/csv",
+        size_bytes=512, attachment_id="att-reply-1",
+    )
+    service = ServiceDeskIntakeService(db_session)
+    for _ in range(2):
+        await service.ingest(
+            _reply_from("claims@i1.example", attachments=[attachment]),
+            desk["mailbox"],
+            "service_desk_gmail",
+        )
+    await db_session.commit()
+
+    ticket = await db_session.get(Ticket, desk["ticket"].id)
+    files = (ticket.field_values or {}).get("attachments") or []
+    assert len(files) == 1

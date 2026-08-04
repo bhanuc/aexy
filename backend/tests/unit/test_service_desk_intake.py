@@ -247,6 +247,9 @@ async def test_attachment_context_is_persisted_on_the_primary_ticket(
             "size_bytes": 42,
             "preview": '[["policy_no"], ["P-1"]]',
             "attachment_id": None,
+            # Stamped so a file arriving on a later reply can still be re-fetched
+            # from its own message rather than the ticket's first one.
+            "message_id": "attachment-context-1",
         }
     ]
 

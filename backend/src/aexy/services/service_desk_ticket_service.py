@@ -464,6 +464,7 @@ class ServiceDeskTicketService:
                         source_email,
                         issue,
                         mailbox,
+                        human_split=True,
                     )
                     child_segment = (
                         await self.db.execute(
@@ -619,7 +620,7 @@ class ServiceDeskTicketService:
         by_name = {str(item.get("filename")): item for item in self._ticket_attachments(ticket)}
         mailbox = await self.db.get(ServiceDeskMailbox, sd.mailbox_id) if sd.mailbox_id else None
         integration_id = mailbox.integration_id if mailbox else None
-        if not sd.source_message_id or not integration_id:
+        if not integration_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="This ticket's original email is not available, so its files cannot be attached",
@@ -642,10 +643,18 @@ class ServiceDeskTicketService:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"'{filename}' is not a forwardable file on this ticket",
                 )
+            # A handle is only valid against the message the file arrived on, and
+            # a ticket collects files from replies as well as the first email.
+            owning_message_id = item.get("message_id") or sd.source_message_id
+            if not owning_message_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"'{filename}' has no source message, so it cannot be attached",
+                )
             try:
                 raw = await service._gmail_attachment_bytes(
                     integration,
-                    sd.source_message_id,
+                    owning_message_id,
                     {"attachmentId": item["attachment_id"], "size": item.get("size_bytes")},
                     max_bytes=_SERVICE_DESK_ATTACHMENT_FORWARD_BYTE_LIMIT,
                 )
