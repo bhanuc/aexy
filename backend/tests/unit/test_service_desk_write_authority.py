@@ -205,7 +205,10 @@ def sent(monkeypatch):
     """Capture the Gmail send instead of making it, keeping the guard path real."""
     calls: list[dict] = []
 
-    async def _capture(db, integration_id, from_address, to_email, subject, body_text, thread_id):
+    async def _capture(
+        db, integration_id, from_address, to_email, subject, body_text, thread_id,
+        attachments=None,
+    ):
         calls.append(
             {
                 "integration_id": integration_id,
@@ -214,8 +217,10 @@ def sent(monkeypatch):
                 "subject": subject,
                 "body": body_text,
                 "thread_id": thread_id,
+                "attachments": attachments or [],
             }
         )
+        return "gmail-thread-sent"
 
     monkeypatch.setattr(service_desk_mailer, "_send_via_gmail", _capture)
     return calls
@@ -311,10 +316,11 @@ async def test_email_goes_out_as_the_watched_mailbox_and_keeps_the_ticket_identi
     await db_session.commit()
 
     assert len(sent) == 1
-    # Sent as August, not as the KAM, and threaded onto the ticket's conversation.
+    # Sent as August, not as the KAM. The insurer gets its own conversation
+    # rather than the partner's, so ticket identity rides on the subject.
     assert sent[0]["from"] == "august@capbumpy.in"
     assert sent[0]["to"] == "claims@insurer-one.example"
-    assert sent[0]["thread_id"] == "gmail-thread-1"
+    assert sent[0]["thread_id"] is None
     # The BSD number is what the deterministic inbound matcher reads.
     assert sent[0]["subject"].startswith("[BSD-1] ")
 
@@ -409,3 +415,143 @@ async def test_a_mailbox_without_a_gmail_link_refuses_rather_than_sending_from_t
         await service_desk_mailer.send_stakeholder_email(
             db_session, None, "claims@insurer-one.example", "s", "b"
         )
+
+
+# ------------------------------------------------- attachments and threading
+
+
+@pytest.fixture
+async def with_attachment(db_session, desk):
+    """Put a forwardable file and a non-forwardable one on the ticket."""
+    ticket = await db_session.get(Ticket, desk["ticket"])
+    values = dict(ticket.field_values or {})
+    values["attachments"] = [
+        {
+            "filename": "claim_register.xlsx",
+            "content_type": "application/vnd.ms-excel",
+            "size_bytes": 2048,
+            "attachment_id": "att-1",
+        },
+        # Arrived before attachment ids were captured, so it can never be sent.
+        {"filename": "legacy.pdf", "content_type": "application/pdf", "size_bytes": 100},
+    ]
+    ticket.field_values = values
+    sd = (
+        await db_session.execute(
+            select(ServiceDeskTicket).where(ServiceDeskTicket.ticket_id == desk["ticket"])
+        )
+    ).scalar_one()
+    sd.source_message_id = "gmail-msg-1"
+    await db_session.commit()
+    return desk
+
+
+@pytest.mark.asyncio
+async def test_attachments_are_listed_with_a_forwardable_flag(db_session, with_attachment):
+    detail = await ServiceDeskTicketService(db_session).get_detail(
+        with_attachment["ws"], with_attachment["ticket"], scope_developer_id=with_attachment["kam"]
+    )
+    assert {(a.filename, a.can_forward) for a in detail.attachments} == {
+        ("claim_register.xlsx", True),
+        ("legacy.pdf", False),
+    }
+
+
+@pytest.mark.asyncio
+async def test_a_chosen_file_is_refetched_and_attached(db_session, with_attachment, sent, monkeypatch):
+    from aexy.services.gmail_sync_service import GmailSyncService
+
+    async def _bytes(self, integration, message_id, body, max_bytes=None):
+        assert message_id == "gmail-msg-1"
+        assert body["attachmentId"] == "att-1"
+        return b"row1,row2"
+
+    monkeypatch.setattr(GmailSyncService, "_gmail_attachment_bytes", _bytes)
+
+    await ServiceDeskTicketService(db_session).email_stakeholder(
+        with_attachment["ws"],
+        with_attachment["ticket"],
+        "claims@insurer-one.example",
+        "Register for your review",
+        "Please see attached.",
+        sender_id=with_attachment["kam"],
+        attachment_filenames=["claim_register.xlsx"],
+        scope_developer_id=with_attachment["kam"],
+    )
+    assert sent[0]["attachments"] == [("claim_register.xlsx", "application/vnd.ms-excel", b"row1,row2")]
+
+
+@pytest.mark.asyncio
+async def test_a_file_that_cannot_be_forwarded_is_refused_before_anything_is_sent(
+    db_session, with_attachment, sent
+):
+    with pytest.raises(HTTPException) as exc:
+        await ServiceDeskTicketService(db_session).email_stakeholder(
+            with_attachment["ws"],
+            with_attachment["ticket"],
+            "claims@insurer-one.example",
+            "Register",
+            "See attached.",
+            sender_id=with_attachment["kam"],
+            attachment_filenames=["legacy.pdf"],
+            scope_developer_id=with_attachment["kam"],
+        )
+    assert exc.value.status_code == 400
+    assert sent == []
+
+
+@pytest.mark.asyncio
+async def test_a_failed_fetch_sends_nothing_rather_than_an_empty_promise(
+    db_session, with_attachment, sent, monkeypatch
+):
+    """"Please find attached" with nothing attached is worse than not sending."""
+    from aexy.services.gmail_sync_service import GmailSyncService
+
+    async def _boom(self, integration, message_id, body, max_bytes=None):
+        raise ValueError("attachment exceeds the Service Desk raw-byte limit")
+
+    monkeypatch.setattr(GmailSyncService, "_gmail_attachment_bytes", _boom)
+
+    with pytest.raises(HTTPException) as exc:
+        await ServiceDeskTicketService(db_session).email_stakeholder(
+            with_attachment["ws"],
+            with_attachment["ticket"],
+            "claims@insurer-one.example",
+            "Register",
+            "See attached.",
+            sender_id=with_attachment["kam"],
+            attachment_filenames=["claim_register.xlsx"],
+            scope_developer_id=with_attachment["kam"],
+        )
+    assert exc.value.status_code == 502
+    assert sent == []
+
+
+@pytest.mark.asyncio
+async def test_writing_to_an_insurer_starts_its_own_conversation(db_session, desk, sent):
+    """Threading it into the partner's conversation would merge the two."""
+    await ServiceDeskTicketService(db_session).email_stakeholder(
+        desk["ws"],
+        desk["ticket"],
+        "claims@insurer-one.example",
+        "Query on this claim",
+        "Body",
+        sender_id=desk["kam"],
+        scope_developer_id=desk["kam"],
+    )
+    assert sent[0]["thread_id"] is None
+    assert sent[0]["subject"].startswith("[BSD-1] ")
+
+
+@pytest.mark.asyncio
+async def test_answering_the_requester_stays_in_their_conversation(db_session, desk, sent):
+    await ServiceDeskTicketService(db_session).email_stakeholder(
+        desk["ws"],
+        desk["ticket"],
+        "paimonking@runbox.com",
+        "Update for you",
+        "Body",
+        sender_id=desk["kam"],
+        scope_developer_id=desk["kam"],
+    )
+    assert sent[0]["thread_id"] == "gmail-thread-1"

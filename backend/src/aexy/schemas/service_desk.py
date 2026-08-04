@@ -120,6 +120,11 @@ class InboundAttachment(BaseModel):
     content_type: str | None = None
     size_bytes: int | None = None
     preview: str | None = None
+    # The provider's handle for re-fetching the bytes later. Captured whether or
+    # not AI is on, because it is an identifier and not content: without it a KAM
+    # can see that a claim register arrived but can never forward it, which is
+    # the whole reason the file was sent to the desk.
+    attachment_id: str | None = None
 
 
 class InboundEmail(BaseModel):
@@ -280,10 +285,26 @@ class TicketEmailRecipient(BaseModel):
     label: str
 
 
+class TicketAttachment(BaseModel):
+    """A file that arrived on the ticket's original email."""
+
+    filename: str
+    content_type: str | None = None
+    size_bytes: int | None = None
+    # False when the provider gave us no handle for the bytes, e.g. mail that
+    # arrived before attachment ids were captured. The UI must not offer to
+    # forward a file the send would then fail on.
+    can_forward: bool = False
+
+
 class StakeholderEmailRequest(BaseModel):
     to: str = Field(..., min_length=3, max_length=255)
     subject: str = Field(..., min_length=1, max_length=255)
     body: str = Field(..., min_length=1, max_length=20000)
+    # Filenames chosen from the ticket's own attachments. Never a client-supplied
+    # payload: the bytes are re-fetched from the original email, so a caller
+    # cannot use the desk to send a file that never arrived on the ticket.
+    attachment_filenames: list[str] = Field(default_factory=list, max_length=10)
 
 
 class ServiceDeskTicketDetail(ServiceDeskTicketResponse):
@@ -294,6 +315,7 @@ class ServiceDeskTicketDetail(ServiceDeskTicketResponse):
     segments: list[SegmentResponse] = Field(default_factory=list)
     correspondence: list[ServiceDeskCorrespondence] = Field(default_factory=list)
     email_recipients: list[TicketEmailRecipient] = Field(default_factory=list)
+    attachments: list[TicketAttachment] = Field(default_factory=list)
     tat: TicketTAT
 
 

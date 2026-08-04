@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from aexy.models.developer import Developer
+from aexy.models.google_integration import GoogleIntegration
 from aexy.models.service_desk import (
     PendingWith,
     ServiceDeskPartner,
@@ -31,6 +32,7 @@ from aexy.schemas.service_desk import (
     SegmentResponse,
     ServiceDeskCorrespondence,
     ServiceDeskTicketDetail,
+    TicketAttachment,
     TicketFieldsUpdate,
     TicketTAT,
 )
@@ -587,6 +589,82 @@ class ServiceDeskTicketService:
         add(ticket.submitter_email, ticket.submitter_name or "Requester")
         return out
 
+    @staticmethod
+    def _ticket_attachments(ticket: Ticket) -> list[dict]:
+        raw = (ticket.field_values or {}).get("attachments")
+        return [item for item in raw if isinstance(item, dict)] if isinstance(raw, list) else []
+
+    async def _load_forward_bytes(
+        self,
+        sd: ServiceDeskTicket,
+        ticket: Ticket,
+        filenames: list[str],
+    ) -> list[tuple[str, str | None, bytes]]:
+        """Re-fetch chosen attachments from the ticket's original email.
+
+        Bytes are never stored on the ticket and never accepted from the client:
+        the caller names a file that actually arrived, and it is pulled fresh
+        from the mailbox. That way the desk cannot be used to send a file that
+        was never part of the conversation.
+        """
+        if not filenames:
+            return []
+        from aexy.models.service_desk import ServiceDeskMailbox
+        from aexy.services.gmail_sync_service import (
+            _SERVICE_DESK_ATTACHMENT_FORWARD_BYTE_LIMIT,
+            GmailSyncService,
+        )
+
+        by_name = {str(item.get("filename")): item for item in self._ticket_attachments(ticket)}
+        mailbox = await self.db.get(ServiceDeskMailbox, sd.mailbox_id) if sd.mailbox_id else None
+        integration_id = mailbox.integration_id if mailbox else None
+        if not sd.source_message_id or not integration_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This ticket's original email is not available, so its files cannot be attached",
+            )
+
+        integration = await self.db.get(GoogleIntegration, integration_id)
+        if integration is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="The mailbox is no longer connected, so files cannot be attached",
+            )
+
+        service = GmailSyncService(self.db)
+        loaded: list[tuple[str, str | None, bytes]] = []
+        total = 0
+        for filename in filenames:
+            item = by_name.get(filename)
+            if item is None or not item.get("attachment_id"):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"'{filename}' is not a forwardable file on this ticket",
+                )
+            try:
+                raw = await service._gmail_attachment_bytes(
+                    integration,
+                    sd.source_message_id,
+                    {"attachmentId": item["attachment_id"], "size": item.get("size_bytes")},
+                    max_bytes=_SERVICE_DESK_ATTACHMENT_FORWARD_BYTE_LIMIT,
+                )
+            except Exception as exc:  # noqa: BLE001 — surfaced, never silently dropped
+                # Sending "please find attached" with nothing attached is worse
+                # than not sending: the insurer waits, and the desk shows a sent
+                # message that was useless.
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"'{filename}' could not be retrieved, so nothing was sent: {exc}",
+                ) from exc
+            total += len(raw)
+            if total > _SERVICE_DESK_ATTACHMENT_FORWARD_BYTE_LIMIT:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="The chosen files are too large to send together",
+                )
+            loaded.append((filename, item.get("content_type"), raw))
+        return loaded
+
     async def email_stakeholder(
         self,
         workspace_id: str,
@@ -595,14 +673,19 @@ class ServiceDeskTicketService:
         subject: str,
         body: str,
         sender_id: str,
+        attachment_filenames: list[str] | None = None,
         scope_developer_id: str | None = None,
     ) -> ServiceDeskTicketDetail:
         """Send a ticket email as the watched mailbox and log it on the ticket.
 
-        The BSD number is forced into the subject and the ticket's Gmail thread
-        is passed through, because those are the two things the deterministic
-        inbound matcher looks at — an outbound message without them produces a
-        reply that opens a second ticket instead of continuing this one.
+        The BSD number is always forced into the subject, because it is what the
+        deterministic inbound matcher reads. Threading is deliberately narrower:
+        the ticket's existing conversation is reused only when answering the
+        person who opened it. Writing to an insurer starts its own conversation,
+        so a partner's thread and an insurer's thread never merge into one in the
+        watched mailbox, where a later reply-all would expose one to the other.
+        Its replies match back by the BSD number in the subject, which is the
+        matcher's second and deliberate path.
         """
         from aexy.models.service_desk import ServiceDeskMailbox
         from aexy.services.service_desk_intake_service import _BSD_RE
@@ -634,10 +717,17 @@ class ServiceDeskTicketService:
         if match is None or int(match.group(1)) != ticket.ticket_number:
             subject = f"[{display_id}] {subject}"
 
+        requester = (ticket.submitter_email or "").strip().lower()
+        thread_id = sd.thread_ref if requester and recipient == requester else None
+
+        # Fetched before the send, so a missing file fails the whole action
+        # rather than delivering a message that promises an attachment.
+        files = await self._load_forward_bytes(sd, ticket, attachment_filenames or [])
+
         mailbox = await self.db.get(ServiceDeskMailbox, sd.mailbox_id) if sd.mailbox_id else None
         try:
             await send_stakeholder_email(
-                self.db, mailbox, recipient, subject, body, thread_id=sd.thread_ref
+                self.db, mailbox, recipient, subject, body, thread_id=thread_id, attachments=files
             )
         except Exception as exc:  # noqa: BLE001 — the user is waiting on this send
             logger.warning("Service desk: stakeholder email failed for %s (%s)", display_id, exc)
@@ -646,6 +736,9 @@ class ServiceDeskTicketService:
                 detail=f"The email could not be sent: {exc}",
             ) from exc
 
+        attached_line = (
+            "\nAttached: " + ", ".join(name for name, _, _ in files) if files else ""
+        )
         # author_id is what marks this correspondence outgoing; inbound replies
         # are stored with only an author_email.
         self.db.add(
@@ -654,12 +747,13 @@ class ServiceDeskTicketService:
                 ticket_id=ticket_id,
                 author_id=sender_id,
                 author_email=mailbox.address if mailbox else None,
-                content=f"To: {recipient}\nSubject: {subject}\n\n{body}",
+                content=f"To: {recipient}\nSubject: {subject}{attached_line}\n\n{body}",
                 is_internal=False,
             )
         )
         await self.db.flush()
         return await self.get_detail(workspace_id, ticket_id)
+
 
     # ------------------------------------------------------- reference checks
 
@@ -833,6 +927,15 @@ class ServiceDeskTicketService:
                 for response in correspondence
             ],
             email_recipients=await self._email_recipients(workspace_id, sd, ticket),
+            attachments=[
+                TicketAttachment(
+                    filename=str(item.get("filename") or "attachment"),
+                    content_type=item.get("content_type"),
+                    size_bytes=item.get("size_bytes"),
+                    can_forward=bool(item.get("attachment_id")),
+                )
+                for item in self._ticket_attachments(ticket)
+            ],
             tat=tat,
         )
 

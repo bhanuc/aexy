@@ -105,6 +105,16 @@ export interface TicketEmailRecipient {
   label: string;
 }
 
+/** A file that arrived on the ticket's original email. */
+export interface TicketAttachment {
+  filename: string;
+  content_type: string | null;
+  size_bytes: number | null;
+  /** False when the original message gave us no handle for the bytes, so it
+   *  cannot be forwarded and must not be offered. */
+  can_forward: boolean;
+}
+
 export interface DetectedIssue {
   summary: string;
   request_type: RequestType;
@@ -126,6 +136,7 @@ export interface ServiceDeskTicketDetail extends ServiceDeskTicket {
   segments: Segment[];
   correspondence: CorrespondenceEntry[];
   email_recipients: TicketEmailRecipient[];
+  attachments: TicketAttachment[];
   tat: TicketTAT;
 }
 
@@ -251,7 +262,8 @@ export const serviceDeskApi = {
   ): Promise<{ ticket_id: string }> =>
     (await api.post(`${base(ws)}/tickets/manual`, data)).data,
   emailStakeholder: async (
-    ws: string, id: string, data: { to: string; subject: string; body: string },
+    ws: string, id: string,
+    data: { to: string; subject: string; body: string; attachment_filenames?: string[] },
   ): Promise<ServiceDeskTicketDetail> =>
     (await api.post(`${base(ws)}/tickets/${id}/email`, data)).data,
   convertToTask: async (

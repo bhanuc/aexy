@@ -246,6 +246,7 @@ async def test_attachment_context_is_persisted_on_the_primary_ticket(
             "content_type": "text/csv",
             "size_bytes": 42,
             "preview": '[["policy_no"], ["P-1"]]',
+            "attachment_id": None,
         }
     ]
 

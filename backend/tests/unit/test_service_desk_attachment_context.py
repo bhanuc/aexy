@@ -192,6 +192,9 @@ async def test_preview_failure_preserves_attachment_metadata(monkeypatch):
             "filename": "members.csv",
             "content_type": "text/csv",
             "size_bytes": 42,
+            # Kept even when the preview fails: it is what lets a KAM forward
+            # the file later, and it is an identifier rather than content.
+            "attachment_id": "attachment-3",
         }
     ]
 

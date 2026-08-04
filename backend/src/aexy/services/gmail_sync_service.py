@@ -34,6 +34,10 @@ _SERVICE_DESK_XLSX_EXPANDED_BYTE_LIMIT = 16 * 1024 * 1024
 _SERVICE_DESK_ATTACHMENT_METADATA_LIMIT = 10
 _SERVICE_DESK_ATTACHMENT_PREVIEW_LIMIT = 3
 _SERVICE_DESK_ATTACHMENT_PREVIEW_CHAR_LIMIT = 600
+# Forwarding a file to an insurer is a different job from sampling it for the
+# classifier, so it gets its own ceiling. Gmail itself rejects much above this,
+# and holding the bytes in memory is what actually costs us.
+_SERVICE_DESK_ATTACHMENT_FORWARD_BYTE_LIMIT = 10 * 1024 * 1024
 
 
 # Default deal creation settings
@@ -1076,6 +1080,10 @@ class GmailSyncService:
                 "filename": filename,
                 "content_type": content_type,
                 "size_bytes": size_bytes,
+                # Identifier only, never content, so it is captured whether or not
+                # AI is on. Without it the desk can show that a claim register
+                # arrived but can never forward it to the insurer.
+                "attachment_id": (body.get("attachmentId") if isinstance(body, dict) else None),
             }
             if (
                 with_previews
@@ -1111,10 +1119,17 @@ class GmailSyncService:
         integration: GoogleIntegration,
         message_id: str,
         body: dict,
+        max_bytes: int | None = None,
     ) -> bytes:
-        """Load attachment bytes only when every pre-decode size check is safe."""
+        """Load attachment bytes only when every pre-decode size check is safe.
+
+        ``max_bytes`` defaults to the classifier's preview ceiling. Forwarding
+        passes its own, larger one: a claim register too big to sample is still
+        a file the insurer needs to receive.
+        """
+        limit = max_bytes or _SERVICE_DESK_ATTACHMENT_RAW_BYTE_LIMIT
         declared_size = self._declared_attachment_size(body)
-        if declared_size is not None and declared_size > _SERVICE_DESK_ATTACHMENT_RAW_BYTE_LIMIT:
+        if declared_size is not None and declared_size > limit:
             raise ValueError("attachment exceeds the Service Desk raw-byte limit")
 
         encoded = body.get("data")
@@ -1127,10 +1142,7 @@ class GmailSyncService:
                 f"/users/me/messages/{message_id}/attachments/{body['attachmentId']}",
             )
             response_size = self._declared_attachment_size(response)
-            if (
-                response_size is not None
-                and response_size > _SERVICE_DESK_ATTACHMENT_RAW_BYTE_LIMIT
-            ):
+            if response_size is not None and response_size > limit:
                 raise ValueError("attachment response exceeds the Service Desk raw-byte limit")
             encoded = response.get("data")
         if not encoded:
@@ -1142,7 +1154,7 @@ class GmailSyncService:
             encoded_text = str(encoded)
         encoded_without_padding = encoded_text.rstrip("=")
         decoded_size_upper_bound = (len(encoded_without_padding) * 3) // 4
-        if decoded_size_upper_bound > _SERVICE_DESK_ATTACHMENT_RAW_BYTE_LIMIT:
+        if decoded_size_upper_bound > limit:
             raise ValueError("encoded attachment exceeds the Service Desk raw-byte limit")
 
         raw = base64.urlsafe_b64decode(

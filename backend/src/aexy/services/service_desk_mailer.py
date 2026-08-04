@@ -10,6 +10,10 @@ See ``prds/BIMAPLAN_SERVICE_DESK_PLAN.md`` §7.
 
 import base64
 import logging
+from email import encoders
+from email.message import Message
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,14 +39,28 @@ async def _send_via_gmail(
     subject: str,
     body_text: str,
     thread_id: str | None,
-) -> None:
+    attachments: list[tuple[str, str | None, bytes]] | None = None,
+) -> str | None:
+    """Send through the connected account. Returns Gmail's thread id, if given."""
     from aexy.services.gmail_sync_service import GmailSyncService
 
     integration = await db.get(GoogleIntegration, integration_id)
     if integration is None or not integration.gmail_sync_enabled:
         raise RuntimeError("Gmail integration unavailable")
 
-    mime = MIMEText(body_text)
+    if attachments:
+        mime: Message = MIMEMultipart()
+        mime.attach(MIMEText(body_text))
+        for filename, content_type, raw_bytes in attachments:
+            maintype, _, subtype = (content_type or "application/octet-stream").partition("/")
+            part = MIMEBase(maintype or "application", subtype or "octet-stream")
+            part.set_payload(raw_bytes)
+            encoders.encode_base64(part)
+            part.add_header("Content-Disposition", "attachment", filename=filename)
+            mime.attach(part)
+    else:
+        mime = MIMEText(body_text)
+
     mime["To"] = to_email
     mime["From"] = from_address
     # Keep the watched mailbox in the reply path explicitly. Gmail already sends
@@ -57,9 +75,10 @@ async def _send_via_gmail(
     if thread_id:
         payload["threadId"] = thread_id
 
-    await GmailSyncService(db)._make_gmail_request(
+    response = await GmailSyncService(db)._make_gmail_request(
         integration, "POST", "/users/me/messages/send", json=payload
     )
+    return (response or {}).get("threadId")
 
 
 async def send_stakeholder_email(
@@ -69,7 +88,8 @@ async def send_stakeholder_email(
     subject: str,
     body_text: str,
     thread_id: str | None = None,
-) -> None:
+    attachments: list[tuple[str, str | None, bytes]] | None = None,
+) -> str | None:
     """Send a KAM-composed ticket email AS the watched mailbox. Raises on failure.
 
     Deliberately not best-effort, unlike the automatic receipts. This is a
@@ -87,8 +107,15 @@ async def send_stakeholder_email(
             "This ticket's mailbox is not linked to a connected Gmail account, "
             "so outbound stakeholder email cannot be sent from it"
         )
-    await _send_via_gmail(
-        db, mailbox.integration_id, mailbox.address, to_email, subject, body_text, thread_id
+    return await _send_via_gmail(
+        db,
+        mailbox.integration_id,
+        mailbox.address,
+        to_email,
+        subject,
+        body_text,
+        thread_id,
+        attachments,
     )
 
 

@@ -83,7 +83,18 @@
       "emailBody": "Write the message…",
       "emailSend": "Send email",
       "emailSending": "Sending…",
-      "emailFailed": "The email could not be sent. Nothing was logged on the ticket."
+      "emailFailed": "The email could not be sent. Nothing was logged on the ticket.",
+      "request": "Request",
+      "attachments": "Attachments",
+      "notForwardable": "Cannot be forwarded",
+      "emailQuoteRequest": "Quote the original request",
+      "emailAttach": "Attach files from this ticket",
+      "emailNoAttachments": "none",
+      "emailReview": "Review before sending",
+      "emailConfirmTitle": "Check before this leaves",
+      "emailConfirmHint": "This sends from the desk mailbox and cannot be recalled.",
+      "emailConfirmSend": "Confirm and send",
+      "emailCancel": "Cancel"
     },
     "ai": {
       "title": "AI email categorisation",

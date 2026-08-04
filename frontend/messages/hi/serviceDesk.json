@@ -83,7 +83,18 @@
       "emailBody": "संदेश लिखें…",
       "emailSend": "ईमेल भेजें",
       "emailSending": "भेजा जा रहा है…",
-      "emailFailed": "ईमेल नहीं भेजा जा सका। टिकट पर कुछ भी दर्ज नहीं हुआ।"
+      "emailFailed": "ईमेल नहीं भेजा जा सका। टिकट पर कुछ भी दर्ज नहीं हुआ।",
+      "request": "अनुरोध",
+      "attachments": "संलग्नक",
+      "notForwardable": "अग्रेषित नहीं किया जा सकता",
+      "emailQuoteRequest": "मूल अनुरोध उद्धृत करें",
+      "emailAttach": "इस टिकट से फ़ाइलें संलग्न करें",
+      "emailNoAttachments": "कोई नहीं",
+      "emailReview": "भेजने से पहले जाँचें",
+      "emailConfirmTitle": "भेजने से पहले जाँच लें",
+      "emailConfirmHint": "यह डेस्क मेलबॉक्स से भेजा जाता है और वापस नहीं लिया जा सकता।",
+      "emailConfirmSend": "पुष्टि करें और भेजें",
+      "emailCancel": "रद्द करें"
     },
     "ai": {
       "title": "AI ईमेल वर्गीकरण",

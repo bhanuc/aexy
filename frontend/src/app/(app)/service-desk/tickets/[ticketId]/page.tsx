@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Clock, GitBranch, Mail, Scissors, Send } from "lucide-react";
+import { ArrowLeft, Clock, GitBranch, Mail, Paperclip, Scissors, Send } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import {
@@ -69,6 +69,11 @@ export default function ServiceDeskTicketDetailPage() {
   const [mailTo, setMailTo] = useState("");
   const [mailSubject, setMailSubject] = useState("");
   const [mailBody, setMailBody] = useState("");
+  const [mailFiles, setMailFiles] = useState<string[]>([]);
+  // A send cannot be undone once Gmail accepts it, and the recipient list holds
+  // partners and insurers side by side, so the last guard against a misdirected
+  // email is showing exactly what is about to leave and to whom.
+  const [confirming, setConfirming] = useState(false);
 
   if (isLoading) return <div className="flex justify-center py-16"><Spinner /></div>;
   if (!ticket) return <div className="p-6 text-muted-foreground">Not found.</div>;
@@ -108,10 +113,30 @@ export default function ServiceDeskTicketDetailPage() {
     if (!mailTo || !mailSubject.trim() || !mailBody.trim()) return;
     await emailStakeholder.mutateAsync({
       id: ticketId,
-      data: { to: mailTo, subject: mailSubject.trim(), body: mailBody.trim() },
+      data: {
+        to: mailTo,
+        subject: mailSubject.trim(),
+        body: mailBody.trim(),
+        attachment_filenames: mailFiles,
+      },
     });
     setMailSubject("");
     setMailBody("");
+    setMailFiles([]);
+    setConfirming(false);
+  };
+
+  const toggleMailFile = (name: string, checked: boolean) =>
+    setMailFiles((current) =>
+      checked ? [...current, name] : current.filter((value) => value !== name),
+    );
+
+  const quoteRequest = () => {
+    const from = ticket.requester_name || ticket.requester_email || "";
+    setMailBody(
+      (current) =>
+        `${current}${current ? "\n\n" : ""}--- Original request from ${from} ---\n${ticket.body ?? ""}`,
+    );
   };
 
   const toggleIssue = (index: number, checked: boolean) => {
@@ -136,6 +161,35 @@ export default function ServiceDeskTicketDetailPage() {
         </div>
         <p className="text-muted-foreground">{ticket.subject ?? "—"}</p>
       </div>
+
+      {/* The request itself. Without this a KAM cannot see what they are being
+          asked to pass on to an insurer, which is the desk's core job. */}
+      {(ticket.body || ticket.attachments.length > 0) && (
+        <Card className="space-y-3 p-4">
+          <div className="text-sm font-semibold">{t("detail.request")}</div>
+          {ticket.body && (
+            <p className="whitespace-pre-wrap text-sm">{ticket.body}</p>
+          )}
+          {ticket.attachments.length > 0 && (
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Paperclip className="h-3.5 w-3.5" /> {t("detail.attachments")}
+              </div>
+              <ul className="space-y-1">
+                {ticket.attachments.map((file) => (
+                  <li key={file.filename} className="flex flex-wrap items-center gap-2 text-sm">
+                    <span>{file.filename}</span>
+                    <span className="text-xs text-muted-foreground">{fmtBytes(file.size_bytes)}</span>
+                    {!file.can_forward && (
+                      <Badge variant="outline">{t("detail.notForwardable")}</Badge>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Fields — auto-filled where a rule could, editable everywhere */}
       <Card className="space-y-4 p-4">
@@ -218,7 +272,7 @@ export default function ServiceDeskTicketDetailPage() {
             <Picker
               label={t("detail.emailTo")}
               value={mailTo}
-              onChange={setMailTo}
+              onChange={(v) => { setMailTo(v); setConfirming(false); }}
               placeholder={t("detail.emailSelectRecipient")}
               options={ticket.email_recipients.map((r) => ({
                 value: r.email,
@@ -227,23 +281,77 @@ export default function ServiceDeskTicketDetailPage() {
             />
             <div>
               <label className="mb-1 block text-xs text-muted-foreground">{t("detail.emailSubject")}</label>
-              <Input value={mailSubject} onChange={(e) => setMailSubject(e.target.value)} />
+              <Input value={mailSubject} onChange={(e) => { setMailSubject(e.target.value); setConfirming(false); }} />
             </div>
           </div>
           <textarea
             value={mailBody}
-            onChange={(e) => setMailBody(e.target.value)}
+            onChange={(e) => { setMailBody(e.target.value); setConfirming(false); }}
             rows={5}
             placeholder={t("detail.emailBody")}
             className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
           />
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              disabled={!mailTo || !mailSubject.trim() || !mailBody.trim() || emailStakeholder.isPending}
-              onClick={sendMail}
-            >
-              {emailStakeholder.isPending ? t("detail.emailSending") : t("detail.emailSend")}
+          {ticket.body && (
+            <Button type="button" variant="outline" size="sm" onClick={quoteRequest}>
+              {t("detail.emailQuoteRequest")}
             </Button>
+          )}
+
+          {/* Files default to unselected. Forwarding a partner's register to an
+              insurer is a disclosure, so it must be an explicit choice each time. */}
+          {ticket.attachments.some((f) => f.can_forward) && (
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Paperclip className="h-3.5 w-3.5" /> {t("detail.emailAttach")}
+              </div>
+              {ticket.attachments.filter((f) => f.can_forward).map((file) => (
+                <label key={file.filename} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={mailFiles.includes(file.filename)}
+                    onChange={(e) => { toggleMailFile(file.filename, e.target.checked); setConfirming(false); }}
+                  />
+                  <span>{file.filename}</span>
+                  <span className="text-xs text-muted-foreground">{fmtBytes(file.size_bytes)}</span>
+                </label>
+              ))}
+            </div>
+          )}
+
+          {confirming && (
+            <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm">
+              <div className="font-medium">{t("detail.emailConfirmTitle")}</div>
+              <div className="mt-1 text-muted-foreground">{t("detail.emailConfirmHint")}</div>
+              <div className="mt-2 space-y-0.5">
+                <div><span className="text-muted-foreground">{t("detail.emailTo")}: </span>{mailTo}</div>
+                <div><span className="text-muted-foreground">{t("detail.emailSubject")}: </span>[{ticket.display_id}] {mailSubject.trim()}</div>
+                <div>
+                  <span className="text-muted-foreground">{t("detail.emailAttach")}: </span>
+                  {mailFiles.length ? mailFiles.join(", ") : t("detail.emailNoAttachments")}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2">
+            {confirming ? (
+              <>
+                <Button disabled={emailStakeholder.isPending} onClick={sendMail}>
+                  {emailStakeholder.isPending ? t("detail.emailSending") : t("detail.emailConfirmSend")}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setConfirming(false)}>
+                  {t("detail.emailCancel")}
+                </Button>
+              </>
+            ) : (
+              <Button
+                disabled={!mailTo || !mailSubject.trim() || !mailBody.trim() || emailStakeholder.isPending}
+                onClick={() => setConfirming(true)}
+              >
+                {t("detail.emailReview")}
+              </Button>
+            )}
             {emailStakeholder.isError && (
               <span className="text-sm text-destructive">{t("detail.emailFailed")}</span>
             )}
@@ -449,6 +557,12 @@ export default function ServiceDeskTicketDetailPage() {
       </Card>
     </div>
   );
+}
+
+function fmtBytes(bytes: number | null): string {
+  if (!bytes) return "";
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
