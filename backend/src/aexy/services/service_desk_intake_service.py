@@ -59,6 +59,16 @@ _SPLIT_MIN_CONFIDENCE = 0.85
 _AI_MATCH_MIN_CONFIDENCE = 0.85
 _AI_MATCH_MAX_CANDIDATES = 20
 
+# Stages a reply can hand back from. Deliberately only the external ones: an
+# outside stakeholder answering says nothing about whether Finance, Sales or
+# Marketing have finished their own work, and pulling the ticket out of an
+# internal queue would lose it from that team's list.
+_HANDBACK_STAGES = {
+    PendingWith.INSURER.value: "insurer",
+    PendingWith.PARTNER.value: "partner",
+    PendingWith.THIRD_PARTY.value: "third_party",
+}
+
 # Headers that mean "a machine sent this". The X-Auto* ones only ever appear on
 # auto-responders, so their presence is enough; Precedence needs a value check
 # because ordinary mail carries it too.
@@ -421,15 +431,59 @@ class ServiceDeskIntakeService:
                 )
             )
         ).scalar_one_or_none()
-        if sd is not None and sd.pending_with == PendingWith.CLOSED.value:
-            from aexy.services.service_desk_ticket_service import ServiceDeskTicketService
+        if sd is None:
+            return
+        from aexy.services.service_desk_ticket_service import ServiceDeskTicketService
 
+        if sd.pending_with == PendingWith.CLOSED.value:
             await ServiceDeskTicketService(self.db).change_pending_with(
                 workspace_id,
                 ticket.id,
                 PendingWith.KAM.value,
                 note="Reopened by requester reply",
             )
+            return
+
+        # The stakeholder we were waiting on has answered, so the ball is back
+        # with the KAM: somebody has to read it and decide, whether the reply
+        # resolves the request or only promises an update tomorrow. Mirrors the
+        # outbound side, and goes through the same transition, so the segment,
+        # the timeline entry and the clock are identical to a Move to click.
+        sender = await self._handback_sender(workspace_id, sd.pending_with, email)
+        if sender is not None:
+            await ServiceDeskTicketService(self.db).change_pending_with(
+                workspace_id,
+                ticket.id,
+                PendingWith.KAM.value,
+                note=f"Reply received from {sender}",
+            )
+
+    async def _handback_sender(
+        self, workspace_id: str, pending_with: str, email: InboundEmail
+    ) -> str | None:
+        """Name the stakeholder if this reply came from the one we are waiting on.
+
+        Someone else chasing the ticket while the insurer still owes an answer
+        does not mean the insurer is done, so only the party actually holding the
+        ticket hands it back.
+        """
+        if pending_with not in _HANDBACK_STAGES:
+            return None
+        address = _address_of(email.from_email)
+        domain = _domain_of(email.from_email)
+        if pending_with == PendingWith.INSURER.value:
+            insurer = await self._match_insurer(workspace_id, domain, address)
+            return insurer.name if insurer else None
+        if pending_with == PendingWith.PARTNER.value:
+            partner = await self._match_partner(workspace_id, domain, address)
+            return partner.name if partner else None
+        # Third party has no master data of its own, so any external sender who
+        # is not a known partner or insurer is taken to be that vendor.
+        if await self._match_partner(workspace_id, domain, address) is not None:
+            return None
+        if await self._match_insurer(workspace_id, domain, address) is not None:
+            return None
+        return email.from_name or address
 
     # ------------------------------------------------------------- new ticket
 

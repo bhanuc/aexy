@@ -206,3 +206,77 @@ async def test_the_deterministic_paths_still_win_before_any_model_runs(
 
     assert result.id == desk["ticket"].id
     assert not any("Open tickets for this company" in prompt for prompt in called)
+
+
+# ----------------------------------------- a reply hands the ticket back
+
+
+def _reply_from(sender: str, **over) -> InboundEmail:
+    base = {
+        "to": "ops@bimaplan.co",
+        "from_email": sender,
+        "subject": "Re: BSD-7 claim update",
+        "body_text": "Still checking, will confirm tomorrow.",
+        "message_id": f"m-{uuid4().hex[:8]}",
+        "thread_id": "thread-original",
+    }
+    base.update(over)
+    return InboundEmail(**base)
+
+
+async def _stage(db, ticket_id: str) -> str:
+    sd = (
+        await db.execute(
+            select(ServiceDeskTicket).where(ServiceDeskTicket.ticket_id == ticket_id)
+        )
+    ).scalar_one()
+    return sd.pending_with
+
+
+@pytest.mark.asyncio
+async def test_a_reply_from_the_stakeholder_we_await_hands_it_back_to_the_kam(
+    db_session, desk
+):
+    """A holding reply is still a reply: a human has to read it and decide."""
+    await ServiceDeskIntakeService(db_session).ingest(
+        _reply_from("claims@i1.example"), desk["mailbox"], "service_desk_gmail"
+    )
+    await db_session.commit()
+
+    assert await _stage(db_session, desk["ticket"].id) == "kam"
+    notes = (
+        await db_session.execute(
+            select(TicketResponse).where(TicketResponse.ticket_id == desk["ticket"].id)
+        )
+    ).scalars().all()
+    assert any("Reply received from Insurer I1" in n.content for n in notes if n.is_internal)
+
+
+@pytest.mark.asyncio
+async def test_someone_else_chasing_does_not_let_the_insurer_off_the_hook(db_session, desk):
+    """The insurer still owes an answer, so the ticket stays with the insurer."""
+    await ServiceDeskIntakeService(db_session).ingest(
+        _reply_from("rahul@partner.example"), desk["mailbox"], "service_desk_gmail"
+    )
+    await db_session.commit()
+
+    assert await _stage(db_session, desk["ticket"].id) == "insurer"
+
+
+@pytest.mark.asyncio
+async def test_an_internal_queue_is_never_emptied_by_an_external_reply(db_session, desk):
+    """Finance replying is not the same as Finance having finished."""
+    sd = (
+        await db_session.execute(
+            select(ServiceDeskTicket).where(ServiceDeskTicket.ticket_id == desk["ticket"].id)
+        )
+    ).scalar_one()
+    sd.pending_with = "finance"
+    await db_session.commit()
+
+    await ServiceDeskIntakeService(db_session).ingest(
+        _reply_from("claims@i1.example"), desk["mailbox"], "service_desk_gmail"
+    )
+    await db_session.commit()
+
+    assert await _stage(db_session, desk["ticket"].id) == "finance"

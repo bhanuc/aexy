@@ -138,16 +138,38 @@ class Clock:
         """Working seconds as working days — 1.0 means one full shift went by."""
         return round(working_seconds / self.working_day_seconds, 2)
 
-    def breach_level(self, stage_working_seconds: int, pending_with: str | None = None) -> str:
+    def breach_level(
+        self,
+        stage_working_seconds: int,
+        pending_with: str | None = None,
+        cumulative_working_seconds: int | None = None,
+    ) -> str:
+        """How late this ticket is with its current stakeholder.
+
+        ``stage_working_seconds`` is the open segment's age and drives amber and
+        red exactly as the BRD specifies.
+
+        ``cumulative_working_seconds`` is everything this stakeholder has held the
+        ticket for, across every hand-off, and can only ever raise the result to
+        red. It exists because a stakeholder who answers "still checking" hands
+        the ticket back, which restarts the stage clock: without this, a daily
+        holding reply would keep a chronically late insurer permanently green.
+        It never triggers amber, so a ticket that is healthy today cannot be
+        pushed to amber by history alone.
+        """
         if pending_with in self.test_stage_slas:
             amber_minutes, red_minutes = self.test_stage_slas[pending_with]
             if stage_working_seconds > red_minutes * 60:
+                return "red"
+            if (cumulative_working_seconds or 0) > red_minutes * 60:
                 return "red"
             if stage_working_seconds >= amber_minutes * 60:
                 return "amber"
             return "green"
         days = stage_working_seconds / self.working_day_seconds
         if days > BREACH_RED_DAYS:
+            return "red"
+        if (cumulative_working_seconds or 0) / self.working_day_seconds > BREACH_RED_DAYS:
             return "red"
         if days >= BREACH_AMBER_DAYS:
             return "amber"

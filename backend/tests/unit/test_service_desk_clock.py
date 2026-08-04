@@ -238,3 +238,32 @@ async def test_load_clock_survives_a_malformed_shift_setting(db_session: AsyncSe
 
     clock = await load_clock(db_session, ws.id)
     assert (clock.work_start, clock.work_end) == (time(9, 30), time(18, 30))
+
+
+def test_cumulative_time_turns_a_reset_stage_clock_red():
+    """A holding reply hands the ticket back and restarts the stage clock.
+
+    Without the cumulative check, an insurer who answers "still checking" every
+    day would sit permanently green no matter how long they had really held the
+    ticket. That is exactly the delay the two-day rule exists to expose.
+    """
+    clock = Clock()
+    day = clock.working_day_seconds
+
+    # Just handed back to them: the stage clock is near zero.
+    assert clock.breach_level(60, "insurer") == "green"
+    # ...but they have already had this ticket for four working days in total.
+    assert (
+        clock.breach_level(60, "insurer", cumulative_working_seconds=int(day * 4)) == "red"
+    )
+
+
+def test_history_alone_never_pushes_a_healthy_ticket_to_amber():
+    """Cumulative time may only raise the level to red, never to amber."""
+    clock = Clock()
+    day = clock.working_day_seconds
+
+    # Well inside both thresholds cumulatively, so nothing changes.
+    assert clock.breach_level(60, "insurer", cumulative_working_seconds=int(day * 1.5)) == "green"
+    # And a genuinely aged stage still reports amber on its own merit.
+    assert clock.breach_level(int(day * 1.2), "insurer") == "amber"

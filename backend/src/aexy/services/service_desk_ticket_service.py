@@ -858,7 +858,15 @@ class ServiceDeskTicketService:
             current_pending_with=current_pending,
             current_stage_seconds=current_seconds,
             current_stage_days=clock.to_days(current_seconds),
-            breach_level=clock.breach_level(current_seconds, current_pending) if current_pending else "green",
+            breach_level=(
+                clock.breach_level(
+                    current_seconds,
+                    current_pending,
+                    cumulative_working_seconds=stakeholder.get(current_pending, 0),
+                )
+                if current_pending
+                else "green"
+            ),
             stakeholder_seconds=dict(stakeholder),
         )
 
@@ -1076,20 +1084,34 @@ class ServiceDeskTicketService:
                 query = query.where(clause)
         rows = (await self.db.execute(query)).all()
 
-        # open segments keyed by ticket for current-stage age
-        open_segs = (
+        # Every segment, not just the open one: the breach level now also
+        # considers how long a stakeholder has held the ticket in total, so a
+        # holding reply that restarts the stage clock cannot hide a chronic delay.
+        # ponytail: one pass over the workspace's segments; if a desk ever grows
+        # past tens of thousands of open tickets, aggregate this in SQL instead.
+        all_segs = (
             await self.db.execute(
-                select(TicketPendingSegment.ticket_id, TicketPendingSegment.entered_at).where(
-                    TicketPendingSegment.workspace_id == workspace_id,
-                    TicketPendingSegment.exited_at.is_(None),
-                )
+                select(
+                    TicketPendingSegment.ticket_id,
+                    TicketPendingSegment.pending_with,
+                    TicketPendingSegment.entered_at,
+                    TicketPendingSegment.exited_at,
+                ).where(TicketPendingSegment.workspace_id == workspace_id)
             )
         ).all()
-        entered_by_ticket = {tid: entered for tid, entered in open_segs}
+        entered_by_ticket = {
+            tid: entered for tid, _, entered, exited in all_segs if exited is None
+        }
 
         now = datetime.now(timezone.utc)
         # One read for the whole dashboard rather than per ticket.
         clock = await load_clock(self.db, workspace_id)
+        cumulative: dict[tuple[str, str], int] = defaultdict(int)
+        for tid, stage, entered, exited in all_segs:
+            if entered is None:
+                continue
+            ends = _aware(exited) if exited is not None else now
+            cumulative[(tid, stage)] += clock.seconds_between(_aware(entered), ends)
         buckets: dict[str, StakeholderBucket] = {}
         tickets: list[DashboardTicket] = []
         breaching = 0
@@ -1104,7 +1126,11 @@ class ServiceDeskTicketService:
             stage_days = clock.to_days(stage_seconds)
             # Overall stays wall clock: that is how long the requester waited.
             overall_days = round(int((now - _aware(ticket.created_at)).total_seconds()) / _DAY, 2)
-            level = clock.breach_level(stage_seconds, sd.pending_with)
+            level = clock.breach_level(
+                stage_seconds,
+                sd.pending_with,
+                cumulative_working_seconds=cumulative.get((sd.ticket_id, sd.pending_with), 0),
+            )
 
             bucket = buckets.setdefault(sd.pending_with, StakeholderBucket(pending_with=sd.pending_with))
             setattr(bucket, level, getattr(bucket, level) + 1)
