@@ -76,31 +76,56 @@ def _openai_tool_defs() -> list[dict]:
 class AskService:
     """Service for AI conversations with streaming and tool execution."""
 
-    def __init__(self, db: AsyncSession):
+    def __init__(
+        self,
+        db: AsyncSession,
+        provider_override: str | None = None,
+        model_override: str | None = None,
+    ):
         self.db = db
         settings = get_settings()
         llm = settings.llm
 
-        # API URL for the OpenAI-compatible streaming path. DeepSeek, OpenRouter
-        # and LM Studio all speak the OpenAI wire format, so they reuse
-        # `_stream_openai` with a different base URL.
+        # API URL for the OpenAI-compatible streaming path.
         self._api_url = OPENAI_API_URL
 
-        # Honor the configured LLM_PROVIDER (settings.llm.llm_provider). This is
-        # the single source of truth the rest of the platform uses via the LLM
-        # gateway; the Ask feature previously ignored it and auto-picked the
-        # first available key (Anthropic > OpenAI > Gemini), so a deployment set
-        # to `deepseek` still hit Gemini. If the configured provider has no
-        # usable credentials we fall back to auto-detect so deployments that
-        # never set LLM_PROVIDER keep working.
-        anthropic_key = settings.anthropic_api_key or llm.anthropic_api_key
-        resolved = self._resolve_provider(llm.llm_provider, llm, anthropic_key)
-        if resolved is None:
-            resolved = self._auto_detect(llm, anthropic_key)
+        anthropic_key = (
+            settings.anthropic_api_key
+            or llm.anthropic_api_key
+        )
 
-        self._provider, self._api_key, self._model, api_url = resolved
+        # Use the benchmark-provided provider when given.
+        # Otherwise keep normal production behavior.
+        provider_name = (
+            provider_override
+            or llm.llm_provider
+        )
+
+        resolved = self._resolve_provider(
+            provider_name,
+            llm,
+            anthropic_key,
+        )
+
+        if resolved is None:
+            resolved = self._auto_detect(
+                llm,
+                anthropic_key,
+            )
+
+        (
+            self._provider,
+            self._api_key,
+            self._model,
+            api_url,
+        ) = resolved
+
         if api_url:
             self._api_url = api_url
+
+        # Optional benchmark-only model override.
+        if model_override:
+            self._model = model_override
 
     @staticmethod
     def _resolve_provider(provider: str, llm, anthropic_key: str):

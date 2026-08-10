@@ -131,11 +131,11 @@ def pytest_collection_modifyitems(
 # ─── Event loop & DB ───────────────────────────────────────────────────
 
 
-@pytest.fixture(scope="session")
-def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
+# @pytest.fixture(scope="session")
+# def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
+#     loop = asyncio.new_event_loop()
+#     yield loop
+#     loop.close()
 
 
 @pytest_asyncio.fixture(scope="function")

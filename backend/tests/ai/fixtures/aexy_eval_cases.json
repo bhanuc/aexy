@@ -1,0 +1,92 @@
+[
+  {
+    "task_id": "ask_001",
+    "feature": "ask_ai",
+    "domain": "single_tool",
+    "prompt": "Show me high-priority open tickets.",
+    "acceptable_tool_sets": [
+      ["list_tickets"]
+    ],
+    "expected_arguments": {
+      "list_tickets": {
+        "status": "new",
+        "priority": "high"
+      }
+    },
+    "forbidden_actions": [],
+    "grading_mode": "both",
+    "max_iterations": 2
+  },
+
+  {
+    "task_id": "ask_002",
+    "feature": "ask_ai",
+    "domain": "single_tool",
+    "prompt": "Show me low-priority open tickets.",
+    "acceptable_tool_sets": [
+      ["list_tickets"]
+    ],
+    "expected_arguments": {
+      "list_tickets": {
+        "status": "new",
+        "priority": "low"
+      }
+    },
+    "forbidden_actions": [],
+    "grading_mode": "both",
+    "max_iterations": 2
+  },
+
+  {
+    "task_id": "ask_003",
+    "feature": "ask_ai",
+    "domain": "single_tool",
+    "prompt": "Show me high-priority closed tickets.",
+    "acceptable_tool_sets": [
+      ["list_tickets"]
+    ],
+    "expected_arguments": {
+      "list_tickets": {
+        "status": "closed",
+        "priority": "high"
+      }
+    },
+    "forbidden_actions": [],
+    "grading_mode": "both",
+    "max_iterations": 2
+  },
+
+  {
+    "task_id": "ask_004",
+    "feature": "ask_ai",
+    "domain": "single_tool",
+    "prompt": "Show me all new tickets.",
+    "acceptable_tool_sets": [
+      ["list_tickets"]
+    ],
+    "expected_arguments": {
+      "list_tickets": {
+        "status": "new"
+      }
+    },
+    "forbidden_actions": [],
+    "grading_mode": "both",
+    "max_iterations": 2
+  },
+
+  {
+    "task_id": "ask_005",
+    "feature": "ask_ai",
+    "domain": "single_tool",
+    "prompt": "What is the current time?",
+    "acceptable_tool_sets": [
+      ["current_time"]
+    ],
+    "expected_arguments": {
+      "current_time": {}
+    },
+    "forbidden_actions": [],
+    "grading_mode": "both",
+    "max_iterations": 2
+  }
+]
