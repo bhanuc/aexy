@@ -1073,11 +1073,16 @@ class AskService:
         for iteration in range(MAX_TOOL_ITERATIONS):
             tool_calls_this_round = []
             text_this_round = ""
+            stream_error: str | None = None
 
             async for event in self._call_anthropic_stream(api_messages):
                 event_type = event.get("type")
 
-                if event_type == "text_delta":
+                if event_type == "error":
+                    stream_error = event.get("message", "Unknown Anthropic error")
+                    yield self._sse({"type": "error", "message": stream_error})
+
+                elif event_type == "text_delta":
                     text = event.get("text", "")
                     text_this_round += text
                     yield self._sse({"type": "text_delta", "text": text})
@@ -1111,6 +1116,9 @@ class AskService:
                 elif event_type == "usage":
                     total_input_tokens += event.get("input_tokens", 0)
                     total_output_tokens += event.get("output_tokens", 0)
+
+            if stream_error:
+                return
 
             full_text += text_this_round
 
