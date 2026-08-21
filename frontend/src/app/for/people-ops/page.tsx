@@ -47,7 +47,7 @@ const useCases = [
 ];
 
 const benefits = [
-  { title: "40% faster hiring", desc: "Skills-based matching reduces screening time" },
+  { title: "Faster screening", desc: "Skills-based matching ranks candidates against real contribution data" },
   { title: "Fair evaluations", desc: "Objective data eliminates bias in reviews" },
   { title: "Visible L&D impact", desc: "Track skill growth over time" },
   { title: "Early warning system", desc: "Predict burnout before it happens" },

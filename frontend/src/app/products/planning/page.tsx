@@ -15,8 +15,9 @@ import {
 } from "lucide-react";
 import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
+import { ProductShot } from "@/components/marketing/ProductShot";
+import boardShot from "../../../../public/marketing/home/home-build@2x.webp";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 const features = [
   {
@@ -49,7 +50,6 @@ const integrations = [
 ];
 
 export default function PlanningProductPage() {
-  const googleLoginUrl = `${API_BASE_URL}/auth/google/login`;
 
   return (
     <LedgerPage>
@@ -76,18 +76,18 @@ export default function PlanningProductPage() {
               </p>
 
               <div className="mb-8 flex flex-col gap-4 sm:flex-row">
-                <a
-                  href={googleLoginUrl}
+                <Link
+                  href="/login"
                   className="group inline-flex items-center justify-center gap-3 rounded-[2px] bg-ledger-green px-8 py-4 text-lg font-semibold text-ledger-paper transition hover:bg-[#095A31]"
                 >
                   Start Planning Free
                   <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
-                </a>
+                </Link>
                 <Link
-                  href="/manifesto"
+                  href="/pricing"
                   className="group inline-flex items-center justify-center gap-2 rounded-[2px] border border-ledger-ink/25 px-8 py-4 text-lg font-medium text-ledger-ink transition hover:border-ledger-ink/50"
                 >
-                  Learn More
+                  See pricing
                 </Link>
               </div>
 
@@ -138,6 +138,31 @@ export default function PlanningProductPage() {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Real screenshot. The hero above is a hand-built mockup sized for a
+          two-column layout; this is the surface as the app actually renders it,
+          captured by e2e/tools/capture-marketing-shots.ts. */}
+      <section className="px-6 py-20">
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-10 max-w-2xl">
+            <div className="mb-4 font-brand-mono text-xs font-medium uppercase tracking-[0.18em] text-ledger-green">
+              In the product
+            </div>
+            <h2 className="mb-4 font-display text-3xl font-semibold tracking-tight md:text-4xl">
+              The board your sprint actually runs on.
+            </h2>
+            <p className="text-lg leading-relaxed text-ledger-ink/65">
+              Tasks move across the columns your workspace defines, linked to the commits and pull requests that closed them.
+            </p>
+          </div>
+          <ProductShot
+            src={boardShot}
+            alt="Aexy sprint board showing tasks in todo, in progress, and in review columns with a sprint goal"
+            figure="FIG. 01"
+            caption="Sprint board — tasks across status columns"
+          />
         </div>
       </section>
 
@@ -254,17 +279,17 @@ export default function PlanningProductPage() {
             Transform your sprint planning
           </h2>
           <p className="mb-10 text-xl text-ledger-ink/55">
-            Join thousands of teams planning smarter with Aexy.
+            Import a Jira or Linear project and plan your next sprint against real capacity.
           </p>
 
           <div className="flex flex-col justify-center gap-4 sm:flex-row">
-            <a
-              href={googleLoginUrl}
+            <Link
+              href="/login"
               className="group inline-flex items-center justify-center gap-3 rounded-[2px] bg-ledger-green px-8 py-4 text-lg font-semibold text-ledger-paper transition hover:bg-[#095A31]"
             >
               Start Planning Free
               <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
-            </a>
+            </Link>
             <a
               href="https://github.com/aexy-io/aexy"
               className="group flex items-center justify-center gap-3 rounded-[2px] border border-ledger-ink/25 px-8 py-4 text-lg font-semibold text-ledger-ink transition hover:border-ledger-ink/50"

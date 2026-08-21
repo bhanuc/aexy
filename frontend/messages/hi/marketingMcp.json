@@ -30,6 +30,14 @@
       },
       "cta": "देखें यह कैसे काम करता है"
     },
+    "shot": {
+      "eyebrow": "प्रोडक्ट में",
+      "heading": "वह tool catalogue जो आपका assistant देखता है।",
+      "body": "Aexy एक MCP server देता है जो sprints, CRM, agents, email, analytics और workflows को कवर करता है — category के हिसाब से समूहित, और हर client के लिए copy-paste setup ब्लॉक के साथ।",
+      "figure": "FIG. 01",
+      "caption": "MCP server — tool catalogue और client setup",
+      "alt": "Aexy का MCP पेज जो tool categories दिखाता है — sprint management, CRM, AI agents, email और GTM, analytics, platform, और Temporal workflows — साथ में Claude Code setup command"
+    },
     "faq": {
       "question": "क्या मैं ChatGPT या Claude से Aexy इस्तेमाल कर सकता हूँ?",
       "answer": "हाँ। Aexy एक MCP सर्वर के साथ आता है, इसलिए ChatGPT, Claude Desktop, Claude Code, Cursor, VS Code और Codex सीधे आपके वर्कस्पेस में काम कर सकते हैं — Sprint पढ़ना, टिकट खिसकाना, CRM रिकॉर्ड अपडेट करना, एनालिटिक्स पूछना। ChatGPT OAuth के साथ एक रिमोट HTTP endpoint पर कनेक्ट होता है: वह खुद को रजिस्टर करता है, आप सहमति स्क्रीन पर एक वर्कस्पेस स्वीकृत करते हैं, और उसे मिली पहुँच उस वर्कस्पेस में आप तक सीमित रहती है और Settings → Connected Apps से कभी भी रद्द की जा सकती है।"

@@ -25,7 +25,7 @@ export async function generateMetadata({ params }: DocPageProps): Promise<Metada
   const { slug } = await params;
   const slugStr = slug.join("/");
   const meta = getDocIndex().lookup[slugStr];
-  if (!meta) return { title: "Not found - Aexy Docs" };
+  if (!meta) return { title: "Not found" };
 
   const content = getDocContent(slugStr) || "";
   let description = meta.description;
@@ -40,10 +40,16 @@ export async function generateMetadata({ params }: DocPageProps): Promise<Metada
   }
 
   return {
-    title: `${meta.title} - Aexy Docs`,
+    // "Docs" not "- Aexy Docs": the root title.template appends " | Aexy", so
+    // the old form rendered "X - Aexy Docs | Aexy".
+    title: `${meta.title} — Docs`,
     description: description || `${meta.title} documentation for Aexy`,
+    // Every doc slug is its own canonical URL. Without this each of the ~100
+    // handbook pages inherited the site-wide canonical and self-reported as a
+    // duplicate of the homepage.
+    alternates: { canonical: `/handbook/${slugStr}` },
     openGraph: {
-      title: `${meta.title} - Aexy Docs`,
+      title: `${meta.title} — Aexy Docs`,
       description: description || undefined,
       type: "article",
     },

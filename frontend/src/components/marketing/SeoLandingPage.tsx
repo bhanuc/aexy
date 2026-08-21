@@ -3,10 +3,19 @@ import { ArrowRight, CheckCircle2, GitBranch } from "lucide-react";
 import { LandingFooter, LandingHeader } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 import { AuthorByline, defaultAuthor, organizationJsonLd, personJsonLd } from "@/components/marketing/AuthorByline";
+import { BreadcrumbJsonLd } from "@/components/marketing/StructuredData";
 
 export interface SeoLandingPageProps {
   eyebrow: string;
   title: string;
+  /** This page's own route, e.g. "/for/founders" — used for BreadcrumbList. */
+  path: string;
+  /**
+   * Short label for the breadcrumb leaf. Defaults to `eyebrow`, which is
+   * already a short noun phrase ("For founders"). The /use-cases/* pages all
+   * share the eyebrow "Use case", so they pass a distinct name instead.
+   */
+  breadcrumbName?: string;
   description: string;
   primaryCta?: string;
   secondaryCta?: string;
@@ -33,9 +42,11 @@ export interface SeoLandingPageProps {
 export function SeoLandingPage({
   eyebrow,
   title,
+  path,
+  breadcrumbName,
   description,
-  primaryCta = "Book demo",
-  secondaryCta = "See company OS",
+  primaryCta = "Start free",
+  secondaryCta = "Book a demo",
   proofPoints,
   painPoints,
   sections,
@@ -74,6 +85,7 @@ export function SeoLandingPage({
       {faqs.length > 0 && (
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }} />
       )}
+      <BreadcrumbJsonLd trail={[{ name: breadcrumbName ?? eyebrow, path }]} />
       <LandingHeader />
 
       <div className="relative">
@@ -85,15 +97,28 @@ export function SeoLandingPage({
             </div>
             <h1 className="font-display text-5xl font-semibold leading-[1.04] tracking-tight sm:text-6xl">{title}</h1>
             <p className="mx-auto mt-7 max-w-3xl text-lg leading-8 text-ledger-ink/65">{description}</p>
+            {/* CTA order is deliberate: self-serve first, sales second.
+                These pages catch high-intent search traffic ("open source crm",
+                "aexy vs jira"), and the product is open source and free to
+                self-host — so the visitor who is ready to act wants a workspace
+                or a git clone, not a calendar invite. The old default sent all
+                of them to /contact, which is a page of mailto: links. Booking a
+                demo stays available as the secondary path. */}
             <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row">
-              <Link href="/contact" className="inline-flex items-center justify-center gap-3 rounded-[2px] bg-ledger-green px-7 py-4 font-semibold text-ledger-paper transition hover:bg-[#095A31]">
+              <Link href="/login" className="inline-flex items-center justify-center gap-3 rounded-[2px] bg-ledger-green px-7 py-4 font-semibold text-ledger-paper transition hover:bg-[#095A31]">
                 {primaryCta}
                 <ArrowRight className="h-5 w-5" />
               </Link>
-              <Link href="/ai-company-os" className="inline-flex items-center justify-center rounded-[2px] border border-ledger-ink/25 px-7 py-4 font-semibold text-ledger-ink transition hover:border-ledger-ink/50">
+              <Link href="/contact" className="inline-flex items-center justify-center rounded-[2px] border border-ledger-ink/25 px-7 py-4 font-semibold text-ledger-ink transition hover:border-ledger-ink/50">
                 {secondaryCta}
               </Link>
             </div>
+            <p className="mt-5 font-brand-mono text-xs uppercase tracking-[0.14em] text-ledger-ink/45">
+              Free forever, self-hosted · No credit card ·{" "}
+              <a href="https://github.com/aexy-io/aexy" className="underline decoration-ledger-ink/25 underline-offset-4 transition hover:text-ledger-green">
+                Read the source
+              </a>
+            </p>
           </div>
         </section>
 

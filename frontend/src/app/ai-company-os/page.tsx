@@ -23,6 +23,7 @@ export const metadata: Metadata = {
   title: "AI Company Operating System",
   description:
     "Aexy is an open-source AI company operating system for engineering, CRM, GTM, people, docs, workflows, and governed AI agents.",
+  alternates: { canonical: "/ai-company-os" },
 };
 
 const modules: readonly IconCapability[] = [

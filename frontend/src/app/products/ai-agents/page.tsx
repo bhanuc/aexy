@@ -3,12 +3,14 @@ import Link from "next/link";
 import { ArrowRight, Bot, CheckCircle2, LockKeyhole, Mail, Shield, Workflow, Wrench } from "lucide-react";
 import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
+import { BreadcrumbJsonLd } from "@/components/marketing/StructuredData";
 import type { IconCapability } from "@/components/landing/marketing-types";
 
 export const metadata: Metadata = {
   title: "AI Agents for Business Workflows",
   description:
     "Build governed AI agents that work across CRM, email, Slack, enrichment, docs, and workflows with approvals, policy gates, and audit history.",
+  alternates: { canonical: "/products/ai-agents" },
 };
 
 const capabilities: readonly IconCapability[] = [
@@ -35,6 +37,7 @@ export default function AIAgentsProductPage() {
   return (
     <LedgerPage>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <BreadcrumbJsonLd trail={[{ name: "AI agents", path: "/products/ai-agents" }]} />
       <LandingHeader />
 
       <div className="relative">
@@ -52,14 +55,20 @@ export default function AIAgentsProductPage() {
                 Build agents that can read company context, use approved tools, update CRM records, draft emails, trigger workflows, and ask for approval before sensitive actions.
               </p>
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-                <Link href="/contact" className="inline-flex items-center justify-center gap-3 rounded-[2px] bg-ledger-green px-7 py-4 font-semibold text-ledger-paper transition hover:bg-[#095A31]">
-                  Book demo
+                <Link href="/login" className="inline-flex items-center justify-center gap-3 rounded-[2px] bg-ledger-green px-7 py-4 font-semibold text-ledger-paper transition hover:bg-[#095A31]">
+                  Start free
                   <ArrowRight className="h-5 w-5" />
                 </Link>
                 <Link href="/ai-company-os" className="inline-flex items-center justify-center rounded-[2px] border border-ledger-ink/25 px-7 py-4 font-semibold text-ledger-ink transition hover:border-ledger-ink/50">
                   See company OS
                 </Link>
+                <Link href="/contact" className="inline-flex items-center justify-center rounded-[2px] border border-ledger-ink/25 px-7 py-4 font-semibold text-ledger-ink transition hover:border-ledger-ink/50">
+                  Book a demo
+                </Link>
               </div>
+              <p className="mt-5 font-brand-mono text-xs uppercase tracking-[0.14em] text-ledger-ink/45">
+                Free forever, self-hosted · No credit card
+              </p>
             </div>
 
             {/* Dark pane — genuine product mockup; white/* utilities are intentional inside bg-ledger-pane. */}

@@ -3,12 +3,14 @@ import Link from "next/link";
 import { ArrowRight, Bell, CheckCircle2, Crosshair, Eye, GitBranch, Mail, Route, Shield, Target, TrendingUp } from "lucide-react";
 import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
+import { BreadcrumbJsonLd } from "@/components/marketing/StructuredData";
 import type { IconCapability } from "@/components/landing/marketing-types";
 
 export const metadata: Metadata = {
   title: "GTM Intelligence Platform",
   description:
     "Turn website visits and customer signals into pipeline with visitor identification, ICP scoring, lead routing, outreach, alerts, and CRM-connected GTM workflows.",
+  alternates: { canonical: "/products/gtm-intelligence" },
 };
 
 const workflow: readonly IconCapability[] = [
@@ -41,6 +43,7 @@ export default function GTMIntelligenceProductPage() {
   return (
     <LedgerPage>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <BreadcrumbJsonLd trail={[{ name: "GTM intelligence", path: "/products/gtm-intelligence" }]} />
       <LandingHeader />
 
       <div className="relative">
@@ -58,14 +61,20 @@ export default function GTMIntelligenceProductPage() {
                 Identify visitors, score accounts, route hot leads, trigger sequences, monitor customer health, and connect every GTM signal back to CRM and workflows.
               </p>
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-                <Link href="/contact" className="inline-flex items-center justify-center gap-3 rounded-[2px] bg-ledger-green px-7 py-4 font-semibold text-ledger-paper transition hover:bg-[#095A31]">
-                  Book GTM demo
+                <Link href="/login" className="inline-flex items-center justify-center gap-3 rounded-[2px] bg-ledger-green px-7 py-4 font-semibold text-ledger-paper transition hover:bg-[#095A31]">
+                  Start free
                   <ArrowRight className="h-5 w-5" />
                 </Link>
                 <Link href="/products/crm" className="inline-flex items-center justify-center rounded-[2px] border border-ledger-ink/25 px-7 py-4 font-semibold text-ledger-ink transition hover:border-ledger-ink/50">
                   See CRM
                 </Link>
+                <Link href="/contact" className="inline-flex items-center justify-center rounded-[2px] border border-ledger-ink/25 px-7 py-4 font-semibold text-ledger-ink transition hover:border-ledger-ink/50">
+                  Book a GTM demo
+                </Link>
               </div>
+              <p className="mt-5 font-brand-mono text-xs uppercase tracking-[0.14em] text-ledger-ink/45">
+                Free forever, self-hosted · No credit card
+              </p>
             </div>
 
             {/* Dark pane — genuine product mockup; white/* utilities are intentional inside bg-ledger-pane. */}

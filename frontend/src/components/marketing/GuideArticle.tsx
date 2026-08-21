@@ -48,8 +48,10 @@ export function GuideArticle({
         "@type": "BreadcrumbList",
         itemListElement: [
           { "@type": "ListItem", position: 1, name: "Home", item: "https://aexy.io" },
-          { "@type": "ListItem", position: 2, name: "Guides", item: "https://aexy.io/guides" },
-          { "@type": "ListItem", position: 3, name: title, item: url },
+          // No intermediate "Guides" crumb: /guides has no index page and
+          // returns 404, and a BreadcrumbList item pointing at a dead URL is a
+          // structured-data error. Add the crumb back if a hub page ever ships.
+          { "@type": "ListItem", position: 2, name: title, item: url },
         ],
       },
       {

@@ -13,6 +13,9 @@ import {
 } from "lucide-react";
 import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
+import { BreadcrumbJsonLd } from "@/components/marketing/StructuredData";
+import { ProductShot } from "@/components/marketing/ProductShot";
+import mcpShot from "../../../../public/marketing/products/mcp@2x.webp";
 import { McpChatPreview } from "@/components/landing/McpChatPreview";
 
 /**
@@ -96,6 +99,7 @@ export default async function McpProductPage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
+      <BreadcrumbJsonLd trail={[{ name: "MCP", path: "/products/mcp" }]} />
       <LandingHeader />
 
       <div className="relative">
@@ -132,6 +136,29 @@ export default async function McpProductPage() {
 
             {/* Restyled into a framed dark plate by the .theme-ledger scope. */}
             <McpChatPreview />
+          </div>
+        </section>
+
+        {/* Real screenshot of the in-app MCP page, captured by
+            e2e/tools/capture-marketing-shots.ts. Copy lives in
+            messages/<locale>/marketingMcp.json like the rest of this page. */}
+        <section className="border-t border-ledger-ink/12 px-4 py-20 sm:px-6">
+          <div className="mx-auto max-w-6xl">
+            <div className="mb-10 max-w-2xl">
+              <div className="mb-4 font-brand-mono text-xs font-medium uppercase tracking-[0.18em] text-ledger-green">
+                {t("shot.eyebrow")}
+              </div>
+              <h2 className="mb-4 font-display text-4xl font-semibold tracking-tight">
+                {t("shot.heading")}
+              </h2>
+              <p className="text-lg leading-8 text-ledger-ink/65">{t("shot.body")}</p>
+            </div>
+            <ProductShot
+              src={mcpShot}
+              alt={t("shot.alt")}
+              figure={t("shot.figure")}
+              caption={t("shot.caption")}
+            />
           </div>
         </section>
 

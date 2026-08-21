@@ -2,10 +2,13 @@ import Link from "next/link";
 import { ArrowRight, CheckCircle2, GitBranch } from "lucide-react";
 import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
+import { BreadcrumbJsonLd } from "@/components/marketing/StructuredData";
 import { AuthorByline, defaultAuthor, organizationJsonLd, personJsonLd } from "@/components/marketing/AuthorByline";
 
 export interface ComparisonPageProps {
   competitor: string;
+  /** This page's own route, e.g. "/compare/jira" — used for BreadcrumbList. */
+  path: string;
   eyebrow: string;
   title: string;
   description: string;
@@ -18,6 +21,7 @@ export interface ComparisonPageProps {
 
 export function ComparisonPage({
   competitor,
+  path,
   eyebrow,
   title,
   description,
@@ -61,6 +65,7 @@ export function ComparisonPage({
   return (
     <LedgerPage>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <BreadcrumbJsonLd trail={[{ name: `Aexy vs ${competitor}`, path }]} />
       <LandingHeader />
 
       <div className="relative">
@@ -72,15 +77,25 @@ export function ComparisonPage({
             </div>
             <h1 className="font-display text-5xl font-semibold leading-[1.04] tracking-tight sm:text-6xl">{title}</h1>
             <p className="mx-auto mt-7 max-w-3xl text-lg leading-8 text-ledger-ink/65">{description}</p>
+            {/* Comparison pages are the highest commercial intent on the site
+                — somebody typing "aexy vs X" is mid-evaluation. Sending them to
+                /contact (a page of mailto: links) as the only primary action
+                threw that intent away. Try-it-now first, demo second. */}
             <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row">
-              <Link href="/contact" className="inline-flex items-center justify-center gap-3 rounded-[2px] bg-ledger-green px-7 py-4 font-semibold text-ledger-paper transition hover:bg-[#095A31]">
-                Book demo
+              <Link href="/login" className="inline-flex items-center justify-center gap-3 rounded-[2px] bg-ledger-green px-7 py-4 font-semibold text-ledger-paper transition hover:bg-[#095A31]">
+                Start free
                 <ArrowRight className="h-5 w-5" />
               </Link>
-              <Link href="/ai-company-os" className="inline-flex items-center justify-center rounded-[2px] border border-ledger-ink/25 px-7 py-4 font-semibold text-ledger-ink transition hover:border-ledger-ink/50">
-                See company OS
+              <Link href="/contact" className="inline-flex items-center justify-center rounded-[2px] border border-ledger-ink/25 px-7 py-4 font-semibold text-ledger-ink transition hover:border-ledger-ink/50">
+                Book a migration call
               </Link>
             </div>
+            <p className="mt-5 font-brand-mono text-xs uppercase tracking-[0.14em] text-ledger-ink/45">
+              Free forever, self-hosted · No credit card ·{" "}
+              <Link href="/pricing" className="underline decoration-ledger-ink/25 underline-offset-4 transition hover:text-ledger-green">
+                See pricing
+              </Link>
+            </p>
           </div>
         </section>
 
@@ -155,10 +170,15 @@ export function ComparisonPage({
           <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-ledger-ink/60">
             We will map your current tools, identify the first migration workflow, and show where Aexy replaces or connects the stack.
           </p>
-          <Link href="/contact" className="mt-8 inline-flex items-center justify-center gap-3 rounded-[2px] bg-ledger-green px-7 py-4 font-semibold text-ledger-paper transition hover:bg-[#095A31]">
-            Book comparison call
-            <ArrowRight className="h-5 w-5" />
-          </Link>
+          <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+            <Link href="/login" className="inline-flex items-center justify-center gap-3 rounded-[2px] bg-ledger-green px-7 py-4 font-semibold text-ledger-paper transition hover:bg-[#095A31]">
+              Start free
+              <ArrowRight className="h-5 w-5" />
+            </Link>
+            <Link href="/contact" className="inline-flex items-center justify-center rounded-[2px] border border-ledger-ink/25 px-7 py-4 font-semibold text-ledger-ink transition hover:border-ledger-ink/50">
+              Book a comparison call
+            </Link>
+          </div>
         </section>
       </div>
 

@@ -5,9 +5,13 @@ import { DocsSearch } from "@/components/docs-site/DocsSearch";
 import { getDocIndex, getSearchIndex } from "@/lib/docs";
 
 export const metadata: Metadata = {
-  title: "Documentation - Aexy",
+  // Bare string, not "… - Aexy": the root layout's title.template already
+  // appends " | Aexy", so carrying the brand here rendered "Documentation -
+  // Aexy | Aexy" in the SERP.
+  title: "Documentation",
   description:
     "The Aexy AI company operating system, fully documented. Architecture, guides, API reference, and per-module deep dives.",
+  alternates: { canonical: "/handbook" },
 };
 
 const SECTION_ICONS: Record<string, typeof BookOpen> = {

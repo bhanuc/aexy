@@ -13,8 +13,10 @@
  * Run:
  *   AEXY_TEST_TOKEN=<jwt> npx tsx e2e/tools/capture-marketing-shots.ts
  *
- * Output: public/marketing/home/home-<surface>@2x.png — convert to WebP with
- *   npx sharp-cli --input "public/marketing/home/*.png" --format webp -q 75
+ * Output: public/marketing/<dir>/<name>@2x.png — convert to WebP with
+ *   npx sharp-cli --input "public/marketing/home/*.png" --output public/marketing/home --format webp -q 75
+ *   npx sharp-cli --input "public/marketing/products/*.png" --output public/marketing/products --format webp -q 75
+ * The PNGs are gitignored intermediates; only the WebP ships.
  * Filenames must stay query-string free: Next 16 400s local images with
  * search params unless allowlisted (images.localPatterns[].search).
  */
@@ -25,7 +27,7 @@ import { join } from "path";
 
 const BASE = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
 const TOKEN = process.env.AEXY_TEST_TOKEN;
-const OUT = join(__dirname, "..", "..", "public", "marketing", "home");
+const PUBLIC_MARKETING = join(__dirname, "..", "..", "public", "marketing");
 
 // Surface → route. Adjust routes to whatever has presentable seeded data;
 // screenshots must look real without exposing anything private.
@@ -34,12 +36,27 @@ const OUT = join(__dirname, "..", "..", "public", "marketing", "home");
 // readyText is a string the seeded data must render before the shot is taken:
 // pages hydrate through fetch chains (sprints → active sprint → tasks), and
 // "skeletons gone" alone still photographs the empty state on a cold cache.
-const SHOTS: Array<{ name: string; path: string; readySelector: string; readyText: string }> = [
-  { name: "sell", path: "/crm/deal", readySelector: "main", readyText: "Northwind" },
-  { name: "build", path: "", readySelector: "main", readyText: "Rate-limit the webhook retry" },
-  { name: "operate", path: "/automations", readySelector: "main", readyText: "Uptime alert" },
-  { name: "grow", path: "/reviews", readySelector: "main", readyText: "Q3 Engineering Reviews" },
-  { name: "know", path: "/docs", readySelector: "main", readyText: "Incident runbook" },
+// `dir` is the subdirectory under public/marketing/ the shot lands in, which
+// mirrors where it is used: "home" for the homepage product tour, "products"
+// for a /products/* hero plate.
+const SHOTS: Array<{ name: string; dir: string; path: string; readySelector: string; readyText: string }> = [
+  { name: "home-sell", dir: "home", path: "/crm/deal", readySelector: "main", readyText: "Northwind" },
+  { name: "home-build", dir: "home", path: "", readySelector: "main", readyText: "Rate-limit the webhook retry" },
+  { name: "home-operate", dir: "home", path: "/automations", readySelector: "main", readyText: "Uptime alert" },
+  { name: "home-grow", dir: "home", path: "/reviews", readySelector: "main", readyText: "Q3 Engineering Reviews" },
+  { name: "home-know", dir: "home", path: "/docs", readySelector: "main", readyText: "Incident runbook" },
+
+  // Product-page plates. The homepage tour reuses the five above; these are
+  // the surfaces a /products/* page needs to show its own feature.
+  //
+  // Only surfaces with presentable demo data are listed. /insights,
+  // /uptime, /forms, /booking, /hiring, /tracking, /reminders,
+  // /email-marketing and /gtm currently render empty states or
+  // single-developer zeroes in the demo workspace — a screenshot of those
+  // sells nothing, so those product pages keep their coded schematics until
+  // seed_marketing_demo.py covers them.
+  { name: "mcp", dir: "products", path: "/mcp", readySelector: "main", readyText: "Model Context Protocol" },
+  { name: "tickets", dir: "products", path: "/service-desk", readySelector: "main", readyText: "Open tickets" },
 ];
 
 async function main() {
@@ -47,7 +64,9 @@ async function main() {
     console.error("AEXY_TEST_TOKEN is required — see the header comment.");
     process.exit(1);
   }
-  mkdirSync(OUT, { recursive: true });
+  for (const dir of new Set(SHOTS.map((s) => s.dir))) {
+    mkdirSync(join(PUBLIC_MARKETING, dir), { recursive: true });
+  }
 
   // The CRM Google-connect banner persists its dismissal per workspace, so
   // resolve the workspace id first to pre-dismiss it below.
@@ -96,7 +115,13 @@ async function main() {
       // Pre-dismiss the free-tier upgrade nudge and the CRM Google banner the
       // way a user would — via their own persistence keys — so a fresh capture
       // context doesn't resurrect them into the frame.
-      for (const trigger of ["module_limit", "automation_limit", "generic"]) {
+      // Every trigger in TRIGGER_MESSAGES (src/components/UpgradeBanner.tsx).
+      // Miss one and a free-tier nudge photographs into the frame — /agents
+      // and /insights each raise a different one.
+      for (const trigger of [
+        "repo_limit", "ai_limit", "token_limit", "automation_limit",
+        "member_limit", "module_limit", "export_limit", "ai_provider", "generic",
+      ]) {
         window.localStorage.setItem(`upgrade_banner_dismissed_${trigger}`, "true");
       }
       if (wsId) {
@@ -135,7 +160,7 @@ async function main() {
       .waitFor({ timeout: 30_000 })
       .catch(() => console.warn(`seeded content "${shot.readyText}" never appeared on ${shot.path}`));
     await page.waitForTimeout(1_500); // let charts and images settle
-    const file = join(OUT, `home-${shot.name}@2x.png`);
+    const file = join(PUBLIC_MARKETING, shot.dir, `${shot.name}@2x.png`);
     await page.screenshot({ path: file });
     console.log(`captured ${file}`);
   }

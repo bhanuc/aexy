@@ -3,13 +3,17 @@ import Link from "next/link";
 import { ArrowRight, Bot, Building2, Calendar, CheckCircle2, Database, Mail, Network, Rows3, Workflow } from "lucide-react";
 import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
+import { BreadcrumbJsonLd } from "@/components/marketing/StructuredData";
 import { AuthorByline, defaultAuthor, organizationJsonLd, personJsonLd } from "@/components/marketing/AuthorByline";
 import type { IconCapability, IconRow } from "@/components/landing/marketing-types";
+import { ProductShot } from "@/components/marketing/ProductShot";
+import crmShot from "../../../../public/marketing/home/home-sell@2x.webp";
 
 export const metadata: Metadata = {
   title: "Agent-Native CRM — Open-Source Alternative to Attio & HubSpot",
   description:
     "A flexible CRM for humans and AI agents with custom objects, Gmail and calendar sync, activity timelines, automations, sequences, and GTM intelligence. Open source and self-hostable.",
+  alternates: { canonical: "/products/crm" },
 };
 
 const capabilities: readonly IconCapability[] = [
@@ -53,6 +57,7 @@ export default function CRMProductPage() {
   return (
     <LedgerPage>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <BreadcrumbJsonLd trail={[{ name: "CRM", path: "/products/crm" }]} />
       <LandingHeader />
 
       <div className="relative">
@@ -70,14 +75,20 @@ export default function CRMProductPage() {
                 Manage companies, people, deals, activities, email, calendar, automations, and GTM signals in a flexible CRM that belongs inside your company OS.
               </p>
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-                <Link href="/contact" className="inline-flex items-center justify-center gap-3 rounded-[2px] bg-ledger-green px-7 py-4 font-semibold text-ledger-paper transition hover:bg-[#095A31]">
-                  Book CRM demo
+                <Link href="/login" className="inline-flex items-center justify-center gap-3 rounded-[2px] bg-ledger-green px-7 py-4 font-semibold text-ledger-paper transition hover:bg-[#095A31]">
+                  Start free
                   <ArrowRight className="h-5 w-5" />
                 </Link>
                 <Link href="/products/ai-agents" className="inline-flex items-center justify-center rounded-[2px] border border-ledger-ink/25 px-7 py-4 font-semibold text-ledger-ink transition hover:border-ledger-ink/50">
                   See AI agents
                 </Link>
+                <Link href="/contact" className="inline-flex items-center justify-center rounded-[2px] border border-ledger-ink/25 px-7 py-4 font-semibold text-ledger-ink transition hover:border-ledger-ink/50">
+                  Book a CRM demo
+                </Link>
               </div>
+              <p className="mt-5 font-brand-mono text-xs uppercase tracking-[0.14em] text-ledger-ink/45">
+                Free forever, self-hosted · No credit card
+              </p>
             </div>
 
             {/* Dark pane — genuine product mockup; white/* utilities are intentional inside bg-ledger-pane. */}
@@ -103,6 +114,31 @@ export default function CRMProductPage() {
                 ))}
               </div>
             </div>
+          </div>
+        </section>
+
+        {/* Real screenshot, captured by e2e/tools/capture-marketing-shots.ts.
+            This page previously argued entirely in prose — a visitor arriving
+            from "open source crm" never saw the product before the signup ask. */}
+        <section className="border-t border-ledger-ink/12 px-4 py-20 sm:px-6">
+          <div className="mx-auto max-w-6xl">
+            <div className="mb-10 max-w-2xl">
+              <div className="mb-4 font-brand-mono text-xs font-medium uppercase tracking-[0.18em] text-ledger-green">
+                In the product
+              </div>
+              <h2 className="mb-4 font-display text-4xl font-semibold tracking-tight">
+                Your pipeline, with the engineering context attached.
+              </h2>
+              <p className="text-lg leading-relaxed text-ledger-ink/65">
+                Deals, stages, and values in a table you define — linked to the companies, threads, and shipped work behind them.
+              </p>
+            </div>
+            <ProductShot
+              src={crmShot}
+              alt="Aexy CRM deals table showing deal names, stages, values, and the companies each deal is linked to"
+              figure="FIG. 01"
+              caption="CRM — deals by stage, value, and linked company"
+            />
           </div>
         </section>
 

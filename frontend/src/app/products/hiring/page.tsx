@@ -22,7 +22,6 @@ import {
 import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 const features = [
   {
@@ -55,7 +54,6 @@ const assessmentSteps = [
 ];
 
 export default function HiringProductPage() {
-  const googleLoginUrl = `${API_BASE_URL}/auth/google/login`;
 
   return (
     <LedgerPage>
@@ -82,18 +80,18 @@ export default function HiringProductPage() {
               </p>
 
               <div className="mb-8 flex flex-col gap-4 sm:flex-row">
-                <a
-                  href={googleLoginUrl}
+                <Link
+                  href="/login"
                   className="group inline-flex items-center justify-center gap-3 rounded-[2px] bg-ledger-green px-8 py-4 text-lg font-semibold text-ledger-paper transition hover:bg-[#095A31]"
                 >
                   Start Hiring Free
                   <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
-                </a>
+                </Link>
                 <Link
-                  href="/manifesto"
+                  href="/pricing"
                   className="group inline-flex items-center justify-center gap-2 rounded-[2px] border border-ledger-ink/25 px-8 py-4 text-lg font-medium text-ledger-ink transition hover:border-ledger-ink/50"
                 >
-                  Learn More
+                  See pricing
                 </Link>
               </div>
 
@@ -284,13 +282,13 @@ export default function HiringProductPage() {
           </p>
 
           <div className="flex flex-col justify-center gap-4 sm:flex-row">
-            <a
-              href={googleLoginUrl}
+            <Link
+              href="/login"
               className="group inline-flex items-center justify-center gap-3 rounded-[2px] bg-ledger-green px-8 py-4 text-lg font-semibold text-ledger-paper transition hover:bg-[#095A31]"
             >
               Get Started Free
               <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
-            </a>
+            </Link>
             <a
               href="https://github.com/aexy-io/aexy"
               className="group flex items-center justify-center gap-3 rounded-[2px] border border-ledger-ink/25 px-8 py-4 text-lg font-semibold text-ledger-ink transition hover:border-ledger-ink/50"

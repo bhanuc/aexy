@@ -5,9 +5,11 @@ import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader
 import { LedgerPage } from "@/components/landing/LedgerPage";
 
 export const metadata: Metadata = {
-  title: "Changelog - Aexy",
+  // Bare: the root title.template appends " | Aexy".
+  title: "Changelog",
   description:
     "All notable changes to Aexy. Track new features, improvements, and fixes.",
+  alternates: { canonical: "/changelog" },
 };
 
 interface Version {
