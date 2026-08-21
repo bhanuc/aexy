@@ -23,7 +23,6 @@ import { LedgerPage } from "@/components/landing/LedgerPage";
 // challenge is written as a diff — a mono "-" for the pain, a mono "+" for the
 // fix — and the executive dashboard stays a dark product pane.
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 const challenges = [
   {
@@ -60,7 +59,6 @@ const metrics = [
 ];
 
 export default function EngineeringLeadersPage() {
-  const googleLoginUrl = `${API_BASE_URL}/auth/google/login`;
 
   return (
     <LedgerPage>
@@ -84,13 +82,13 @@ export default function EngineeringLeadersPage() {
           </p>
 
           <div className="flex flex-col sm:flex-row justify-center gap-4 mb-8">
-            <a
-              href={googleLoginUrl}
+            <Link
+              href="/contact"
               className="group inline-flex items-center justify-center gap-3 rounded-[2px] bg-ledger-green text-ledger-paper px-8 py-4 text-lg font-semibold transition hover:bg-[#095A31]"
             >
               Schedule Demo
               <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
-            </a>
+            </Link>
             <Link
               href="/manifesto"
               className="group inline-flex items-center justify-center gap-2 rounded-[2px] border border-ledger-ink/25 text-ledger-ink px-8 py-4 text-lg font-medium transition hover:border-ledger-ink/50"
@@ -270,12 +268,12 @@ export default function EngineeringLeadersPage() {
               Talk to Sales
               <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
             </a>
-            <a
-              href={googleLoginUrl}
+            <Link
+              href="/login"
               className="group inline-flex items-center justify-center gap-3 rounded-[2px] border border-ledger-ink/25 text-ledger-ink px-8 py-4 text-lg font-semibold transition hover:border-ledger-ink/50"
             >
               Try Free First
-            </a>
+            </Link>
           </div>
         </div>
       </section>

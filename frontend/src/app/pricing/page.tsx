@@ -24,7 +24,6 @@ import { STRIPE_ENABLED, buildSalesMailto } from "@/lib/billingMode";
 import { BillingToggle } from "@/components/billing/BillingToggle";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 const plans = [
   {
@@ -171,7 +170,6 @@ function PricingContent() {
     (searchParams.get("billing") as "monthly" | "annual") || "monthly"
   );
 
-  const googleLoginUrl = `${API_BASE_URL}/auth/google/login`;
 
   // Update URL when billing period changes
   useEffect(() => {
@@ -648,7 +646,7 @@ function PricingContent() {
                   <motion.a
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.98 }}
-                    href={googleLoginUrl}
+                    href="/login"
                     className="group inline-flex items-center justify-center gap-3 bg-ledger-green text-ledger-paper px-8 py-4 rounded-[2px] text-lg font-semibold transition-all hover:bg-[#095A31]"
                   >
                     Get Started Free

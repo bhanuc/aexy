@@ -5,12 +5,10 @@ import { ArrowRight, Heart, Lightbulb, Rocket, Users, Code2, Target } from "luci
 import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 // "Open Ledger" brand: paper page, ink text, ledger-green as the only accent.
 // Chapters are separated by hairline ink rules rather than gradient spines.
 export default function StoryPage() {
-  const googleLoginUrl = `${API_BASE_URL}/auth/google/login`;
 
   return (
     <LedgerPage>
@@ -156,13 +154,13 @@ export default function StoryPage() {
           </p>
 
           <div className="flex flex-col justify-center gap-3 sm:flex-row">
-            <a
-              href={googleLoginUrl}
+            <Link
+              href="/login"
               className="group inline-flex items-center justify-center gap-3 rounded-[2px] bg-ledger-green px-8 py-4 text-lg font-semibold text-ledger-paper transition hover:bg-[#095A31]"
             >
               Get Started Free
               <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
-            </a>
+            </Link>
             <Link
               href="/manifesto"
               className="flex items-center justify-center gap-3 rounded-[2px] border border-ledger-ink/25 px-8 py-4 text-lg font-semibold text-ledger-ink transition hover:border-ledger-ink/50"

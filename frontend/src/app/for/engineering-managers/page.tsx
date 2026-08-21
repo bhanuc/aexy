@@ -17,7 +17,6 @@ import { LedgerPage } from "@/components/landing/LedgerPage";
 // "Open Ledger" light brand: paper page, ink text, ledger-green accents, and
 // the homepage's diff motif (mono "-" pains, mono "+" fixes) for pain points.
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 const painPoints = [
   { problem: "No visibility into what the team is actually working on", solution: "Real-time activity tracking synced with GitHub" },
@@ -54,7 +53,6 @@ const features = [
 ];
 
 export default function EngineeringManagersPage() {
-  const googleLoginUrl = `${API_BASE_URL}/auth/google/login`;
 
   return (
     <LedgerPage>
@@ -78,13 +76,13 @@ export default function EngineeringManagersPage() {
           </p>
 
           <div className="flex flex-col sm:flex-row justify-center gap-4 mb-8">
-            <a
-              href={googleLoginUrl}
+            <Link
+              href="/login"
               className="group inline-flex items-center justify-center gap-3 rounded-[2px] bg-ledger-green text-ledger-paper px-8 py-4 text-lg font-semibold transition hover:bg-[#095A31]"
             >
               Start Free
               <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
-            </a>
+            </Link>
             <Link
               href="/manifesto"
               className="group inline-flex items-center justify-center gap-2 rounded-[2px] border border-ledger-ink/25 text-ledger-ink px-8 py-4 text-lg font-medium transition hover:border-ledger-ink/50"
@@ -257,13 +255,13 @@ export default function EngineeringManagersPage() {
           </p>
 
           <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <a
-              href={googleLoginUrl}
+            <Link
+              href="/login"
               className="group inline-flex items-center justify-center gap-3 rounded-[2px] bg-ledger-green text-ledger-paper px-8 py-4 text-lg font-semibold transition hover:bg-[#095A31]"
             >
               Get Started Free
               <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
-            </a>
+            </Link>
             <a
               href="https://github.com/aexy-io/aexy"
               className="group inline-flex items-center justify-center gap-3 rounded-[2px] border border-ledger-ink/25 text-ledger-ink px-8 py-4 text-lg font-semibold transition hover:border-ledger-ink/50"

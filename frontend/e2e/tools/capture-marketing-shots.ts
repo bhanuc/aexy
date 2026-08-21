@@ -90,7 +90,14 @@ async function main() {
     console.error("no project found — run scripts/seed_marketing_demo.py first");
     process.exit(1);
   }
-  const buildShot = SHOTS.find((s) => s.name === "build")!;
+  // Non-null assertion removed on purpose: this used to say `.find(... "build")!`
+  // and silently became undefined when the shot was renamed to "home-build",
+  // failing three frames later with "Cannot set properties of undefined".
+  const buildShot = SHOTS.find((s) => s.name === "home-build");
+  if (!buildShot) {
+    console.error("no shot named 'home-build' — the sprint-board route is resolved at runtime");
+    process.exit(1);
+  }
   buildShot.path = `/sprints/${projects[0].id}/board`;
 
   const browser = await chromium.launch();

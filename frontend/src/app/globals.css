@@ -2,13 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
-/* "Open Ledger" marketing theme (homepage only for now).
+/* "Open Ledger" marketing theme — scoped by .theme-ledger, which
+ * components/landing/LedgerPage puts on every public marketing page.
  *
- * The homepage paints itself with static ledger-* Tailwind tokens; this block
- * exists for the pieces that cannot: components shared with still-dark
- * marketing pages (McpChatPreview) get semantic hooks whose DEFAULT styling is
- * their existing Tailwind utilities, overridden only inside .theme-ledger.
- * /products/mcp must render pixel-identical to before. */
+ * Pages paint themselves with the static ledger-* Tailwind tokens; this block
+ * exists for the pieces that cannot. McpChatPreview is shared between the
+ * homepage and /products/mcp and must not be forked, so it carries semantic
+ * hooks (.mcp-preview-*) whose default styling is its own Tailwind utilities,
+ * overridden only inside .theme-ledger. */
 .theme-ledger {
   --ledger-paper: #f2f3ee;
   --ledger-ink: #101913;

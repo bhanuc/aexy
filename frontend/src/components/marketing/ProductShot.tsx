@@ -15,23 +15,23 @@ import Image, { type StaticImageData } from "next/image";
  * e2e/tools/capture-marketing-shots.ts.
  *
  * `figure`/`caption` render the mono slug line the brand uses on product
- * imagery ("FIG. 01 — Service desk, email-intake"). `priority` opts into eager
- * loading for a shot that is the LCP element; note Next 16 deprecated the
- * `priority` prop on next/image itself in favour of `fetchPriority`.
+ * imagery ("FIG. 01 — Service desk, email-intake").
+ *
+ * Every shot is lazy. These sit below a text hero on each page, so none is the
+ * LCP element; if one ever is, add `fetchPriority="high"` rather than the
+ * `priority` prop, which Next 16 deprecated in favour of `preload`.
  */
 export function ProductShot({
   src,
   alt,
   figure,
   caption,
-  priority = false,
   className = "",
 }: {
   src: StaticImageData;
   alt: string;
   figure: string;
   caption: string;
-  priority?: boolean;
   className?: string;
 }) {
   return (
@@ -48,8 +48,6 @@ export function ProductShot({
           alt={alt}
           placeholder="blur"
           sizes="(min-width: 1024px) 60vw, 100vw"
-          fetchPriority={priority ? "high" : undefined}
-          loading={priority ? "eager" : "lazy"}
           className="w-full"
         />
       </div>

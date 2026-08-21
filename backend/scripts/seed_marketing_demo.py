@@ -11,8 +11,19 @@ Idempotent: everything is looked up by name/title before insert, so
 re-runs add nothing. Fictional data only.
 
 Throwaway helper for demo/marketing databases — not part of the product.
+
+WRITES REAL ROWS. It picks the first developer's first workspace and inserts
+CRM records, a sprint, **enabled** automations, a review cycle, and docs. Run
+against a production database it would drop fictional "Northwind Traders"
+deals into a real customer workspace and switch on automations that then fire
+on live records. So it refuses to run without an explicit `--yes`, and prints
+the database and workspace it is about to touch first.
+
+    python scripts/seed_marketing_demo.py            # shows the target, does nothing
+    python scripts/seed_marketing_demo.py --yes      # actually seeds
 """
 
+import argparse
 import asyncio
 import sys
 from datetime import date, datetime, timedelta, timezone
@@ -45,6 +56,19 @@ TODAY = NOW.date()
 
 created: list[str] = []
 skipped: list[str] = []
+
+
+def redacted_dsn() -> str:
+    """The DSN with any password removed — safe to print."""
+    from aexy.core.config import settings
+
+    dsn = settings.database_url
+    if "@" in dsn and "://" in dsn:
+        scheme, rest = dsn.split("://", 1)
+        creds, host = rest.rsplit("@", 1)
+        user = creds.split(":", 1)[0]
+        return f"{scheme}://{user}:***@{host}"
+    return dsn
 
 
 def note(kind: str, name: str, was_created: bool) -> None:
@@ -845,6 +869,13 @@ async def seed_docs(db, workspace_id: str, dev: Developer) -> None:
 # ---------------------------------------------------------------------------
 
 async def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--yes", "-y", action="store_true",
+        help="actually write. Without it the script only reports its target.",
+    )
+    args = parser.parse_args()
+
     async with async_session_maker() as db:
         dev = (
             await db.execute(
@@ -873,9 +904,24 @@ async def main() -> int:
             print(f"Developer {dev.id} owns no workspace.", file=sys.stderr)
             return 1
 
-        print(f"Seeding into workspace {workspace.name!r} ({workspace.id}) "
-              f"as {dev.name!r} ({dev.id})\n")
+        print(f"Database:  {redacted_dsn()}")
+        print(f"Workspace: {workspace.name!r} ({workspace.id})")
+        print(f"As:        {dev.name!r} <{dev.email}> ({dev.id})")
 
+        if not args.yes:
+            # Deliberately a hard stop, not a prompt: the documented invocation
+            # is `docker exec aexy-backend python scripts/seed_marketing_demo.py`,
+            # which has no TTY, so a prompt would either hang or be auto-skipped.
+            print(
+                "\nRefusing to write without --yes.\n"
+                "This inserts fictional CRM records and ENABLED automations into "
+                "the workspace above.\n"
+                "Confirm that is a demo database, then re-run with --yes.",
+                file=sys.stderr,
+            )
+            return 1
+
+        print()
         await seed_crm(db, workspace.id, dev)
         await seed_planning(db, workspace, dev)
         await seed_automations(db, workspace.id, dev)

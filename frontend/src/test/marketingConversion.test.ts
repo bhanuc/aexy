@@ -46,13 +46,31 @@ describe("self-serve conversion path", () => {
     }
   });
 
-  it("no product page sends its CTA straight to a single OAuth provider", () => {
+  it("no public page sends its CTA straight to a single OAuth provider", () => {
     // /login offers Google *and* GitHub and reads "Sign in or create your
-    // workspace"; a bare provider URL forces one identity provider.
-    const offenders = productPages().filter((slug) =>
-      /auth\/(google|github)\/login/.test(read(APP, "products", slug, "page.tsx")),
-    );
-    expect(offenders, "product pages hardcoding one OAuth provider as the CTA").toEqual([]);
+    // workspace"; a bare provider URL forces one identity provider, which on a
+    // developer product silently excludes anyone without that account.
+    //
+    // Scoped to the whole public tree, not just /products: /pricing, the four
+    // /for/* client pages, /manifesto, /mission and /story all had the same
+    // hardcoded Google URL. /login itself is the exception (it *is* the
+    // provider picker), and /invite + /oauth are gated auth flows.
+    const EXEMPT = ["login", "invite", "oauth", "auth"];
+    const offenders: string[] = [];
+    const walk = (dir: string, rel: string[] = []) => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        if (e.isDirectory()) {
+          if (rel.length === 0 && (EXEMPT.includes(e.name) || e.name.startsWith("("))) continue;
+          walk(join(dir, e.name), [...rel, e.name]);
+        } else if (e.name === "page.tsx") {
+          if (/auth\/(google|github)\/login/.test(readFileSync(join(dir, e.name), "utf8"))) {
+            offenders.push("/" + rel.join("/"));
+          }
+        }
+      }
+    };
+    walk(APP);
+    expect(offenders, "public pages hardcoding one OAuth provider as the CTA").toEqual([]);
   });
 
   it("every product page offers a self-serve CTA before a sales one", () => {

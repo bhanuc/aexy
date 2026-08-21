@@ -21,9 +21,9 @@ const config: Config = {
           },
         },
         colors: {
-          // "Open Ledger" marketing brand (homepage; interior marketing pages
-          // migrate later). Static hexes on purpose — the marketing surface
-          // does not flip with the app's dark mode.
+          // "Open Ledger" marketing brand — used by every public marketing
+          // page via components/landing/LedgerPage. Static hexes on purpose:
+          // the marketing surface does not flip with the app's dark mode.
           ledger: {
             paper: "#F2F3EE",
             card: "#FBFCF9",
