@@ -76,12 +76,12 @@ export default async function DocPage({ params }: DocPageProps) {
       <div className="min-w-0">
         <DocsBreadcrumb section={meta.section} title={meta.title} />
 
-        <header className="mb-8 pb-8 border-b border-white/[0.06]">
-          <h1 className="text-4xl md:text-5xl font-bold text-white tracking-tight mb-3">
+        <header className="mb-8 pb-8 border-b border-ledger-ink/12">
+          <h1 className="font-display text-4xl md:text-5xl font-bold text-ledger-ink tracking-tight mb-3">
             {meta.title}
           </h1>
           {meta.description && (
-            <p className="text-lg text-white/55 leading-relaxed">{meta.description}</p>
+            <p className="text-lg text-ledger-ink/60 leading-relaxed">{meta.description}</p>
           )}
         </header>
 
