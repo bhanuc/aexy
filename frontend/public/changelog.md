@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.26.0] - 2026-08-22
+## [0.28.0] - 2026-08-22
 
 The public site: a new look, and the SEO and conversion audit that came with it.
 
@@ -125,6 +125,283 @@ switched on automations that then fire on live records.
 It prints the database, workspace and developer it resolved, and refuses to
 write without `--yes`.
 
+## [0.27.1] - 2026-08-21
+
+Files & Storage, from one upload that arrived three times.
+
+### Fixed: one upload became three files, with three AI summaries
+
+Dropping a single file into Files & Storage created three rows, each analysed
+separately, so the same document ended up with three different AI summaries
+sitting side by side. The upload panel said "1 of 1 uploaded" the whole time,
+because there genuinely was only one queue item — the duplication happened
+below it.
+
+The queue drains in a loop bounded by how many uploads may run at once, and it
+read the queue through a ref. Marking an item as started goes through React
+state, which does not apply until the next render, so every remaining pass of
+that loop found the *same* item still reporting itself as pending and sent it
+again. Three concurrent slots meant three POSTs for one file; a five-file batch
+sent twenty-one.
+
+What has been dispatched is now tracked directly instead of being inferred from
+a queue snapshot that cannot have caught up yet. Existing duplicates are not
+touched — they are real rows, and they can now be deleted from the page.
+
+### Fixed: a Word document rendered dark
+
+A .docx preview showed light text on a dark page. The editor canvas asked the
+operating system what colour mode to use and no caller had ever told it
+otherwise.
+
+Dark mode inverts the page but not the ink. A document's black body text,
+coloured headings and table rules were all chosen by its author against white
+paper, so keeping them over a dark canvas is neither what the author wrote nor
+what the file prints as. Documents now render on paper regardless of the app's
+theme, which is what Word Online, Google Docs and Preview all do — they theme
+the chrome around the page, not the page. This covers the document editor as
+well as the Drive preview. PDF previews get the same treatment. Images and
+video keep a neutral mat that does follow the theme, which is conventional for
+media.
+
+Separately, every AI badge and status pill had picked a text colour that only
+works on a dark background, so "Ready", "Failed" and the tag chips were washed
+out to near-invisible in light mode.
+
+### Added: storage says how much room is left
+
+The sidebar reported a percentage and a byte count. It now draws a meter that
+goes amber and then red as the quota fills, and states the space remaining —
+the number that actually decides whether the next upload will fit.
+
+### Added: retrying one failed upload, and deleting a file
+
+A failed upload was a dead end. The only control was "Clear", which threw away
+the whole batch including the files that had succeeded, and the failure itself
+could not be retried without picking the file again. Individual items can now be
+retried or dismissed, and batch progress is weighted by bytes rather than by
+file count, so one large file among small ones no longer jumps from nothing to
+finished.
+
+Files could not be deleted from this page at all, which is why clearing up
+duplicated uploads meant going elsewhere. Cards now carry a delete action behind
+a confirmation.
+
+Empty folders, searches with no matches and the loading state each used to be a
+single grey line of text. They are now sized like the content they stand in for
+and say what to do next.
+
+## [0.27.0] - 2026-08-21
+
+### Added: a board knows which queue its work is pending with
+
+Converting a ticket to a task said nothing about who now owed the work, so the
+ticket kept whatever `pending_with` it had and somebody moved it by hand every
+time.
+
+The chain to compute it was already in the schema and used by nothing:
+`teams.department_id` (whose own comment said it drives Service Desk pending-with
+resolution) → `departments.function_key` → `service_desk_stakeholders.function_key`.
+Nothing except the bulk org mirror ever wrote `department_id`, and no API exposed
+it, so in practice every board rolled up to nothing.
+
+A board's owning department is now set when the project is created and editable
+on its settings row, with a per-board bucket override for the board the org chart
+cannot describe — a shared triage board two departments feed. Boards resolve only
+to *internal* buckets: a board is where work is done, and pointing one at
+"Partner" would move tickets out of the desk's own queue the moment somebody
+started on them.
+
+Matching tolerates the retired `ops_kam` spelling on either side of the join.
+Live workspaces hold it in `departments.function_key` while newer rows
+canonicalise to `operations`, and comparing a single string is how this kind of
+join silently resolves to nothing — indistinguishable from routing being off.
+
+**Every unresolved case says which one it is.** No department, a department with
+no function, no bucket claiming that function: three distinct answers with three
+distinct sentences, shown on the board row, in the convert dialog before the
+operator commits, and written into the ticket. A routing feature that quietly
+does nothing is the complaint this release is answering; a blank badge would have
+been the same bug wearing a different hat.
+
+### Added: pending-with buckets are editable
+
+The backend has had full CRUD on this taxonomy since `PendingWith` stopped being
+an enum, and nothing rendered it. A desk seeded from the insurance template had
+KAM, Insurer, Partner, Sales, Finance and Marketing — and no amount of clicking
+could add Tech or Product, which is also why an engineering board had nowhere to
+hand a ticket to.
+
+There is a new settings page for it. The server's invariants surface as its
+error messages rather than being re-implemented in the UI: one terminal bucket,
+the terminal bucket cannot be retired or deleted, one claimant per master-data
+table, and no deleting a slug that a ticket or a closed TAT stage still names.
+
+One gap closed underneath: nothing stopped an *internal* bucket being saved with
+no owning department, though the industry templates had always refused it on
+seeded rows. Such a bucket looks finished in the list and then matches nothing.
+The department is now required, chosen as a department rather than as a raw
+function key, so the two sides of the join agree by construction.
+
+Retiring a bucket also now actually keeps it out of the hand-off picker. Nothing
+filtered `is_active` before — harmless while nobody could retire anything.
+
+### Added: the ticket follows its task between boards
+
+Moving the card onto the Tech board is how work gets handed to Tech, so the
+ticket follows.
+
+That surfaced a bug. `move_to_project` is a *fork*: the clone lands on the target
+board and the source is archived or marked done. A ticket raised from the source
+was left pointing at a dead task — and since conversion refuses a ticket that
+already has one, it could not be converted again either. The link now follows the
+fork.
+
+### Added: open tickets rolled up by department
+
+The dashboard matrix answers "which queue is this in". With two departments
+owning three buckets between them, the question being asked is "who is behind".
+Both views are folded from the same numbers server-side, so they cannot disagree,
+and external buckets are kept under their own row rather than dropped — otherwise
+the department view would quietly sum to less than the bucket board.
+
+### Changed: a resolved ticket stops holding its queue
+
+Completing the linked task moved the ticket to Resolved and left `pending_with`
+alone, so it sat in Tech's queue for good — work finished, and the breach clock
+still running against them.
+
+It now moves to the terminal bucket, which is what stops the clock. Deliberately
+*not* through the normal hand-off, which couples the terminal bucket to
+`status = CLOSED` and sends the closure email: both are right when a person
+closes a ticket, and neither is right here, because a developer finishing a card
+has not spoken to the requester. Resolved-not-Closed stands.
+
+### Changed: long email bodies arrive folded
+
+A partner's first email is often the whole history of a case pasted in, and at
+full height it pushed the ticket's own fields, actions and reply box off the
+screen — so reading the ticket meant scrolling past the mail to reach anything
+you could act on. Folded past a threshold, with the cut faded rather than square:
+a hard edge mid-sentence reads as the email itself having been truncated.
+
+### Fixed: converting from the ticket page asks who picks it up
+
+The Log-ticket dialog has always asked for an assignee and the ticket detail
+page's own convert dialog never did, so the same action produced an assigned task
+from one screen and an unowned one from the other. The backend argument existed
+and was simply never sent.
+
+### Migration
+
+`backend/scripts/migrate_team_desk_routing.sql` — adds
+`teams.desk_stakeholder_slug` (nullable) and a partial index. Nothing to
+backfill: an unset override means "resolve through the department", which is the
+behaviour every existing board keeps. Refuses to run if `teams.department_id` is
+absent, so a database missing the organization migration fails there rather than
+at the first conversion.
+
+## [0.26.0] - 2026-08-21
+
+Which model does this run on? There were four answers, and one of them did nothing.
+
+### Added: one place to configure AI models
+
+`/settings/ai/models` lists every AI feature in the product — fifty of them,
+grouped the way you would look for them — and for each one: the model it will
+actually use, and where that answer came from. Set a model for a whole group, or
+for one feature inside it.
+
+**Nothing on the page is decorative, because the thing it replaced was.** There
+was a haiku/sonnet dropdown under code insights, admin-only, that no code had
+ever read: you could change it, save it, and change nothing. It is deleted rather
+than wired up — making it live would have silently downgraded every workspace
+showing the default while it was actually running something else.
+
+**A model belongs to a provider, so a stored choice can go stale.** Pick a Claude
+model, then move the workspace to Gemini, and that choice cannot apply. The row
+says so — "not being used", with the reason — instead of showing a setting that
+looks live. The alternative is a 404 from somebody else's API, hours later, inside
+a background job.
+
+### Fixed: AI settings did not apply to agents or to Ask
+
+The workspace AI switch and bring-your-own-key were enforced in one place, and
+two of the three paths that call a model did not go through it. An organisation
+that switched AI off still had its agents running, and Ask answering, on the
+platform's credential. Agents were also pinned to a model Anthropic had retired.
+
+All three paths now resolve through the same function, so the switch means what it
+says.
+
+### Added: Word documents, and asking the AI to edit them
+
+A `.docx` is a first-class document — the same tree, permissions, comments,
+version history and review queue as any other page — rather than an attachment.
+Editing is structure-aware, and pagination matches Word, because a page count
+that drifts puts every anchored comment on the wrong page.
+
+Three ways to ask for an edit, and the third is the one that does not start here:
+a reviewer opens the file in Word, types `@aexy` in a comment asking for a change,
+and sends it back. They hear about the answer, because they are the one who asked
+— not the document's owner, who did not.
+
+**Every AI edit arrives as a redline to accept or reject**, never as a saved
+change. The panel lists what is in a proposal before you replay it, since "12
+changes waiting" is a count rather than something you can review, and it says
+which changes will not appear as markup so you are not left hunting for them.
+
+### Added: turning a Word document into issues
+
+A requirements document, a client's review with twenty comments in the margin, a
+QA report where every finding is a defect. Read it for work items — open comments,
+TODO lines, or whatever the AI finds — and create sprint tasks, bugs, stories or
+tickets from the ones you keep.
+
+Two steps, always. It proposes; you remove what does not belong; then it creates.
+These become work a team is measured against, and a model that mistook a heading
+for a deliverable should not be able to put a phantom task in somebody's sprint.
+
+### Fixed: five AI features had never once run
+
+Each had a call that passed an argument the gateway has never accepted, raised on
+every invocation, and had the error swallowed by a surrounding catch. Commit
+analysis, attrition risk, burnout risk, performance trajectory and team health
+were all switched on, all reported as working, and all doing nothing.
+
+The calls are fixed. They ship **off**, named in `AI_ENABLE_DORMANT_FEATURES`,
+because repairing a call is not the same decision as starting to pay for five
+analyses nobody has seen run — and the models page says which are off and why. A
+feature that is not running should say so; that is the whole lesson of the
+dropdown above.
+
+### Fixed: two issues could be given the same key
+
+Bug, story and ticket keys were `count(*) + 1` read in one statement and written
+in another, so two people creating at once got the same number. Tickets failed
+loudly — a 500 on a public form. Bugs and stories had no uniqueness constraint at
+all, so you simply ended up with two things called BUG-004 and every reference to
+"BUG-004" ambiguous from then on.
+
+Keys are now allocated atomically, the constraints exist, and deleting BUG-003 no
+longer causes the next bug to be called BUG-003.
+
+### Fixed
+
+- **A workspace using its own Gemini key read answers the platform's Claude
+  wrote.** The analysis cache was keyed on the prompt alone, with no record of
+  which model produced the result.
+- **Uploaded files were read by the AI regardless of the workspace's settings** —
+  the highest-volume AI path in the product, bypassing the switch, the
+  credential, the rate limit and the usage record.
+- **Three report metrics crashed instead of rendering.** Team health, bus factor
+  and attrition risk built a service without an argument it required.
+- **An AI redline was signed by whoever opened the review**, so the document
+  claimed a reviewer had written changes they were in the middle of judging. The
+  name the workspace configures for the AI was stored, validated, shown in the
+  API — and never read.
+- **Two notification toggles could not be switched on by anything.** The events
+  existed and nothing emitted them.
 ## [0.25.1] - 2026-08-21
 
 ### Changed: a ticket is one email thread
