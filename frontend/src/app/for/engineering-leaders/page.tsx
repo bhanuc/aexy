@@ -16,7 +16,6 @@ import {
   Clock,
   AlertTriangle,
 } from "lucide-react";
-import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 
 // "Open Ledger" light brand: paper page, ink text, ledger-green accents. Each
@@ -62,7 +61,6 @@ export default function EngineeringLeadersPage() {
 
   return (
     <LedgerPage>
-      <LandingHeader />
 
       {/* Hero */}
       <section className="pt-32 pb-20 px-6 relative">
@@ -278,7 +276,6 @@ export default function EngineeringLeadersPage() {
         </div>
       </section>
 
-      <LandingFooter />
     </LedgerPage>
   );
 }

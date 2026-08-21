@@ -19,7 +19,6 @@ import {
   MessageSquare,
   Github,
 } from "lucide-react";
-import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 import { ProductShot } from "@/components/marketing/ProductShot";
 import docsShot from "../../../../public/marketing/home/home-know@2x.webp";
@@ -52,7 +51,6 @@ export default function DocsProductPage() {
 
   return (
     <LedgerPage>
-      <LandingHeader />
 
       {/* Hero */}
       <section className="px-6 pt-32 pb-20">
@@ -299,7 +297,6 @@ export default function DocsProductPage() {
         </div>
       </section>
 
-      <LandingFooter />
     </LedgerPage>
   );
 }

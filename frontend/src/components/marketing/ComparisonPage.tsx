@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, GitBranch } from "lucide-react";
-import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 import { BreadcrumbJsonLd } from "@/components/marketing/StructuredData";
 import { AuthorByline, defaultAuthor, organizationJsonLd, personJsonLd } from "@/components/marketing/AuthorByline";
@@ -66,7 +65,6 @@ export function ComparisonPage({
     <LedgerPage>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <BreadcrumbJsonLd trail={[{ name: `Aexy vs ${competitor}`, path }]} />
-      <LandingHeader />
 
       <div className="relative">
         <section className="px-4 pb-20 pt-32 sm:px-6">
@@ -182,7 +180,6 @@ export function ComparisonPage({
         </section>
       </div>
 
-      <LandingFooter />
     </LedgerPage>
   );
 }

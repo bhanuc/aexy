@@ -4,12 +4,11 @@ import { getTranslations } from "next-intl/server";
 import { ArrowRight, ChevronRight } from "lucide-react";
 import { McpChatPreview } from "@/components/landing/McpChatPreview";
 import { AuthRedirect } from "@/components/landing/home/AuthRedirect";
-import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
+import { LedgerPage } from "@/components/landing/LedgerPage";
 import { ProductTour } from "@/components/landing/home/ProductTour";
 import { SectionHeading } from "@/components/landing/home/SectionHeading";
 import { DiffStrip } from "@/components/landing/home/DiffStrip";
 import { OsConsolePreview } from "@/components/landing/home/OsConsolePreview";
-import { displayFont, brandMonoFont } from "@/components/landing/fonts";
 import {
   MCP_HOME_CARDS,
   buildHomepageJsonLd,
@@ -85,16 +84,13 @@ export default async function Home() {
   ];
 
   return (
-    <main
-      className={`theme-ledger ${displayFont.variable} ${brandMonoFont.variable} min-h-screen bg-ledger-paper text-ledger-ink antialiased`}
-    >
+    <LedgerPage>
       <AuthRedirect />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(buildHomepageJsonLd(faqs)) }}
       />
 
-      <LandingHeader />
 
       {/* SYS/01 — hero */}
       <section className="relative px-4 pb-16 pt-28 sm:px-6 sm:pb-24 sm:pt-36">
@@ -391,7 +387,6 @@ export default async function Home() {
         </div>
       </section>
 
-      <LandingFooter />
-    </main>
+    </LedgerPage>
   );
 }

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Bell, CheckCircle2, Crosshair, Eye, GitBranch, Mail, Route, Shield, Target, TrendingUp } from "lucide-react";
-import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 import { BreadcrumbJsonLd } from "@/components/marketing/StructuredData";
 import type { IconCapability } from "@/components/landing/marketing-types";
@@ -44,7 +43,6 @@ export default function GTMIntelligenceProductPage() {
     <LedgerPage>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <BreadcrumbJsonLd trail={[{ name: "GTM intelligence", path: "/products/gtm-intelligence" }]} />
-      <LandingHeader />
 
       <div className="relative">
         <section className="px-4 pb-20 pt-32 sm:px-6">
@@ -168,7 +166,6 @@ export default function GTMIntelligenceProductPage() {
         </section>
       </div>
 
-      <LandingFooter />
     </LedgerPage>
   );
 }

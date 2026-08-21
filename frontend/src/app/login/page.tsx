@@ -31,7 +31,7 @@ export default function LoginPage() {
   }, [router]);
 
   return (
-    <LedgerPage className="relative flex flex-col">
+    <LedgerPage chrome={false} className="relative flex flex-col">
       <header className="relative px-4 py-5 sm:px-6">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <Link href="/" className="flex items-center gap-3">

@@ -2,7 +2,6 @@
 
 import { ArrowRight, Briefcase, Globe, Code2, Heart } from "lucide-react";
 import { SiGithub } from "@icons-pack/react-simple-icons";
-import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 
 // "Open Ledger" treatment: paper page, principles as hairline cards with bare
@@ -29,7 +28,6 @@ const PRINCIPLES = [
 export default function CareersPage() {
   return (
     <LedgerPage>
-      <LandingHeader />
 
       <section className="relative px-6 pb-16 pt-32">
         <div className="mx-auto max-w-4xl text-center">
@@ -96,7 +94,6 @@ export default function CareersPage() {
         </div>
       </section>
 
-      <LandingFooter />
     </LedgerPage>
   );
 }

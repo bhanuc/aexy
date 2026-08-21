@@ -15,7 +15,6 @@ import {
   Workflow,
 } from "lucide-react";
 import { SiGithub } from "@icons-pack/react-simple-icons";
-import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import type { IconCapability } from "@/components/landing/marketing-types";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 
@@ -49,7 +48,6 @@ export default function AICompanyOSPage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <LandingHeader />
 
       <div className="relative">
         <section className="px-4 pb-20 pt-32 sm:px-6">
@@ -180,7 +178,6 @@ export default function AICompanyOSPage() {
         </section>
       </div>
 
-      <LandingFooter />
     </LedgerPage>
   );
 }

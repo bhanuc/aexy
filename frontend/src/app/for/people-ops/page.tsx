@@ -11,7 +11,6 @@ import {
   UserPlus,
   Clock,
 } from "lucide-react";
-import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 
 // "Open Ledger" light brand: paper page, ink text, ledger-green accents. The
@@ -56,7 +55,6 @@ export default function PeopleOpsPage() {
 
   return (
     <LedgerPage>
-      <LandingHeader />
 
       {/* Hero */}
       <section className="pt-32 pb-20 px-6 relative">
@@ -266,7 +264,6 @@ export default function PeopleOpsPage() {
         </div>
       </section>
 
-      <LandingFooter />
     </LedgerPage>
   );
 }

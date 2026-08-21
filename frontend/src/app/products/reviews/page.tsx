@@ -14,7 +14,6 @@ import {
   Eye,
   Github,
 } from "lucide-react";
-import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 import { ProductShot } from "@/components/marketing/ProductShot";
 import reviewsShot from "../../../../public/marketing/home/home-grow@2x.webp";
@@ -47,7 +46,6 @@ export default function ReviewsProductPage() {
 
   return (
     <LedgerPage>
-      <LandingHeader />
 
       {/* Hero */}
       <section className="px-6 pt-32 pb-20">
@@ -308,7 +306,6 @@ export default function ReviewsProductPage() {
         </div>
       </section>
 
-      <LandingFooter />
     </LedgerPage>
   );
 }

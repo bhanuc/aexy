@@ -19,7 +19,6 @@ import {
   Shield,
   Github,
 } from "lucide-react";
-import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 
 
@@ -57,7 +56,6 @@ export default function HiringProductPage() {
 
   return (
     <LedgerPage>
-      <LandingHeader />
 
       {/* Hero */}
       <section className="px-6 pt-32 pb-20">
@@ -300,7 +298,6 @@ export default function HiringProductPage() {
         </div>
       </section>
 
-      <LandingFooter />
     </LedgerPage>
   );
 }

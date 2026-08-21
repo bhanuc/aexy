@@ -1,7 +1,6 @@
 "use client";
 
 import { Shield } from "lucide-react";
-import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 
 // "Open Ledger" long-form treatment: paper page, hairline rules between
@@ -16,7 +15,6 @@ const linkClass =
 export default function PrivacyPage() {
   return (
     <LedgerPage>
-      <LandingHeader />
 
       <section className="relative px-6 pb-12 pt-32">
         <div className="mx-auto max-w-3xl">
@@ -163,7 +161,6 @@ export default function PrivacyPage() {
         </div>
       </section>
 
-      <LandingFooter />
     </LedgerPage>
   );
 }

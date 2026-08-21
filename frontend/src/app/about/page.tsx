@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { ArrowRight, Heart, Code2, Globe, Sparkles } from "lucide-react";
-import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 import { SiGithub } from "@icons-pack/react-simple-icons";
 import { defaultAuthor, organizationJsonLd, personJsonLd } from "@/components/marketing/AuthorByline";
@@ -42,7 +41,6 @@ export default function AboutPage() {
     <LedgerPage>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(aboutJsonLd) }} />
 
-      <LandingHeader />
 
       <section className="relative px-6 pb-16 pt-32">
         <div className="mx-auto max-w-4xl text-center">
@@ -170,7 +168,6 @@ export default function AboutPage() {
         </div>
       </section>
 
-      <LandingFooter />
     </LedgerPage>
   );
 }

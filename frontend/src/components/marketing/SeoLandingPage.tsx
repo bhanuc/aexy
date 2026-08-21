@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, GitBranch } from "lucide-react";
-import { LandingFooter, LandingHeader } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 import { AuthorByline, defaultAuthor, organizationJsonLd, personJsonLd } from "@/components/marketing/AuthorByline";
 import { BreadcrumbJsonLd } from "@/components/marketing/StructuredData";
@@ -86,7 +85,6 @@ export function SeoLandingPage({
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }} />
       )}
       <BreadcrumbJsonLd trail={[{ name: breadcrumbName ?? eyebrow, path }]} />
-      <LandingHeader />
 
       <div className="relative">
         <section className="px-4 pb-16 pt-32 sm:px-6">
@@ -273,7 +271,6 @@ export function SeoLandingPage({
         </section>
       </div>
 
-      <LandingFooter />
     </LedgerPage>
   );
 }

@@ -11,7 +11,6 @@ import {
   ShieldCheck,
   Terminal,
 } from "lucide-react";
-import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 import { BreadcrumbJsonLd } from "@/components/marketing/StructuredData";
 import { ProductShot } from "@/components/marketing/ProductShot";
@@ -100,7 +99,6 @@ export default async function McpProductPage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
       <BreadcrumbJsonLd trail={[{ name: "MCP", path: "/products/mcp" }]} />
-      <LandingHeader />
 
       <div className="relative">
         {/* Hero */}
@@ -342,7 +340,6 @@ export default async function McpProductPage() {
         </section>
       </div>
 
-      <LandingFooter />
     </LedgerPage>
   );
 }

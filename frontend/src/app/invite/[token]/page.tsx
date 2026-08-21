@@ -110,7 +110,7 @@ export default function AcceptInvitePage() {
 
   if (loading) {
     return (
-      <LedgerPage className="flex items-center justify-center">
+      <LedgerPage chrome={false} className="flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-8 h-8 text-ledger-green animate-spin mx-auto mb-4" />
           <p className="text-ledger-ink/65">Loading invite...</p>
@@ -121,7 +121,7 @@ export default function AcceptInvitePage() {
 
   if (error && !inviteInfo) {
     return (
-      <LedgerPage className="flex items-center justify-center p-4">
+      <LedgerPage chrome={false} className="flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-ledger-card border border-ledger-ink/12 rounded-[2px] p-8 text-center">
           <div className="w-16 h-16 rounded-[2px] bg-ledger-red/10 flex items-center justify-center mx-auto mb-6">
             <XCircle className="w-8 h-8 text-ledger-red" />
@@ -141,7 +141,7 @@ export default function AcceptInvitePage() {
 
   if (success && acceptedWorkspace) {
     return (
-      <LedgerPage className="flex items-center justify-center p-4">
+      <LedgerPage chrome={false} className="flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-ledger-card border border-ledger-ink/12 rounded-[2px] p-8 text-center">
           <div className="w-16 h-16 rounded-[2px] bg-ledger-green/10 flex items-center justify-center mx-auto mb-6">
             <CheckCircle2 className="w-8 h-8 text-ledger-green" />
@@ -171,7 +171,7 @@ export default function AcceptInvitePage() {
   const emailMatches = currentUserEmail?.toLowerCase() === inviteInfo.email.toLowerCase();
 
   return (
-    <LedgerPage className="flex items-center justify-center p-4">
+    <LedgerPage chrome={false} className="flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-ledger-card border border-ledger-ink/12 rounded-[2px] p-8">
         {/* Header */}
         <div className="text-center mb-8">

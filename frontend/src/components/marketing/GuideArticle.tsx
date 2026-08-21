@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
-import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 import { AuthorByline, defaultAuthor, organizationJsonLd, personJsonLd } from "@/components/marketing/AuthorByline";
 
@@ -70,7 +69,6 @@ export function GuideArticle({
   return (
     <LedgerPage>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <LandingHeader />
 
       <div className="relative">
         <article className="px-4 pb-16 pt-32 sm:px-6">
@@ -166,7 +164,6 @@ export function GuideArticle({
         </article>
       </div>
 
-      <LandingFooter />
     </LedgerPage>
   );
 }

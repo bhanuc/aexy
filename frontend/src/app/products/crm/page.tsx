@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Bot, Building2, Calendar, CheckCircle2, Database, Mail, Network, Rows3, Workflow } from "lucide-react";
-import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 import { BreadcrumbJsonLd } from "@/components/marketing/StructuredData";
 import { AuthorByline, defaultAuthor, organizationJsonLd, personJsonLd } from "@/components/marketing/AuthorByline";
@@ -58,7 +57,6 @@ export default function CRMProductPage() {
     <LedgerPage>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <BreadcrumbJsonLd trail={[{ name: "CRM", path: "/products/crm" }]} />
-      <LandingHeader />
 
       <div className="relative">
         <section className="px-4 pb-20 pt-32 sm:px-6">
@@ -242,7 +240,6 @@ export default function CRMProductPage() {
         </section>
       </div>
 
-      <LandingFooter />
     </LedgerPage>
   );
 }

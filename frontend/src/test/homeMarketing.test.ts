@@ -54,13 +54,19 @@ describe("homepage server/client split", () => {
     expect(page()).toMatch(/<AuthRedirect\s*\/>/);
   });
 
-  it("uses the same header and footer as every other marketing page", () => {
+  it("uses the same chrome as every other marketing page", () => {
     // The homepage used to carry its own forked header and footer, which is
     // how the chrome drifts: a link added to the shared nav silently misses
     // the highest-traffic page.
+    //
+    // LedgerPage now renders the header and footer itself, so composing it is
+    // what guarantees the shared chrome. It also means the homepage must NOT
+    // render them again — doing so produced a visibly doubled footer, since
+    // two fixed headers stack invisibly but two footers do not.
     const src = page();
-    expect(src).toMatch(/<LandingHeader\s*\/>/);
-    expect(src).toMatch(/<LandingFooter\s*\/>/);
+    expect(src, "homepage must compose LedgerPage").toMatch(/<LedgerPage>/);
+    expect(src, "LedgerPage renders the header; a second one duplicates it").not.toMatch(/<LandingHeader\s*\/>/);
+    expect(src, "LedgerPage renders the footer; a second one duplicates it").not.toMatch(/<LandingFooter\s*\/>/);
   });
 
   it("the auth island validates the token before setting the presence cookie", () => {

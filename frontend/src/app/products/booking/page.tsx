@@ -16,7 +16,6 @@ import {
   Send,
   Github,
 } from "lucide-react";
-import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 
 
@@ -53,7 +52,6 @@ export default function BookingProductPage() {
 
   return (
     <LedgerPage>
-      <LandingHeader />
 
       {/* Hero */}
       <section className="px-6 pt-32 pb-20">
@@ -361,7 +359,6 @@ export default function BookingProductPage() {
         </div>
       </section>
 
-      <LandingFooter />
     </LedgerPage>
   );
 }

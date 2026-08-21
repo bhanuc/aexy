@@ -20,7 +20,6 @@ import {
   Zap,
   BarChart3,
 } from "lucide-react";
-import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 
 
@@ -31,7 +30,6 @@ export default function ManifestoPage() {
 
   return (
     <LedgerPage>
-      <LandingHeader />
 
       {/* Hero Section */}
       <section className="relative px-6 pb-20 pt-32">
@@ -367,7 +365,6 @@ export default function ManifestoPage() {
         </div>
       </section>
 
-      <LandingFooter />
     </LedgerPage>
   );
 }

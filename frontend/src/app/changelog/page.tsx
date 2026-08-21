@@ -1,7 +1,6 @@
 import fs from "fs";
 import path from "path";
 import { Metadata } from "next";
-import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 
 export const metadata: Metadata = {
@@ -250,7 +249,6 @@ export default function ChangelogPage() {
        element the scroll container for everything inside, which silently
        disables the sticky version rail. */
     <LedgerPage>
-      <LandingHeader />
 
       {/* Hero */}
       <section className="px-6 pt-32 pb-12">
@@ -305,7 +303,6 @@ export default function ChangelogPage() {
         </div>
       </section>
 
-      <LandingFooter />
     </LedgerPage>
   );
 }

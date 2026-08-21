@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { ArrowRight, Rss } from "lucide-react";
 import { SiGithub } from "@icons-pack/react-simple-icons";
-import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 
 // "Open Ledger" treatment: paper page, mono eyebrow, and the empty state as a
@@ -12,7 +11,6 @@ import { LedgerPage } from "@/components/landing/LedgerPage";
 export default function BlogPage() {
   return (
     <LedgerPage>
-      <LandingHeader />
 
       <section className="relative px-6 pb-16 pt-32">
         <div className="mx-auto max-w-3xl text-center">
@@ -72,7 +70,6 @@ export default function BlogPage() {
         </div>
       </section>
 
-      <LandingFooter />
     </LedgerPage>
   );
 }

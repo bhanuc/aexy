@@ -1,7 +1,6 @@
 "use client";
 
 import { FileText } from "lucide-react";
-import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 
 // "Open Ledger" long-form treatment. Clause numbers stay part of the heading
@@ -19,7 +18,6 @@ const clauseNumberClass = "font-brand-mono text-xl text-ledger-green";
 export default function TermsPage() {
   return (
     <LedgerPage>
-      <LandingHeader />
 
       <section className="relative px-6 pb-12 pt-32">
         <div className="mx-auto max-w-3xl">
@@ -171,7 +169,6 @@ export default function TermsPage() {
         </div>
       </section>
 
-      <LandingFooter />
     </LedgerPage>
   );
 }

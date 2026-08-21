@@ -28,6 +28,13 @@ const APP = join(ROOT, "src", "app");
 const MARKETING = join(ROOT, "src", "components", "marketing");
 
 const read = (...p: string[]) => readFileSync(join(...p), "utf8");
+
+/** Strip comments and JSX comments — a comment about `<main>` is not `<main>`. */
+const stripComments = (src: string) =>
+  src
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
 const productPages = () =>
   readdirSync(join(APP, "products")).filter((d) => existsSync(join(APP, "products", d, "page.tsx")));
 
@@ -132,6 +139,58 @@ describe("no fabricated proof", () => {
       }
     }
     expect(hits, "unsourced volume or outcome claim").toEqual([]);
+  });
+});
+
+describe("document landmarks", () => {
+  /**
+   * ARIA grants <header> the `banner` role and <footer> the `contentinfo` role
+   * only when they are NOT inside <main>. Marketing pages used to render all
+   * three as siblings under one page-wide <main>, which silently cost every
+   * page both landmarks. LedgerPage owns the structure now — header and footer
+   * outside, page content in <main> — so the way to break it again is for a
+   * page to render its own chrome or its own wrapper.
+   */
+  function ledgerPages(dir: string, acc: string[] = []): string[] {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, e.name);
+      if (e.isDirectory()) ledgerPages(full, acc);
+      else if (e.name.endsWith(".tsx") && readFileSync(full, "utf8").includes("<LedgerPage")) acc.push(full);
+    }
+    return acc;
+  }
+
+  const PAGES_WITH_CHROME = [...ledgerPages(APP), ...ledgerPages(MARKETING)];
+
+  it("finds the pages", () => {
+    expect(PAGES_WITH_CHROME.length).toBeGreaterThan(30);
+  });
+
+  it("LedgerPage keeps header and footer outside <main>", () => {
+    const src = stripComments(read(ROOT, "src", "components", "landing", "LedgerPage.tsx"));
+    const header = src.indexOf("<LandingHeader />");
+    const mainOpen = src.indexOf("<main>");
+    const mainClose = src.indexOf("</main>");
+    const footer = src.indexOf("<LandingFooter />");
+    expect(header).toBeGreaterThan(-1);
+    expect(mainOpen).toBeGreaterThan(header);
+    expect(footer).toBeGreaterThan(mainClose);
+  });
+
+  it("no page renders the chrome itself", () => {
+    // A page that also renders <LandingFooter /> ships two visible footers.
+    const offenders = PAGES_WITH_CHROME
+      .filter((f) => /<Landing(Header|Footer)\s*\/>/.test(stripComments(readFileSync(f, "utf8"))))
+      .map((f) => f.replace(ROOT + "/", ""));
+    expect(offenders, "duplicate chrome — LedgerPage already renders it").toEqual([]);
+  });
+
+  it("no page hand-rolls the LedgerPage wrapper", () => {
+    // The homepage did, and carried the landmark bug for exactly that reason.
+    const offenders = [...ledgerPages(APP), ...ledgerPages(MARKETING)]
+      .filter((f) => stripComments(readFileSync(f, "utf8")).includes("theme-ledger"))
+      .map((f) => f.replace(ROOT + "/", ""));
+    expect(offenders, "applies theme-ledger directly instead of composing LedgerPage").toEqual([]);
   });
 });
 

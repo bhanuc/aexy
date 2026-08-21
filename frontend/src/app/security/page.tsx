@@ -1,7 +1,6 @@
 "use client";
 
 import { Shield, Lock, Eye, Server, KeyRound, Bug } from "lucide-react";
-import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 
 // "Open Ledger" treatment: paper page, hairline trust cards with bare green
@@ -38,7 +37,6 @@ const headingClass = "mb-3 font-display text-2xl font-semibold tracking-tight";
 export default function SecurityPage() {
   return (
     <LedgerPage>
-      <LandingHeader />
 
       <section className="relative px-6 pb-16 pt-32">
         <div className="mx-auto max-w-4xl text-center">
@@ -137,7 +135,6 @@ export default function SecurityPage() {
         </div>
       </section>
 
-      <LandingFooter />
     </LedgerPage>
   );
 }

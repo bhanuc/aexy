@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Bot, CheckCircle2, LockKeyhole, Mail, Shield, Workflow, Wrench } from "lucide-react";
-import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 import { BreadcrumbJsonLd } from "@/components/marketing/StructuredData";
 import type { IconCapability } from "@/components/landing/marketing-types";
@@ -38,7 +37,6 @@ export default function AIAgentsProductPage() {
     <LedgerPage>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <BreadcrumbJsonLd trail={[{ name: "AI agents", path: "/products/ai-agents" }]} />
-      <LandingHeader />
 
       <div className="relative">
         <section className="px-4 pb-20 pt-32 sm:px-6">
@@ -146,7 +144,6 @@ export default function AIAgentsProductPage() {
         </section>
       </div>
 
-      <LandingFooter />
     </LedgerPage>
   );
 }

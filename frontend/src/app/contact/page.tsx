@@ -2,7 +2,6 @@
 
 import { Mail, MessageSquare, Shield, Briefcase, ArrowRight } from "lucide-react";
 import { SiGithub } from "@icons-pack/react-simple-icons";
-import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 
 const CONTACTS = [
@@ -39,7 +38,6 @@ const CONTACTS = [
 export default function ContactPage() {
   return (
     <LedgerPage className="overflow-hidden">
-      <LandingHeader />
 
       <section className="pt-32 pb-16 px-6 relative">
         <div className="max-w-4xl mx-auto text-center">
@@ -93,7 +91,6 @@ export default function ContactPage() {
         </div>
       </section>
 
-      <LandingFooter />
     </LedgerPage>
   );
 }

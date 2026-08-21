@@ -15,7 +15,6 @@ import {
   X,
   AlertCircle,
 } from "lucide-react";
-import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useWorkspace } from "@/hooks/useWorkspace";
@@ -224,7 +223,6 @@ function PricingContent() {
   return (
     <LedgerPage className="overflow-hidden">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(pricingJsonLd) }} />
-      <LandingHeader />
 
       {/* Error Modal */}
       <AnimatePresence>
@@ -668,7 +666,6 @@ function PricingContent() {
         </div>
       </section>
 
-      <LandingFooter />
     </LedgerPage>
   );
 }

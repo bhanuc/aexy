@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { LandingHeader, LandingFooter } from "@/components/landing/LandingHeader";
 import { LedgerPage } from "@/components/landing/LedgerPage";
 
 
@@ -12,7 +11,6 @@ export default function MissionPage() {
 
   return (
     <LedgerPage>
-      <LandingHeader />
 
       {/* Hero */}
       <section className="relative px-6 pb-16 pt-32">
@@ -175,7 +173,6 @@ export default function MissionPage() {
         </div>
       </section>
 
-      <LandingFooter />
     </LedgerPage>
   );
 }
