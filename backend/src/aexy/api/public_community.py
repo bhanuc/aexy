@@ -19,10 +19,16 @@ from aexy.schemas.chat import (
     PublicCommunityResponse,
     PublicDirectoryItem,
     PublicDirectoryResponse,
+    PublicMemberProfile,
     PublicMessage,
+    PublicReactionCreate,
     PublicReplyCreate,
+    PublicSearchHit,
+    PublicSearchResponse,
+    PublicTopicCreate,
     PublicTopicResponse,
     PublicTopicSummary,
+    TopicAcceptedAnswerUpdate,
 )
 from aexy.services.community_member_service import CommunityMemberService
 from aexy.services.community_participation_service import (
@@ -75,6 +81,7 @@ async def get_community(community_slug: str, db: AsyncSession = Depends(get_db))
         theme=community.theme or {},
         noindex=community.noindex,
         allow_participation=community.allow_participation,
+        allow_new_topics=community.allow_new_topics,
         channels=[PublicCommunityChannel(**c) for c in channels],
     )
 
@@ -168,6 +175,7 @@ async def get_topic(
         messages=[PublicMessage(**m) for m in messages],
         total=total,
         allow_participation=community.allow_participation,
+        accepted_message_id=topic.accepted_message_id,
     )
 
 
@@ -189,8 +197,11 @@ async def get_sitemap(community_slug: str, db: AsyncSession = Depends(get_db)):
 _ERROR_STATUS = {
     "empty": 400,
     "too_long": 400,
+    "invalid_emoji": 400,
     "disabled": 403,
     "not_public": 403,
+    "forbidden": 403,
+    "not_found": 404,
     "rate_limited": 429,
 }
 
@@ -229,6 +240,216 @@ async def post_reply(
     try:
         result = await participation.post_reply(
             community, channel, topic, str(current_user.id), data.content
+        )
+    except ParticipationError as e:
+        raise HTTPException(status_code=_ERROR_STATUS.get(e.code, 400), detail=e.message)
+    await db.commit()
+    return result
+
+
+# ── Search, feeds, and profiles (anonymous) ──────────────────────────
+
+
+@router.get("/{community_slug}/search", response_model=PublicSearchResponse)
+async def search_community(
+    community_slug: str,
+    q: str = Query("", max_length=200),
+    limit: int = Query(20, ge=1, le=50),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+):
+    """Search this community's public threads.
+
+    A short or empty query returns nothing rather than everything — "" would
+    otherwise match every thread in the forum and read as a broken page.
+    """
+    service = PublicCommunityService(db)
+    community = await service.get_community(community_slug)
+    if community is None:
+        raise HTTPException(status_code=404, detail="Community not found")
+
+    hits, total = await service.search(
+        community.workspace_id, q, limit=limit, offset=offset
+    )
+    return PublicSearchResponse(
+        query=q.strip(), hits=[PublicSearchHit(**h) for h in hits], total=total
+    )
+
+
+@router.get("/{community_slug}/members/{handle}", response_model=PublicMemberProfile)
+async def get_member_profile(
+    community_slug: str, handle: str, db: AsyncSession = Depends(get_db)
+):
+    """Public profile behind an author handle.
+
+    404 — not an empty profile — when the member posts anonymously. The absence
+    of the page is what makes the anonymity hold.
+    """
+    service = PublicCommunityService(db)
+    community = await service.get_community(community_slug)
+    if community is None:
+        raise HTTPException(status_code=404, detail="Community not found")
+
+    profile = await service.get_member_profile(community.workspace_id, handle)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    return PublicMemberProfile(**profile)
+
+
+@router.get("/{community_slug}/feed")
+async def get_feed(
+    community_slug: str,
+    channel: str | None = Query(None),
+    limit: int = Query(30, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    """Newest public threads, for the frontend's RSS route to render."""
+    service = PublicCommunityService(db)
+    community = await service.get_community(community_slug)
+    if community is None:
+        raise HTTPException(status_code=404, detail="Community not found")
+    entries = await service.feed_entries(
+        community.workspace_id, channel_slug=channel, limit=limit
+    )
+    return {
+        "community_slug": community.community_slug,
+        "title": community.title,
+        "description": community.description,
+        "noindex": community.noindex,
+        "entries": entries,
+    }
+
+
+# ── Participation (authenticated) ────────────────────────────────────
+
+
+async def _resolve_topic(
+    db: AsyncSession, community_slug: str, channel_slug: str, topic_param: str
+):
+    """Community + channel + topic for a public path, or the right 404."""
+    slug, short_id = _split_topic_param(topic_param)
+    read = PublicCommunityService(db)
+    community = await read.get_community(community_slug)
+    if community is None:
+        raise HTTPException(status_code=404, detail="Community not found")
+    channel = await read.get_public_channel(community.workspace_id, channel_slug)
+    if channel is None:
+        raise HTTPException(status_code=404, detail="Channel not found")
+    topic = await read.get_public_topic(channel, slug, short_id)
+    if topic is None:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    return community, channel, topic
+
+
+@router.post("/{community_slug}/channels/{channel_slug}/topics", status_code=201)
+async def create_topic(
+    community_slug: str,
+    channel_slug: str,
+    data: PublicTopicCreate,
+    current_user: Developer = Depends(get_current_developer),
+    db: AsyncSession = Depends(get_db),
+):
+    """Start a new thread in a public channel as a signed-in visitor.
+
+    Gated by the community's own ``allow_new_topics`` switch on top of
+    ``allow_participation`` — a forum can accept answers without accepting
+    questions from outside.
+    """
+    read = PublicCommunityService(db)
+    community = await read.get_community(community_slug)
+    if community is None:
+        raise HTTPException(status_code=404, detail="Community not found")
+    channel = await read.get_public_channel(community.workspace_id, channel_slug)
+    if channel is None:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    participation = CommunityParticipationService(db)
+    try:
+        result = await participation.create_topic(
+            community, channel, str(current_user.id), data.name, data.content
+        )
+    except ParticipationError as e:
+        raise HTTPException(status_code=_ERROR_STATUS.get(e.code, 400), detail=e.message)
+    await db.commit()
+    return result
+
+
+@router.post(
+    "/{community_slug}/channels/{channel_slug}/topics/{topic_param}"
+    "/messages/{message_id}/reactions"
+)
+async def toggle_reaction(
+    community_slug: str,
+    channel_slug: str,
+    topic_param: str,
+    message_id: str,
+    data: PublicReactionCreate,
+    current_user: Developer = Depends(get_current_developer),
+    db: AsyncSession = Depends(get_db),
+):
+    """Add or remove one of the caller's reactions on a public message."""
+    community, channel, topic = await _resolve_topic(
+        db, community_slug, channel_slug, topic_param
+    )
+    participation = CommunityParticipationService(db)
+    try:
+        result = await participation.toggle_reaction(
+            community, channel, topic, message_id, str(current_user.id), data.emoji
+        )
+    except ParticipationError as e:
+        raise HTTPException(status_code=_ERROR_STATUS.get(e.code, 400), detail=e.message)
+    await db.commit()
+    return result
+
+
+@router.get(
+    "/{community_slug}/channels/{channel_slug}/topics/{topic_param}/my-reactions"
+)
+async def get_my_reactions(
+    community_slug: str,
+    channel_slug: str,
+    topic_param: str,
+    current_user: Developer = Depends(get_current_developer),
+    db: AsyncSession = Depends(get_db),
+):
+    """Which reactions the caller has already left in this thread.
+
+    Separate from the thread payload on purpose: that response is cached and
+    served to every anonymous reader, so it cannot carry anything per-viewer.
+    """
+    _community, _channel, topic = await _resolve_topic(
+        db, community_slug, channel_slug, topic_param
+    )
+    reactions = await PublicCommunityService(db).my_reactions(
+        topic.id, str(current_user.id)
+    )
+    return {"reactions": reactions}
+
+
+@router.put(
+    "/{community_slug}/channels/{channel_slug}/topics/{topic_param}/accepted-answer"
+)
+async def set_accepted_answer(
+    community_slug: str,
+    channel_slug: str,
+    topic_param: str,
+    data: TopicAcceptedAnswerUpdate,
+    current_user: Developer = Depends(get_current_developer),
+    db: AsyncSession = Depends(get_db),
+):
+    """Mark a reply as the answer (or clear it with a null ``message_id``).
+
+    Lives on the public router rather than the workspace one because the person
+    most entitled to use it — whoever asked — may well be a community-only
+    account, which the isolation middleware bars from every internal path.
+    """
+    community, channel, topic = await _resolve_topic(
+        db, community_slug, channel_slug, topic_param
+    )
+    participation = CommunityParticipationService(db)
+    try:
+        result = await participation.set_accepted_answer(
+            community, channel, topic, str(current_user.id), data.message_id
         )
     except ParticipationError as e:
         raise HTTPException(status_code=_ERROR_STATUS.get(e.code, 400), detail=e.message)

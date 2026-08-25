@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from fastapi import (
     APIRouter,
+    Body,
     Depends,
     File,
     HTTPException,
@@ -3044,3 +3045,114 @@ async def promote_drive_file_to_document(
 
     await quota.invalidate_workspace_usage(workspace_id)
     return document_to_response(document)
+
+
+# ── Community discussion (opt-in, off by default) ────────────────────
+
+
+@router.get("/community/targets")
+async def document_community_targets(
+    workspace_id: str,
+    current_user: Developer = Depends(get_current_developer),
+    db: AsyncSession = Depends(get_db),
+):
+    """Whether documents may be discussed in the public community, and where.
+
+    ``enabled=false`` with no channels is the default — the workspace has not
+    opted in, so the editor should not offer the action at all.
+    """
+    await check_workspace_permission(workspace_id, current_user, db, "viewer")
+
+    from aexy.services.community_publishing_service import CommunityPublishingService
+
+    service = CommunityPublishingService(db)
+    community = await service.linked_community(workspace_id, "docs")
+    channels = await service.target_channels(workspace_id, "docs")
+    return {
+        "enabled": community is not None,
+        "community_slug": community.community_slug if community is not None else None,
+        "channels": channels,
+    }
+
+
+@router.post("/{document_id}/discuss-in-community", status_code=status.HTTP_201_CREATED)
+async def discuss_document_in_community(
+    workspace_id: str,
+    document_id: str,
+    payload: dict = Body(...),
+    current_user: Developer = Depends(get_current_developer),
+    db: AsyncSession = Depends(get_db),
+):
+    """Open (or return) a public thread for discussing this document.
+
+    Idempotent: a document already linked to a thread returns that thread rather
+    than opening a second one, so "Discuss this page" stays one conversation
+    instead of fragmenting into one per click.
+
+    The thread's opening post is the intro the author wrote, not the document's
+    body. A document is edited after it is published; a copy of it pasted into a
+    forum thread is wrong the moment that happens, and a stale copy on a public
+    page is worse than no copy.
+    """
+    await check_workspace_permission(workspace_id, current_user, db, "editor")
+
+    from aexy.models.documentation import Document
+    from aexy.services.community_publishing_service import (
+        CommunityPublishingService,
+        PublishingError,
+    )
+
+    document = await db.get(Document, document_id)
+    if document is None or str(document.workspace_id) != str(workspace_id):
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    service = CommunityPublishingService(db)
+    community = await service.linked_community(workspace_id, "docs")
+    if community is None:
+        raise HTTPException(
+            status_code=403,
+            detail="Discussing documents in the community is switched off",
+        )
+
+    if document.community_topic_id:
+        from aexy.models.chat import ChatChannel, ChatTopic
+
+        topic = await db.get(ChatTopic, document.community_topic_id)
+        if topic is not None:
+            channel = await db.get(ChatChannel, topic.channel_id)
+            return {
+                "topic_id": topic.id,
+                "community_slug": community.community_slug,
+                "path": (
+                    f"/community/{community.community_slug}/{channel.slug}"
+                    f"/{topic.slug}-{topic.public_short_id}"
+                    if channel is not None
+                    else None
+                ),
+                "live": community.enabled,
+                "already_linked": True,
+            }
+
+    channel_id = (payload or {}).get("channel_id")
+    intro = ((payload or {}).get("content") or "").strip()
+    title = ((payload or {}).get("title") or document.title or "Untitled").strip()
+    if not channel_id or not intro:
+        raise HTTPException(
+            status_code=400, detail="Pick a channel and write an opening message"
+        )
+
+    try:
+        published = await service.publish(
+            workspace_id,
+            source="docs",
+            channel_id=channel_id,
+            title=title,
+            content=intro,
+            developer_id=str(current_user.id),
+        )
+    except PublishingError as exc:
+        raise HTTPException(status_code=400, detail=exc.message)
+
+    document.community_topic_id = published["topic_id"]
+    await db.commit()
+    return {**published, "already_linked": False}

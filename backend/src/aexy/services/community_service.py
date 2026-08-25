@@ -15,11 +15,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aexy.models.chat import (
+    ChannelVisibility,
+    ChatChannel,
     ChatPublicMemberPref,
     PublicDisplayMode,
     WorkspaceCommunity,
 )
 from aexy.models.workspace import Workspace
+from aexy.services.community_templates import get_template
 
 _VALID_DISPLAY = {m.value for m in PublicDisplayMode}
 
@@ -71,7 +74,8 @@ class CommunityService:
         allowed = {
             "enabled", "title", "description", "logo_url", "theme",
             "default_public_display", "noindex", "listed", "community_slug",
-            "allow_participation", "post_moderation",
+            "allow_participation", "post_moderation", "allow_new_topics",
+            "link_service_desk", "link_docs",
         }
         for key, value in fields.items():
             if key not in allowed or value is None:
@@ -105,6 +109,82 @@ class CommunityService:
         if owner is None or str(owner) == str(exclude):
             return slug
         return f"{slug}-{uuid4().hex[:6]}"
+
+    # ── Starter templates ─────────────────────────────────────────────
+
+    async def apply_template(
+        self, workspace_id: str, developer_id: str, template_id: str, publish: bool = False
+    ) -> dict:
+        """Lay out a community from a starter template.
+
+        Idempotent by channel slug: a channel that already exists is left
+        untouched and reported as skipped, so clicking twice does not produce
+        "help" and "help-a1b2c3". That mirrors
+        :meth:`ChatService.setup_default_channel`, and it is what makes the
+        picker safe to re-open.
+
+        ``publish`` is the only thing here that makes anything visible, and it
+        defaults to false. Laying out channels and going live are separate
+        decisions; conflating them is how a half-written forum ends up indexed.
+        """
+        template = get_template(template_id)
+        if template is None:
+            raise ValueError(f"Unknown community template: {template_id}")
+
+        from aexy.services.chat_service import ChatService
+
+        chat = ChatService(self.db)
+        created: list[str] = []
+        skipped: list[str] = []
+        topics_created = 0
+
+        for spec in template.channels:
+            existing = (
+                await self.db.execute(
+                    select(ChatChannel).where(
+                        ChatChannel.workspace_id == workspace_id,
+                        ChatChannel.slug == spec.slug,
+                    )
+                )
+            ).scalar_one_or_none()
+            if existing is not None:
+                skipped.append(spec.name)
+                continue
+
+            channel = await chat.create_channel(
+                workspace_id,
+                developer_id,
+                spec.name,
+                description=spec.description,
+                # Web-public from the start: a template's whole purpose is a
+                # forum with something on it, and the community master switch
+                # (``enabled``) is what still gates whether any of it is served.
+                visibility=ChannelVisibility.WEB_PUBLIC.value,
+            )
+            created.append(spec.name)
+
+            for topic in spec.topics:
+                await chat.create_topic_with_message(
+                    channel.id, developer_id, topic.name, topic.first_message
+                )
+                topics_created += 1
+
+        settings = await self.upsert_settings(
+            workspace_id,
+            allow_participation=template.allow_participation,
+            allow_new_topics=template.allow_new_topics,
+            post_moderation=template.post_moderation,
+            enabled=True if publish else None,
+        )
+
+        return {
+            "template_id": template.id,
+            "channels_created": created,
+            "channels_skipped": skipped,
+            "topics_created": topics_created,
+            "enabled": settings.enabled,
+            "community_slug": settings.community_slug,
+        }
 
     # ── Per-member public display prefs ───────────────────────────────
 
