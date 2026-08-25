@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from typing import Any
 from uuid import uuid4
 
 import redis.asyncio as redis
@@ -49,6 +50,10 @@ _RATE_LIMIT_WINDOW_SECONDS = 60
 # Starting a thread is rarer and costlier than replying to one, so it gets its
 # own, tighter budget in the same window.
 _TOPIC_RATE_LIMIT_MAX = 3
+
+# Searches per IP per window. Deliberately loose: an office behind one NAT is
+# many readers sharing an address, and there is no identity to key on.
+_SEARCH_RATE_LIMIT_MAX = 30
 
 _ADMIN_ROLES = ("owner", "admin")
 
@@ -90,10 +95,27 @@ class CommunityParticipationService:
             count = await self._redis.incr(key)
             if count == 1:
                 await self._redis.expire(key, _RATE_LIMIT_WINDOW_SECONDS)
-            return count <= limit
+            return bool(count <= limit)
         except Exception:
             logger.warning("Community rate-limit check failed open", exc_info=True)
             return True
+
+    async def search_rate_ok(self, community_slug: str, client_ip: str) -> bool:
+        """Budget for the one public endpoint that does real work per request.
+
+        Search is the only new anonymous surface here that runs a query rather
+        than serving a cached page, so it is the only one worth a limiter. Keyed
+        on the caller's IP because there is no caller identity to key on — which
+        is also why the budget is generous rather than tight: an office behind
+        one NAT is many people sharing an address, and the failure mode of a
+        limit that is too low is a forum that looks broken.
+
+        Fails open, like the posting limiter — a reader should not be told the
+        search is down because Redis is.
+        """
+        return await self._rate_ok(
+            community_slug, client_ip, scope="search", limit=_SEARCH_RATE_LIMIT_MAX
+        )
 
     async def ensure_community_member(self, workspace_id: str, developer_id: str) -> None:
         """Idempotently ensure the poster has a membership row. Existing members
@@ -135,7 +157,7 @@ class CommunityParticipationService:
         topic: ChatTopic,
         developer_id: str,
         content: str,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Post a community reply to a web-public topic. Returns the created
         message plus its moderation state."""
         content = (content or "").strip()
@@ -196,7 +218,7 @@ class CommunityParticipationService:
         developer_id: str,
         name: str,
         content: str,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Open a new thread in a web-public channel as an outside participant.
 
         Same guards as :meth:`post_reply`, plus its own switch: a workspace that
@@ -317,7 +339,7 @@ class CommunityParticipationService:
         message_id: str,
         developer_id: str,
         emoji: str,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Add or remove one reaction. Idempotent per (message, person, emoji)."""
         if emoji not in PUBLIC_REACTIONS:
             raise ParticipationError("invalid_emoji", "That reaction isn't available")
@@ -395,7 +417,7 @@ class CommunityParticipationService:
         topic: ChatTopic,
         developer_id: str,
         message_id: str | None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Mark a reply as the answer, or clear the mark with ``None``.
 
         Allowed for the person who asked and for workspace admins — nobody else,
@@ -547,7 +569,7 @@ class CommunityParticipationService:
 
     # ── Moderation queue ──────────────────────────────────────────────
 
-    async def list_pending(self, workspace_id: str) -> list[dict]:
+    async def list_pending(self, workspace_id: str) -> list[dict[str, Any]]:
         rows = (
             await self.db.execute(
                 select(ChatMessage, ChatTopic, ChatChannel)
@@ -565,7 +587,7 @@ class CommunityParticipationService:
         # Deliberate: the queue is admin-only and short by construction (it is
         # the backlog somebody is about to clear), and the alternative is a
         # moderator not being told that "reject" here removes a whole thread.
-        out: list[dict] = []
+        out: list[dict[str, Any]] = []
         for m, t, ch in rows:
             out.append(
                 {

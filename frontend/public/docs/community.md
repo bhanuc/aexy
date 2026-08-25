@@ -113,9 +113,12 @@ deletes the thread — unless other live messages have since arrived, in which c
 only the post goes.
 
 Posting is rate-limited per developer per community through Redis, with a tighter
-budget for new threads than for replies. The limiter **fails open** if Redis is
-unreachable: a public forum should not hard-fail because the cache is down, and
-abuse is still bounded by moderation.
+budget for new threads than for replies. Search gets its own budget keyed on the
+caller's IP — it is the only anonymous endpoint that runs a query rather than
+serving a cached page, and there is no identity to key on, which is also why that
+budget is loose (an office behind one NAT is many readers sharing an address).
+All of them **fail open** if Redis is unreachable: a public forum should not
+hard-fail because the cache is down, and abuse is still bounded by moderation.
 
 Reactions are an allow-list (`PUBLIC_REACTIONS`), not free text — the value is
 rendered on a page anyone can read.
@@ -137,6 +140,11 @@ threads, and is **idempotent by channel slug**: a channel that already exists is
 left exactly as it is and reported as skipped, so a second click cannot produce
 `help` and `help-a1b2c3`. Applying a template never publishes anything by itself
 — `enabled` stays under the operator's finger unless they pass `publish`.
+
+A template's participation settings are *defaults*, written only when the
+community row does not exist yet. Re-applying one to add a channel must not
+re-open replies on a forum whose owner deliberately closed them, so the result
+carries `settings_applied` and the UI says which happened.
 
 ## Linking to other modules
 
@@ -245,8 +253,12 @@ COMMUNITY_SLUG=… COMMUNITY_CHANNEL_SLUG=… COMMUNITY_TOPIC_PARAM=… \
   `ALTER TABLE` — which SQLite, the test backend, cannot execute. Both ids are
   validated against the topic in the service instead.
 - `/community/{slug}/search` and `/members` are static segments and therefore win
-  over `[channelSlug]`. A channel slugged exactly `search` or `members` is
-  unreachable publicly.
+  over `[channelSlug]`, so a channel slugged exactly `search` or `members` would
+  be reachable internally and 404 publicly. `RESERVED_CHANNEL_SLUGS` in
+  `services/chat_service.py` gives such a slug the same random suffix a duplicate
+  gets, and `migrate_2026_08_25_community_reserved_slugs.sql` repairs any row
+  that predates the rule. Keep that set in step with the directories under
+  `frontend/src/app/community/[communitySlug]/`.
 - The rate limiter fails open. That is deliberate (see above), but it means load
   tests against a Redis-less environment will not see limits.
 - A channel with zero web-public topics 404s rather than rendering an empty page:

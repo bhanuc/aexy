@@ -24,6 +24,7 @@ Two rules:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -325,7 +326,7 @@ def get_template(template_id: str) -> CommunityTemplate | None:
     return TEMPLATES_BY_ID.get(template_id)
 
 
-def template_summaries() -> list[dict]:
+def template_summaries() -> list[dict[str, Any]]:
     """Catalogue in the shape the picker renders, previews included."""
     return [
         {

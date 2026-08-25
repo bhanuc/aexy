@@ -21,7 +21,12 @@ from aexy.api.developers import get_current_developer
 from aexy.core.database import get_db
 from aexy.models.developer import Developer
 from aexy.models.documentation import DocumentPermission
+from typing import Any
+
 from aexy.schemas.document import (
+    DocumentCommunityDiscussRequest,
+    DocumentCommunityTargets,
+    DocumentCommunityThreadResponse,
     DocumentCommentCreate,
     DocumentCommentListResponse,
     DocumentCommentResponse,
@@ -3053,12 +3058,12 @@ async def promote_drive_file_to_document(
 # ── Community discussion (opt-in, off by default) ────────────────────
 
 
-@router.get("/community/targets")
+@router.get("/community/targets", response_model=DocumentCommunityTargets)
 async def document_community_targets(
     workspace_id: str,
     current_user: Developer = Depends(get_current_developer),
     db: AsyncSession = Depends(get_db),
-):
+) -> DocumentCommunityTargets:
     """Whether documents may be discussed in the public community, and where.
 
     ``enabled=false`` with no channels is the default — the workspace has not
@@ -3071,14 +3076,16 @@ async def document_community_targets(
     service = CommunityPublishingService(db)
     community = await service.linked_community(workspace_id, "docs")
     channels = await service.target_channels(workspace_id, "docs")
-    return {
-        "enabled": community is not None,
-        "community_slug": community.community_slug if community is not None else None,
-        "channels": channels,
-    }
+    return DocumentCommunityTargets(
+        enabled=community is not None,
+        community_slug=community.community_slug if community is not None else None,
+        channels=channels,
+    )
 
 
-async def _resolve_community_thread(db, document, community) -> dict | None:
+async def _resolve_community_thread(
+    db: AsyncSession, document: Any, community: Any
+) -> dict[str, Any] | None:
     """The public path of the thread discussing this document, if it has one."""
     if not document.community_topic_id:
         return None
@@ -3102,13 +3109,15 @@ async def _resolve_community_thread(db, document, community) -> dict | None:
     }
 
 
-@router.get("/{document_id}/community-thread")
+@router.get(
+    "/{document_id}/community-thread", response_model=DocumentCommunityThreadResponse
+)
 async def get_document_community_thread(
     workspace_id: str,
     document_id: str,
     current_user: Developer = Depends(get_current_developer),
     db: AsyncSession = Depends(get_db),
-):
+) -> DocumentCommunityThreadResponse:
     """Where this document's discussion thread lives, or 404.
 
     A read, so it is a GET. Fetched lazily by the editor only when the document
@@ -3133,17 +3142,19 @@ async def get_document_community_thread(
     thread = await _resolve_community_thread(db, document, community)
     if thread is None:
         raise HTTPException(status_code=404, detail="No thread for this document")
-    return thread
+    return DocumentCommunityThreadResponse(**thread)
 
 
 @router.post("/{document_id}/discuss-in-community", status_code=status.HTTP_201_CREATED)
 async def discuss_document_in_community(
     workspace_id: str,
     document_id: str,
-    payload: dict = Body(...),
+    payload: DocumentCommunityDiscussRequest = Body(
+        default_factory=DocumentCommunityDiscussRequest
+    ),
     current_user: Developer = Depends(get_current_developer),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Open (or return) a public thread for discussing this document.
 
     Idempotent: a document already linked to a thread returns that thread rather
@@ -3179,9 +3190,9 @@ async def discuss_document_in_community(
     if existing is not None:
         return {**existing, "already_linked": True}
 
-    channel_id = (payload or {}).get("channel_id")
-    intro = ((payload or {}).get("content") or "").strip()
-    title = ((payload or {}).get("title") or document.title or "Untitled").strip()
+    channel_id = payload.channel_id
+    intro = (payload.content or "").strip()
+    title = (payload.title or document.title or "Untitled").strip()
     if not channel_id or not intro:
         raise HTTPException(
             status_code=400, detail="Pick a channel and write an opening message"

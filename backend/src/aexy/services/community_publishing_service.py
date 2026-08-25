@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -70,7 +71,9 @@ class CommunityPublishingService:
         """The community this source may publish into, or None if it may not."""
         return await self._community_if_linked(workspace_id, source)
 
-    async def target_channels(self, workspace_id: str, source: str) -> list[dict]:
+    async def target_channels(
+        self, workspace_id: str, source: str
+    ) -> list[dict[str, Any]]:
         """Channels this source may publish into, or an empty list if it may not.
 
         Empty covers both "the switch is off" and "there is nowhere to publish
@@ -102,7 +105,7 @@ class CommunityPublishingService:
         title: str,
         content: str,
         developer_id: str,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Create a web-public thread from an internally authored answer."""
         community = await self._community_if_linked(workspace_id, source)
         if community is None:

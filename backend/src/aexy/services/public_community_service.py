@@ -19,8 +19,10 @@ from __future__ import annotations
 
 import hashlib
 import re
+from typing import Any
 
 from sqlalchemy import and_, func, or_, select
+from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aexy.models.chat import (
@@ -85,14 +87,14 @@ class PublicCommunityService:
     # ── Predicates (shared) ───────────────────────────────────────────
 
     @staticmethod
-    def _public_channel_pred():
+    def _public_channel_pred() -> ColumnElement[bool]:
         return and_(
             ChatChannel.kind == ChannelKind.CHANNEL.value,
             ChatChannel.is_archived.is_(False),
         )
 
     @staticmethod
-    def _message_public_pred():
+    def _message_public_pred() -> ColumnElement[bool]:
         """Per-message public filters. Requires ``ChatChannel`` in the join.
 
         The history cutoff belongs here and not only in the topic listing: a
@@ -109,7 +111,7 @@ class PublicCommunityService:
         )
 
     @staticmethod
-    def _topic_public_pred():
+    def _topic_public_pred() -> ColumnElement[bool]:
         """A topic row is web-public given its channel is a public-eligible one."""
         return and_(
             ChatTopic.visibility.notin_(
@@ -133,7 +135,7 @@ class PublicCommunityService:
         )
         return result.scalar_one_or_none()
 
-    async def list_directory(self) -> list[dict]:
+    async def list_directory(self) -> list[dict[str, Any]]:
         """Communities that opted into the public directory (enabled AND listed),
         each with a count of its web-public channels and topics.
 
@@ -187,7 +189,7 @@ class PublicCommunityService:
         out.sort(key=lambda d: d["topic_count"], reverse=True)
         return out
 
-    async def list_public_channels(self, workspace_id: str) -> list[dict]:
+    async def list_public_channels(self, workspace_id: str) -> list[dict[str, Any]]:
         """Channels that have at least one web-public topic, with counts."""
         # Base: channels whose (channel-level) visibility is web_public, OR that
         # contain an explicitly web_public topic.
@@ -243,7 +245,7 @@ class PublicCommunityService:
 
     async def list_public_topics(
         self, channel: ChatChannel, *, limit: int = 50, offset: int = 0
-    ) -> tuple[list[dict], int]:
+    ) -> tuple[list[dict[str, Any]], int]:
         """Web-public topics in a channel, newest activity first, with total."""
         base = (
             select(ChatTopic)
@@ -305,7 +307,7 @@ class PublicCommunityService:
         *,
         limit: int = 50,
         offset: int = 0,
-    ) -> tuple[list[dict], int]:
+    ) -> tuple[list[dict[str, Any]], int]:
         """Public-safe messages in a topic, oldest first (reading order)."""
         conds = [
             ChatMessage.topic_id == topic.id,
@@ -394,7 +396,7 @@ class PublicCommunityService:
             )
         return messages, int(total)
 
-    async def _reactions_for(self, message_ids: list[str]) -> dict[str, list[dict]]:
+    async def _reactions_for(self, message_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
         """Reaction counts per message, in one grouped query (never N+1).
 
         Counts only — never who reacted. The public topic response is rendered
@@ -417,7 +419,7 @@ class PublicCommunityService:
             )
         ).all()
 
-        out: dict[str, list[dict]] = {}
+        out: dict[str, list[dict[str, Any]]] = {}
         for message_id, emoji, count in rows:
             out.setdefault(message_id, []).append(
                 {"emoji": emoji, "count": int(count or 0), "mine": False}
@@ -461,7 +463,7 @@ class PublicCommunityService:
 
     async def search(
         self, workspace_id: str, query: str, *, limit: int = 20, offset: int = 0
-    ) -> tuple[list[dict], int]:
+    ) -> tuple[list[dict[str, Any]], int]:
         """Search web-public threads by title and message body.
 
         Returns threads, not messages: an answer taken out of its question is
@@ -578,7 +580,7 @@ class PublicCommunityService:
 
     async def get_member_profile(
         self, workspace_id: str, handle: str
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         """Public profile for the member behind ``handle``, or None.
 
         Handles are derived, not stored, so resolving one means recomputing it
@@ -723,7 +725,7 @@ class PublicCommunityService:
 
     async def feed_entries(
         self, workspace_id: str, *, channel_slug: str | None = None, limit: int = 30
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Newest public threads, for the RSS feed."""
         conds = [
             ChatChannel.workspace_id == workspace_id,
@@ -787,7 +789,7 @@ class PublicCommunityService:
 
     # ── Sitemap ───────────────────────────────────────────────────────
 
-    async def sitemap_entries(self, workspace_id: str) -> list[dict]:
+    async def sitemap_entries(self, workspace_id: str) -> list[dict[str, Any]]:
         """Flat list of public channel + topic paths with lastmod for the sitemap."""
         rows = (
             await self.db.execute(
@@ -807,7 +809,7 @@ class PublicCommunityService:
                 .order_by(ChatTopic.last_message_at.desc().nullslast())
             )
         ).all()
-        entries: list[dict] = []
+        entries: list[dict[str, Any]] = []
         seen_channels: set[str] = set()
         for ch_slug, t_slug, short_id, last_at, created_at in rows:
             if ch_slug not in seen_channels:

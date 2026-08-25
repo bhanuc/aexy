@@ -8,6 +8,7 @@ branding, and how each member appears publicly). The anonymous public read API
 from __future__ import annotations
 
 import re
+from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -55,7 +56,9 @@ class CommunityService:
         )
         return result.scalar_one_or_none()
 
-    async def upsert_settings(self, workspace_id: str, **fields) -> WorkspaceCommunity:
+    async def upsert_settings(
+        self, workspace_id: str, **fields: Any
+    ) -> WorkspaceCommunity:
         """Create or update a workspace's community settings.
 
         On first creation the ``community_slug`` defaults to the workspace slug
@@ -114,7 +117,7 @@ class CommunityService:
 
     async def apply_template(
         self, workspace_id: str, developer_id: str, template_id: str, publish: bool = False
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Lay out a community from a starter template.
 
         Idempotent by channel slug: a channel that already exists is left

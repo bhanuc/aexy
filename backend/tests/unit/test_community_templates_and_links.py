@@ -342,3 +342,34 @@ async def test_the_first_template_does_set_the_defaults(db_session, env):
     settings = await svc.get_settings(env["ws"].id)
     assert settings.allow_participation is True
     assert settings.allow_new_topics is True
+
+
+async def test_reserved_channel_slugs_stay_publicly_reachable(db_session, env):
+    """A channel called "Members" must not be shadowed by the members route.
+
+    /community/{slug}/search and /community/{slug}/members/… are static segments
+    in the frontend router and always beat the dynamic [channelSlug]. A channel
+    slugged exactly "search" or "members" would be addressable internally and
+    404 publicly, so the slug is nudged at the point it is minted.
+    """
+    from aexy.services.chat_service import RESERVED_CHANNEL_SLUGS, ChatService
+
+    chat = ChatService(db_session)
+    for name in ("Members", "Search"):
+        channel = await chat.create_channel(env["ws"].id, env["admin"].id, name)
+        await db_session.commit()
+        assert channel.slug not in RESERVED_CHANNEL_SLUGS
+        # Still recognisably itself — suffixed, not renamed.
+        assert channel.slug.startswith(name.lower())
+        assert channel.name == name
+
+
+async def test_ordinary_channel_names_keep_their_plain_slug(db_session, env):
+    """The nudge must not fire on names that were never a problem."""
+    from aexy.services.chat_service import ChatService
+
+    channel = await ChatService(db_session).create_channel(
+        env["ws"].id, env["admin"].id, "Feature requests"
+    )
+    await db_session.commit()
+    assert channel.slug == "feature-requests"
