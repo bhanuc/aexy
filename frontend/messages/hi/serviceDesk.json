@@ -92,7 +92,7 @@
       "emailRecipientPlaceholder": "name@example.com",
       "emailKnownRecipients": "इस टिकट के लिए कॉन्फ़िगर किए गए:",
       "emailCc": "Cc",
-      "emailCcPlaceholder": "पतों को कॉमा से अलग करें",
+      "emailCcPlaceholder": "एक और पता जोड़ें",
       "emailCcInvalid": "Cc पते जाँचें — इनमें से एक मान्य ईमेल नहीं है।",
       "emailCcNone": "कोई नहीं",
       "emailCustomRecipient": "यह कॉन्फ़िगर किया गया पता नहीं है, इसलिए टिकट का स्टेज नहीं बदलेगा।",
@@ -124,7 +124,14 @@
       "showQuoted": "उद्धृत इतिहास दिखाएँ",
       "hideQuoted": "उद्धृत इतिहास छिपाएँ",
       "showImage": "{host} से छवि",
-      "imageFrom": "{host} से छवि"
+      "imageFrom": "{host} से छवि",
+      "emailCcRemove": "{email} को Cc से हटाएँ",
+      "emailReplyAll": "इस थ्रेड के सभी लोगों को कॉपी करें",
+      "emailUpload": "फ़ाइल संलग्न करें",
+      "emailChooseFile": "फ़ाइल चुनें…",
+      "emailUploading": "अपलोड हो रहा है…",
+      "emailUploadRemove": "{filename} हटाएँ",
+      "whyThisOwner": "यह owner क्यों:"
     },
     "ai": {
       "title": "AI ईमेल वर्गीकरण",

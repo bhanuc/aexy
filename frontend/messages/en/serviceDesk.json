@@ -92,7 +92,7 @@
       "emailRecipientPlaceholder": "name@example.com",
       "emailKnownRecipients": "Configured for this ticket:",
       "emailCc": "Cc",
-      "emailCcPlaceholder": "Separate addresses with commas",
+      "emailCcPlaceholder": "Add another address",
       "emailCcInvalid": "Check the Cc addresses — one of them is not a valid email.",
       "emailCcNone": "none",
       "emailCustomRecipient": "Not a configured address, so the ticket will not change stage.",
@@ -124,7 +124,14 @@
       "showQuoted": "Show quoted history",
       "hideQuoted": "Hide quoted history",
       "showImage": "Image from {host}",
-      "imageFrom": "Image from {host}"
+      "imageFrom": "Image from {host}",
+      "emailCcRemove": "Remove {email} from Cc",
+      "emailReplyAll": "Copy everyone on this thread",
+      "emailUpload": "Attach a file",
+      "emailChooseFile": "Choose a file…",
+      "emailUploading": "Uploading…",
+      "emailUploadRemove": "Remove {filename}",
+      "whyThisOwner": "Why this owner:"
     },
     "ai": {
       "title": "AI email categorisation",
