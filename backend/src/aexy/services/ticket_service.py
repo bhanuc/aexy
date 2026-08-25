@@ -7,39 +7,42 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 import bcrypt
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from aexy.core.config import settings
 from aexy.models.developer import Developer
 from aexy.models.ticketing import (
+    EscalationMatrix,
+    SLAPolicy,
     Ticket,
-    TicketResponse as TicketResponseModel,
+    TicketEscalation,
     TicketForm,
+    TicketPriority,
     TicketShareLink,
     TicketStatus,
-    TicketPriority,
-    SLAPolicy,
-    EscalationMatrix,
-    TicketEscalation,
 )
+from aexy.models.ticketing import (
+    TicketResponse as TicketResponseModel,
+)
+from aexy.models.workspace import Workspace
 from aexy.schemas.ticketing import (
-    TicketCreate,
-    TicketUpdate,
-    TicketFilters,
-    TicketCommentCreate,
-    PublicTicketSubmission,
     EscalationMatrixCreate,
     EscalationMatrixUpdate,
-)
-from aexy.services.automation_service import dispatch_automation_event
-from aexy.services.notification_service import (
-    extract_mentioned_user_ids,
-    notify_mention,
-    _get_text_snippet,
+    PublicTicketSubmission,
+    TicketCommentCreate,
+    TicketCreate,
+    TicketFilters,
+    TicketUpdate,
 )
 from aexy.services.activity_logger import log_activity
+from aexy.services.automation_service import dispatch_automation_event
+from aexy.services.notification_service import (
+    _get_text_snippet,
+    extract_mentioned_user_ids,
+    notify_mention,
+)
 from aexy.services.storage_service import get_storage_service
 
 
@@ -186,14 +189,32 @@ class TicketService:
         return ticket
 
     async def _get_next_ticket_number(self, workspace_id: str) -> int:
-        """Get the next ticket number for a workspace."""
-        stmt = (
-            select(func.max(Ticket.ticket_number))
-            .where(Ticket.workspace_id == workspace_id)
-        )
-        result = await self.db.execute(stmt)
-        max_number = result.scalar() or 0
-        return max_number + 1
+        """The next ticket number, allocated atomically.
+
+        Was `max(ticket_number) + 1` read in one statement and written in
+        another: two concurrent submissions read the same number and both used
+        it. `tickets` has a unique constraint on (workspace_id, ticket_number),
+        so that surfaced as an IntegrityError — a 500 on a public form, which is
+        the worst place to have one.
+
+        The UPDATE...RETURNING locks the workspace row, so concurrent
+        submissions serialize on it and get distinct numbers. Same mechanism as
+        `SprintTask.task_key` and the bug and story keys.
+
+        `next_ticket_number` holds the value to assign NEXT, so a fresh
+        workspace's first ticket is #1 and the counter becomes 2.
+        """
+        row = (
+            await self.db.execute(
+                update(Workspace)
+                .where(Workspace.id == workspace_id)
+                .values(next_ticket_number=Workspace.next_ticket_number + 1)
+                .returning(Workspace.next_ticket_number)
+            )
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"Workspace {workspace_id} does not exist")
+        return int(row[0]) - 1
 
     async def _apply_sla(self, ticket: Ticket) -> None:
         """Apply SLA policy to a ticket."""
@@ -583,6 +604,31 @@ class TicketService:
             )
         )
         await self.db.flush()
+
+        # And park it in the terminal bucket. Without this the ticket read as
+        # Resolved while still sitting in the queue of whoever the work was
+        # pending with, so it stayed on their board and the breach clock kept
+        # running against them after the work was finished.
+        #
+        # Best-effort: a ticket that is resolved but still in an open bucket is a
+        # visible, fixable state; refusing to resolve because the ledger write
+        # failed is not.
+        try:
+            from aexy.services.service_desk_ticket_service import (
+                ServiceDeskTicketService,
+            )
+
+            await ServiceDeskTicketService(self.db).stop_clock_for_resolution(
+                str(updated.workspace_id),
+                str(updated.id),
+                reason=f'the linked task "{task_title}" was completed',
+                actor_id=actor_id,
+            )
+        except Exception:
+            logger.exception(
+                "Ticket %s resolved but its pending-with clock was not stopped",
+                updated.id,
+            )
 
         await self._notify_ticket_resolved(updated, task_id=task_id, task_title=task_title)
         return updated

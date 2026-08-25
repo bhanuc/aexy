@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.26.0] - 2026-08-25
+## [0.30.0] - 2026-08-25
 
 ### Fixed: mail a colleague sent no longer picks an owner at random
 
@@ -100,6 +100,590 @@ never sent is worse than not showing it at all.
 the detail endpoint, so a page could show a blank owner beside a list showing
 their name — which reads as an unassigned ticket.
 
+## [0.29.1] - 2026-08-23
+
+A follow-up on the demo account: it now shows the two modules it refuses to run,
+and the refusal is no longer something the demo user can lift.
+
+### Changed: the demo shows the modules it will not run
+
+Demo provisioning switched `email_marketing` and `agents` off in the workspace's
+`app_settings` — the outermost layer of app access, off "for everybody, admins
+included". The reasoning was that a shared account should not be able to send
+mail or spend tokens, which is right; hiding the modules was the wrong way to
+get there.
+
+It cost the demo its point. Those two are among the three things the marketing
+site leads with, so a visitor who opened the demo to see the agent story found
+it absent — and "Request Access" on a module you own reads as broken or
+paywalled, not as a safety measure. It also quietly contradicted the claim that
+self-hosting is not a crippled edition.
+
+It also protected nothing. What actually refuses is the workspace AI kill switch,
+which the LLM gateway resolves through on every path, and the outbound-email
+block on the two send paths. Both work with every module on screen. Hiding
+`agents` did not even close the hole it appeared to: the AI setting lives under
+Settings, not inside that module, so it was reachable either way.
+
+So nothing is hidden now. Open an agent and read its tools and policy gates;
+build a campaign in the builder. Pressing the button is where it stops, with
+"AI features are disabled for this workspace" or a send that answers with the
+reason it did not go. The seeded automations stay inactive for the same reason
+they always were — one of them runs an agent on every lead created, so an enabled
+copy is a way to spend the operator's budget by filling in a form — but they
+still show their triggers, actions and run history.
+
+### Fixed: the demo could switch AI back on for everybody
+
+Re-asserting the kill switch at sign-in was the whole enforcement, and that is
+not enough for an account that is shared. The demo user is an owner, so one
+visitor turning AI on in Settings left it on for every session after them until
+somebody signed in again — and each of those sessions spent the operator's
+credential. "Reverted at the next sign-in" is too late when the sign-in is not
+yours.
+
+`WorkspaceAISettingsService.update` now refuses a request to enable AI for the
+demo workspace outright, scoped by owner so that anyone signing in through OAuth
+on the same install still configures their own workspaces normally. The
+re-assertion stays as the floor underneath it. On a free-plan install the
+existing plan gate already refuses first with a 402; this is what catches a
+hosted demo on a plan that would otherwise allow the write.
+
+## [0.29.0] - 2026-08-23
+
+Post-login craft: the boards, the dashboard, the sidebar, and a render loop
+that had been running since the backlog page shipped.
+
+### Fixed: every kanban board was cut off
+
+Each of the four boards sized its columns with a hard pixel width —
+`w-[280px]` in the hiring pipeline, `w-[300px]` in CRM and on the project
+board, `w-[320px]` in Planning — and let the row scroll. A fixed column times a
+column count the board does not control is a width the container almost never
+has, so the last column was permanently sliced in half. Measured at a 1600px
+viewport, i.e. on a screen with room to spare:
+
+| board | needs | has | hidden |
+|---|---|---|---|
+| Planning ▸ All Tasks | 1648px | 1248px | 400px |
+| Hiring ▸ Candidates | 1760px | 1296px | 464px |
+| CRM ▸ Deals | 2196px | 1280px | 916px |
+| Project board | 1596px | 1344px | 252px |
+
+Planning made it worse by wrapping the board in a centred `max-w-7xl`, so the
+board was boxed into 1280px of an available 1344 on a page whose entire content
+is a horizontal board. Worse still, on a tall board the horizontal scrollbar
+sat below the fold, so the usual read of a clipped edge — "there is more,
+scroll for it" — was not even available. The board simply looked broken.
+
+Columns flex now, between a 248px floor and a 360px ceiling, from one shared
+contract in `lib/boardLayout.ts`. The floor is where a card still holds its
+badges on one line and its title on two; it is also what lets a five-status
+board fit whole on a 1600px screen, which is the case that was failing. Boards
+still scroll when they genuinely cannot fit — seven CRM stages will not tile at
+1280px at any readable width — but the scroll is the last resort rather than
+the first.
+
+### Fixed: "Maximum update depth exceeded" on the sprint backlog
+
+`/sprints/[projectId]/backlog` re-rendered until React gave up, on every visit,
+for as long as the page was open. The chain started somewhere that looks
+harmless:
+
+```
+useTaskStatuses     statuses: statuses || []      ← new identity every render
+  → useProjectBoard   projectStatusSlugs → tasksByStatus
+    → backlog page    backlogItems → filteredItems
+      → useEffect(() => setOrderedItems(filteredItems), [filteredItems])
+```
+
+`|| []` allocates a fresh array on every call — while the query is in flight,
+while it is disabled, and forever if it errors — which invalidates every
+`useMemo` downstream. Four memos of amplification later, a component mirrors
+the result into state inside an effect, and the two feed each other.
+
+Both ends are fixed, and each is independently sufficient: hooks return a
+single frozen `EMPTY_ARRAY`, and the backlog effect uses the updater form and
+returns `prev` when nothing changed, so React skips the re-render outright.
+
+### Changed: `|| []` is gone from every hook return
+
+The same literal appeared in **166 return properties across 46 hook files**.
+Only the backlog page ended its chain in a setState, so only it hung; the rest
+were paying for renders nobody could see. All of them now return the shared
+frozen array from `lib/emptyArray.ts`, typed `never[]` so the element type
+survives. Two neighbouring cases went with them —
+`todoStatuses`/`inProgressStatuses`/`doneStatuses` and `pendingSuggestions`
+were unmemoised `.filter()` calls in return objects, which allocate regardless
+of the data.
+
+### Fixed: Tailwind never compiled the app's shared class strings
+
+The `content` globs listed `pages`, `components` and `app` — not `lib`,
+`config` or `hooks`. `lib/statusColors.ts` calls itself the "single source of
+truth for all status colors" and lives in one of the unscanned directories: its
+classes render today only because some component happens to spell the same
+utility inline. That is luck, and it runs out exactly when the raw-palette
+migration deletes the duplicates.
+
+### Changed: the project board header
+
+Eleven controls in one non-wrapping row beside an unconstrained title. The row
+overflowed its container by 34px at a 1600px viewport with `overflow: visible`,
+so the last toggle was clipped off the page — not scrolled, clipped — while the
+squeeze crushed the `<h1>` to 62px and wrapped "Project Board" onto three
+lines.
+
+The title truncates instead of wrapping and the toolbar wraps instead of
+overflowing, so neither can cut the other off. The heading is the project's
+name now — the breadcrumb already says "Board"; what it did not say was which
+project. Import, Templates, Export and Keyboard shortcuts move into one "More"
+menu, which closes on Escape. And the board fills the viewport instead of
+leaving grey space under it, with each column scrolling its own tasks.
+
+### Changed: dashboard widgets are as tall as their contents
+
+The grid forced every card in a row to the height of the tallest one. "My Work"
+set a 669px row, so "Work by type" — five bars, 295px of content — was inflated
+to 669 and drew 374px of empty card. Two of those were visible above the fold.
+
+Widgets now span as many rows as they measure, and dense packing closes up
+around them: the grid went from ~1700px to 1207px, and the worst slack from
+374px to 16px — exactly the row gap. Upcoming Deadlines is half-width to match
+Sprint Overview, Sprint Overview hides itself when there is no sprint rather
+than drawing a card around an empty state, and My Goals is off by default.
+Anyone who has already saved a layout keeps it; only the defaults change.
+
+### Fixed: pages narrower than the width they asked for
+
+`/exports` declared `max-w-5xl` and rendered at 704px inside a 1344px content
+area. So did every one of the **107 pages that wrap themselves in
+`mx-auto max-w-…`** — the width stopped being a cap and became a shrink-wrap.
+
+The cause was a one-line change made for the board's height: `<main>` became a
+flex column. A flex item is stretched to the line only when neither cross-axis
+margin is `auto`, and `mx-auto` is exactly that, so those pages fell back to
+their content width. Nothing errored; the build passed.
+
+`<main>` is a block box again, and the board takes its height from a definite
+`min-h` on its own subtree instead — one magic number, scoped to
+`/sprints/[projectId]`, rather than a change every page silently depended on.
+A guard fails if `<main>` becomes a flex or grid container again.
+
+### Changed: the org chart uses the page
+
+Six departments stacked into a single 1024px column down the middle of a
+1344px area, half of them empty cards saying "Nobody is in this department
+yet" at the same visual weight as a team of eight. Departments lay out in
+columns now, sized to their own contents; an empty one is a quiet dashed row
+rather than a full card; and the list is no longer boxed inside a second
+bordered card that added nothing.
+
+### Fixed: sidebar favourites truncated with space to spare
+
+Favourites read "Das… SERVICE DESK" and "Autom… AUTOPILOT" with visible empty
+space to the right of them. Nothing was too long: the pin and remove buttons
+are `opacity-0` until hover, but opacity does not free layout, so they held
+34px of the 204px row at all times. "Dashboard" needed 73px and was allotted
+46. Out of flow it gets 92.
+
+## [0.28.0] - 2026-08-22
+
+The public site: a new look, and the SEO and conversion audit that came with it.
+
+### Changed: the marketing site is "Open Ledger"
+
+Every public page — the homepage, sixteen product pages, eleven comparisons,
+the ICP and use-case pages, the guides, pricing, the handbook, login and the
+legal pages — moves off the dark gradient it shared with every other developer
+tool and onto bone paper. Ink `#101913` on `#F2F3EE`, ledger-green for links and
+actions, hairline 1px rules, 2px corners, and dark panes reserved for product
+UI. No gradients, no glass, no glow. Display type is Bricolage Grotesque, mono
+utility text is IBM Plex Mono, body stays Inter; the brand faces load only on
+marketing routes, so the authenticated app ships no extra font bytes.
+
+The header lost the thirteen-product and eight-solution catalogues it was
+carrying — those live in the footer now — and keeps Products, Solutions,
+Pricing, Docs, GitHub and one call to action.
+
+### Fixed: every page told Google it was a duplicate of the homepage
+
+The root layout carried `alternates: { canonical: "/" }`. Next inherits metadata
+down the route tree, so all sixty-four public pages emitted
+`<link rel="canonical" href="https://aexy.io">` — every product page, every
+comparison, every guide, nominating the homepage as its canonical URL. Nothing
+about this is visible in a browser or a build; the pages render perfectly while
+asking to be dropped from the index.
+
+Each route owns its canonical now, server pages through their `metadata` export
+and client pages through a sibling `layout.tsx`. A source-scan test fails if a
+public route ships without one, and fails again if a site-wide canonical
+reappears on the root layout.
+
+### Fixed: twenty pages had no title or description of their own
+
+Their `page.tsx` is a client component, where a `metadata` export is silently
+ignored, and no layout supplied one — so `/about`, `/security`,
+`/for/developers`, `/products/uptime` and sixteen others served the homepage's
+title and description verbatim. Each has its own now. `/login` is `noindex`: it
+is a gate, and it was competing for brand queries.
+
+Titles that already carried the brand rendered it twice — "About Aexy | Aexy",
+"MCP (Model Context Protocol) - Aexy Docs | Aexy" — because the root template
+appends " | Aexy". Those opt out with `title: { absolute }`.
+
+The handbook's fifty-one pages were missing from `sitemap.ts` entirely,
+reachable only by crawling links from `/handbook`. They are generated from the
+same index the pages render from, so a new doc is listed the moment it exists.
+The sitemap goes from 62 URLs to 113.
+
+### Changed: the highest-intent pages have a self-serve path
+
+Every comparison, use-case and ICP page sent its primary call to action to
+`/contact`, which is a page of `mailto:` links. Somebody typing "aexy vs jira"
+is mid-evaluation, and the product is open source and free to self-host — that
+visitor wants a workspace or a `git clone`, not a calendar invite. Primary is
+"Start free" now, with the demo kept as the secondary action.
+
+Product pages had the mirror problem. Their call to action went straight to the
+Google OAuth URL, which excludes anyone without a Google account on a product
+whose audience is developers; `/login` offers GitHub too and already reads "Sign
+in or create your workspace". Twenty pages in total pointed at a single
+provider, `/pricing` among them. `/for/engineering-leaders` had a button
+labelled "Schedule Demo" that opened a Google sign-in screen.
+
+Secondary actions on product pages pointed at `/manifesto`, which has no next
+step; they go to pricing.
+
+### Removed: two claims the site cannot support
+
+"Join thousands of teams planning smarter with Aexy" on `/products/planning`,
+and "40% faster hiring" on `/for/people-ops`. Neither number exists anywhere.
+A test now fails on unsourced volume and outcome claims across the public tree.
+
+### Added: real product screenshots on the pages that sell the product
+
+Forty-four interior pages had no product imagery at all — a visitor arriving
+from a search never saw the thing before being asked to sign up. `/products/crm`,
+`/products/planning`, `/products/docs`, `/products/reviews`, `/products/tickets`
+and `/products/mcp` now show the actual surface, framed as a dark plate.
+
+The captures come from a script against a seeded workspace, so they can be
+regenerated rather than hand-collected. Surfaces that photograph badly are left
+out on purpose: `/agents` looks good but reads "0% Success" in red on every
+card, because the seeder creates no agent runs, and shipping that would argue
+against the product.
+
+### Fixed: marketing pages had no banner, contentinfo or main landmark
+
+Pages rendered the header, their content and the footer as siblings inside one
+page-wide `<main>`. ARIA grants `<header>` the `banner` role and `<footer>` the
+`contentinfo` role only when they are *not* inside `<main>`, so every marketing
+page lost both, while `<main>` itself meant nothing by spanning the whole
+document. Screen-reader users had no landmark to jump to.
+
+`LedgerPage` owns the structure now — header, then `<main>` around the page's
+content, then footer — because a page can only control one of the three
+elements' position relative to the others, and so cannot get this right on its
+own. Verified across all 113 sitemap routes.
+
+### Added: structured data on the pages that had none
+
+Twelve of the sixteen product pages emitted no JSON-LD at all and were
+ineligible for any rich result. Nothing on the site emitted `BreadcrumbList`.
+Both are in place. The guides breadcrumb pointed at `/guides`, which 404s — that
+crumb is gone rather than linking to a dead URL.
+
+### Fixed: the demo seeder could be pointed at a production database
+
+`seed_marketing_demo.py` resolved "the first developer's first workspace" and
+wrote to it with no confirmation — CRM records, a sprint, a review cycle, docs,
+and two automations with `is_active=True`. Its documented invocation is
+`docker exec aexy-backend python scripts/seed_marketing_demo.py`, the same shape
+as the migration command that is run against real environments. Pointed at
+production it would have dropped fictional deals into a customer workspace and
+switched on automations that then fire on live records.
+
+It prints the database, workspace and developer it resolved, and refuses to
+write without `--yes`.
+
+## [0.27.1] - 2026-08-21
+
+Files & Storage, from one upload that arrived three times.
+
+### Fixed: one upload became three files, with three AI summaries
+
+Dropping a single file into Files & Storage created three rows, each analysed
+separately, so the same document ended up with three different AI summaries
+sitting side by side. The upload panel said "1 of 1 uploaded" the whole time,
+because there genuinely was only one queue item — the duplication happened
+below it.
+
+The queue drains in a loop bounded by how many uploads may run at once, and it
+read the queue through a ref. Marking an item as started goes through React
+state, which does not apply until the next render, so every remaining pass of
+that loop found the *same* item still reporting itself as pending and sent it
+again. Three concurrent slots meant three POSTs for one file; a five-file batch
+sent twenty-one.
+
+What has been dispatched is now tracked directly instead of being inferred from
+a queue snapshot that cannot have caught up yet. Existing duplicates are not
+touched — they are real rows, and they can now be deleted from the page.
+
+### Fixed: a Word document rendered dark
+
+A .docx preview showed light text on a dark page. The editor canvas asked the
+operating system what colour mode to use and no caller had ever told it
+otherwise.
+
+Dark mode inverts the page but not the ink. A document's black body text,
+coloured headings and table rules were all chosen by its author against white
+paper, so keeping them over a dark canvas is neither what the author wrote nor
+what the file prints as. Documents now render on paper regardless of the app's
+theme, which is what Word Online, Google Docs and Preview all do — they theme
+the chrome around the page, not the page. This covers the document editor as
+well as the Drive preview. PDF previews get the same treatment. Images and
+video keep a neutral mat that does follow the theme, which is conventional for
+media.
+
+Separately, every AI badge and status pill had picked a text colour that only
+works on a dark background, so "Ready", "Failed" and the tag chips were washed
+out to near-invisible in light mode.
+
+### Added: storage says how much room is left
+
+The sidebar reported a percentage and a byte count. It now draws a meter that
+goes amber and then red as the quota fills, and states the space remaining —
+the number that actually decides whether the next upload will fit.
+
+### Added: retrying one failed upload, and deleting a file
+
+A failed upload was a dead end. The only control was "Clear", which threw away
+the whole batch including the files that had succeeded, and the failure itself
+could not be retried without picking the file again. Individual items can now be
+retried or dismissed, and batch progress is weighted by bytes rather than by
+file count, so one large file among small ones no longer jumps from nothing to
+finished.
+
+Files could not be deleted from this page at all, which is why clearing up
+duplicated uploads meant going elsewhere. Cards now carry a delete action behind
+a confirmation.
+
+Empty folders, searches with no matches and the loading state each used to be a
+single grey line of text. They are now sized like the content they stand in for
+and say what to do next.
+
+## [0.27.0] - 2026-08-21
+
+### Added: a board knows which queue its work is pending with
+
+Converting a ticket to a task said nothing about who now owed the work, so the
+ticket kept whatever `pending_with` it had and somebody moved it by hand every
+time.
+
+The chain to compute it was already in the schema and used by nothing:
+`teams.department_id` (whose own comment said it drives Service Desk pending-with
+resolution) → `departments.function_key` → `service_desk_stakeholders.function_key`.
+Nothing except the bulk org mirror ever wrote `department_id`, and no API exposed
+it, so in practice every board rolled up to nothing.
+
+A board's owning department is now set when the project is created and editable
+on its settings row, with a per-board bucket override for the board the org chart
+cannot describe — a shared triage board two departments feed. Boards resolve only
+to *internal* buckets: a board is where work is done, and pointing one at
+"Partner" would move tickets out of the desk's own queue the moment somebody
+started on them.
+
+Matching tolerates the retired `ops_kam` spelling on either side of the join.
+Live workspaces hold it in `departments.function_key` while newer rows
+canonicalise to `operations`, and comparing a single string is how this kind of
+join silently resolves to nothing — indistinguishable from routing being off.
+
+**Every unresolved case says which one it is.** No department, a department with
+no function, no bucket claiming that function: three distinct answers with three
+distinct sentences, shown on the board row, in the convert dialog before the
+operator commits, and written into the ticket. A routing feature that quietly
+does nothing is the complaint this release is answering; a blank badge would have
+been the same bug wearing a different hat.
+
+### Added: pending-with buckets are editable
+
+The backend has had full CRUD on this taxonomy since `PendingWith` stopped being
+an enum, and nothing rendered it. A desk seeded from the insurance template had
+KAM, Insurer, Partner, Sales, Finance and Marketing — and no amount of clicking
+could add Tech or Product, which is also why an engineering board had nowhere to
+hand a ticket to.
+
+There is a new settings page for it. The server's invariants surface as its
+error messages rather than being re-implemented in the UI: one terminal bucket,
+the terminal bucket cannot be retired or deleted, one claimant per master-data
+table, and no deleting a slug that a ticket or a closed TAT stage still names.
+
+One gap closed underneath: nothing stopped an *internal* bucket being saved with
+no owning department, though the industry templates had always refused it on
+seeded rows. Such a bucket looks finished in the list and then matches nothing.
+The department is now required, chosen as a department rather than as a raw
+function key, so the two sides of the join agree by construction.
+
+Retiring a bucket also now actually keeps it out of the hand-off picker. Nothing
+filtered `is_active` before — harmless while nobody could retire anything.
+
+### Added: the ticket follows its task between boards
+
+Moving the card onto the Tech board is how work gets handed to Tech, so the
+ticket follows.
+
+That surfaced a bug. `move_to_project` is a *fork*: the clone lands on the target
+board and the source is archived or marked done. A ticket raised from the source
+was left pointing at a dead task — and since conversion refuses a ticket that
+already has one, it could not be converted again either. The link now follows the
+fork.
+
+### Added: open tickets rolled up by department
+
+The dashboard matrix answers "which queue is this in". With two departments
+owning three buckets between them, the question being asked is "who is behind".
+Both views are folded from the same numbers server-side, so they cannot disagree,
+and external buckets are kept under their own row rather than dropped — otherwise
+the department view would quietly sum to less than the bucket board.
+
+### Changed: a resolved ticket stops holding its queue
+
+Completing the linked task moved the ticket to Resolved and left `pending_with`
+alone, so it sat in Tech's queue for good — work finished, and the breach clock
+still running against them.
+
+It now moves to the terminal bucket, which is what stops the clock. Deliberately
+*not* through the normal hand-off, which couples the terminal bucket to
+`status = CLOSED` and sends the closure email: both are right when a person
+closes a ticket, and neither is right here, because a developer finishing a card
+has not spoken to the requester. Resolved-not-Closed stands.
+
+### Changed: long email bodies arrive folded
+
+A partner's first email is often the whole history of a case pasted in, and at
+full height it pushed the ticket's own fields, actions and reply box off the
+screen — so reading the ticket meant scrolling past the mail to reach anything
+you could act on. Folded past a threshold, with the cut faded rather than square:
+a hard edge mid-sentence reads as the email itself having been truncated.
+
+### Fixed: converting from the ticket page asks who picks it up
+
+The Log-ticket dialog has always asked for an assignee and the ticket detail
+page's own convert dialog never did, so the same action produced an assigned task
+from one screen and an unowned one from the other. The backend argument existed
+and was simply never sent.
+
+### Migration
+
+`backend/scripts/migrate_team_desk_routing.sql` — adds
+`teams.desk_stakeholder_slug` (nullable) and a partial index. Nothing to
+backfill: an unset override means "resolve through the department", which is the
+behaviour every existing board keeps. Refuses to run if `teams.department_id` is
+absent, so a database missing the organization migration fails there rather than
+at the first conversion.
+
+## [0.26.0] - 2026-08-21
+
+Which model does this run on? There were four answers, and one of them did nothing.
+
+### Added: one place to configure AI models
+
+`/settings/ai/models` lists every AI feature in the product — fifty of them,
+grouped the way you would look for them — and for each one: the model it will
+actually use, and where that answer came from. Set a model for a whole group, or
+for one feature inside it.
+
+**Nothing on the page is decorative, because the thing it replaced was.** There
+was a haiku/sonnet dropdown under code insights, admin-only, that no code had
+ever read: you could change it, save it, and change nothing. It is deleted rather
+than wired up — making it live would have silently downgraded every workspace
+showing the default while it was actually running something else.
+
+**A model belongs to a provider, so a stored choice can go stale.** Pick a Claude
+model, then move the workspace to Gemini, and that choice cannot apply. The row
+says so — "not being used", with the reason — instead of showing a setting that
+looks live. The alternative is a 404 from somebody else's API, hours later, inside
+a background job.
+
+### Fixed: AI settings did not apply to agents or to Ask
+
+The workspace AI switch and bring-your-own-key were enforced in one place, and
+two of the three paths that call a model did not go through it. An organisation
+that switched AI off still had its agents running, and Ask answering, on the
+platform's credential. Agents were also pinned to a model Anthropic had retired.
+
+All three paths now resolve through the same function, so the switch means what it
+says.
+
+### Added: Word documents, and asking the AI to edit them
+
+A `.docx` is a first-class document — the same tree, permissions, comments,
+version history and review queue as any other page — rather than an attachment.
+Editing is structure-aware, and pagination matches Word, because a page count
+that drifts puts every anchored comment on the wrong page.
+
+Three ways to ask for an edit, and the third is the one that does not start here:
+a reviewer opens the file in Word, types `@aexy` in a comment asking for a change,
+and sends it back. They hear about the answer, because they are the one who asked
+— not the document's owner, who did not.
+
+**Every AI edit arrives as a redline to accept or reject**, never as a saved
+change. The panel lists what is in a proposal before you replay it, since "12
+changes waiting" is a count rather than something you can review, and it says
+which changes will not appear as markup so you are not left hunting for them.
+
+### Added: turning a Word document into issues
+
+A requirements document, a client's review with twenty comments in the margin, a
+QA report where every finding is a defect. Read it for work items — open comments,
+TODO lines, or whatever the AI finds — and create sprint tasks, bugs, stories or
+tickets from the ones you keep.
+
+Two steps, always. It proposes; you remove what does not belong; then it creates.
+These become work a team is measured against, and a model that mistook a heading
+for a deliverable should not be able to put a phantom task in somebody's sprint.
+
+### Fixed: five AI features had never once run
+
+Each had a call that passed an argument the gateway has never accepted, raised on
+every invocation, and had the error swallowed by a surrounding catch. Commit
+analysis, attrition risk, burnout risk, performance trajectory and team health
+were all switched on, all reported as working, and all doing nothing.
+
+The calls are fixed. They ship **off**, named in `AI_ENABLE_DORMANT_FEATURES`,
+because repairing a call is not the same decision as starting to pay for five
+analyses nobody has seen run — and the models page says which are off and why. A
+feature that is not running should say so; that is the whole lesson of the
+dropdown above.
+
+### Fixed: two issues could be given the same key
+
+Bug, story and ticket keys were `count(*) + 1` read in one statement and written
+in another, so two people creating at once got the same number. Tickets failed
+loudly — a 500 on a public form. Bugs and stories had no uniqueness constraint at
+all, so you simply ended up with two things called BUG-004 and every reference to
+"BUG-004" ambiguous from then on.
+
+Keys are now allocated atomically, the constraints exist, and deleting BUG-003 no
+longer causes the next bug to be called BUG-003.
+
+### Fixed
+
+- **A workspace using its own Gemini key read answers the platform's Claude
+  wrote.** The analysis cache was keyed on the prompt alone, with no record of
+  which model produced the result.
+- **Uploaded files were read by the AI regardless of the workspace's settings** —
+  the highest-volume AI path in the product, bypassing the switch, the
+  credential, the rate limit and the usage record.
+- **Three report metrics crashed instead of rendering.** Team health, bus factor
+  and attrition risk built a service without an argument it required.
+- **An AI redline was signed by whoever opened the review**, so the document
+  claimed a reviewer had written changes they were in the middle of judging. The
+  name the workspace configures for the AI was stored, validated, shown in the
+  API — and never read.
+- **Two notification toggles could not be switched on by anything.** The events
+  existed and nothing emitted them.
 ## [0.25.1] - 2026-08-21
 
 ### Changed: a ticket is one email thread

@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   sprintApi,
+  type WorkspaceSprintListItem,
   Sprint,
   SprintListItem,
   SprintTask,
@@ -18,6 +19,7 @@ import {
   TaskActivity,
   TaskActivityList,
 } from "@/lib/api";
+import { EMPTY_ARRAY } from "@/lib/emptyArray";
 
 // List sprints for a team
 export function useSprints(workspaceId: string | null, teamId: string | null) {
@@ -50,7 +52,7 @@ export function useSprints(workspaceId: string | null, teamId: string | null) {
   });
 
   return {
-    sprints: sprints || [],
+    sprints: sprints ?? EMPTY_ARRAY,
     isLoading,
     error,
     refetch,
@@ -321,7 +323,7 @@ export function useSprintTasks(sprintId: string | null) {
   });
 
   return {
-    tasks: tasks || [],
+    tasks: tasks ?? EMPTY_ARRAY,
     isLoading,
     error,
     refetch,
@@ -371,7 +373,7 @@ export function useTaskActivities(sprintId: string | null, taskId: string | null
   });
 
   return {
-    activities: activityData?.activities || [],
+    activities: activityData?.activities ?? EMPTY_ARRAY,
     total: activityData?.total || 0,
     isLoading,
     error,
@@ -596,4 +598,23 @@ export function useSprintRetrospective(sprintId: string | null) {
     isDeletingItem: deleteItemMutation.isPending,
     isVoting: voteItemMutation.isPending,
   };
+}
+
+
+/**
+ * Every sprint in the workspace, for anything that has no team to scope by.
+ *
+ * `useSprints` above requires a `teamId` and stays disabled without one, which
+ * is correct for a sprint board and useless anywhere else. A document being
+ * turned into tasks has a workspace and no team, and asking the person to pick a
+ * team first would be asking them about our schema rather than their work.
+ */
+export function useWorkspaceSprints(workspaceId: string | null) {
+  const { data, isLoading, error } = useQuery<WorkspaceSprintListItem[]>({
+    queryKey: ["workspaceSprints", workspaceId],
+    queryFn: () => sprintApi.listForWorkspace(workspaceId!),
+    enabled: !!workspaceId,
+  });
+
+  return { sprints: data ?? [], isLoading, error };
 }

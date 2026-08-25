@@ -198,6 +198,19 @@ class LLMSettings(BaseSettings):
         default=4096,
         description="Maximum tokens per LLM request",
     )
+    ai_enable_dormant_features: str = Field(
+        default="",
+        validation_alias="AI_ENABLE_DORMANT_FEATURES",
+        description=(
+            "Comma-separated AI feature ids to switch on, or 'all'. These are "
+            "features whose call sites were broken for their entire existence — "
+            "they raised on every invocation and were swallowed, so they never "
+            "ran. Repairing the call is a separate decision from starting to "
+            "spend money on it, so they stay off until named here. See "
+            "DORMANT_FEATURES in aexy/llm/features.py for the list and why each "
+            "one is on it."
+        ),
+    )
     max_requests_per_hour: int = Field(
         default=100,
         description="Rate limit for LLM requests",
@@ -465,6 +478,44 @@ class Settings(BaseSettings):
     secret_key: str = "dev-secret-key-change-in-production"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 10080  # 7 days for development
+
+    # Demo login. Off by default, and the only way into a fresh self-hosted
+    # install without first registering an OAuth app with GitHub, Google or
+    # Microsoft — which is what every provider flow below requires. Turning it
+    # on publishes one shared account whose password is in the environment, so
+    # it belongs on a laptop or a deliberately public demo box and nowhere
+    # else. `docker-compose.yml` (dev) enables it; `docker-compose.prod.yml`
+    # does not.
+    demo_login_enabled: bool = Field(
+        default=False,
+        description="Allow password sign-in to the shared demo workspace",
+        validation_alias="AEXY_DEMO_LOGIN",
+    )
+    demo_login_email: str = Field(
+        default="demo@example.com",
+        description=(
+            "Email of the shared demo account. Must be a real-looking domain: "
+            "DeveloperResponse validates it as an EmailStr, and pydantic "
+            "rejects reserved TLDs like .local, so /developers/me would 500 "
+            "right after a successful sign-in."
+        ),
+        validation_alias="AEXY_DEMO_EMAIL",
+    )
+    demo_login_password: str = Field(
+        default="aexy-demo",
+        description="Password for the shared demo account. Empty disables demo login outright.",
+        validation_alias="AEXY_DEMO_PASSWORD",
+    )
+    demo_allow_outbound_email: bool = Field(
+        default=False,
+        description=(
+            "Let a demo deployment send real email. Off by default: a "
+            "deployment with demo login on is a demo, and a shared account "
+            "that anyone can sign into should not be able to mail strangers "
+            "from your domain."
+        ),
+        validation_alias="AEXY_DEMO_ALLOW_OUTBOUND_EMAIL",
+    )
 
     # GitHub API
     github_api_base_url: str = "https://api.github.com"

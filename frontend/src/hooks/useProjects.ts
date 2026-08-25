@@ -1,6 +1,7 @@
 "use client";
 
 import { getApiErrorMessage } from "@/lib/utils";
+import { EMPTY_ARRAY } from "@/lib/emptyArray";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -44,6 +45,17 @@ export function useProjects(workspaceId: string | null, status?: ProjectStatus) 
     },
   });
 
+  const updateMutation = useMutation({
+    mutationFn: ({ projectId, data }: { projectId: string; data: ProjectUpdate }) =>
+      projectApi.update(workspaceId!, projectId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects", workspaceId] });
+    },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error, "Failed to update project"));
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (projectId: string) => projectApi.delete(workspaceId!, projectId),
     onSuccess: () => {
@@ -56,13 +68,15 @@ export function useProjects(workspaceId: string | null, status?: ProjectStatus) 
   });
 
   return {
-    projects: data?.projects || [],
+    projects: data?.projects ?? EMPTY_ARRAY,
     isLoading,
     error,
     refetch,
     createProject: createMutation.mutateAsync,
+    updateProject: updateMutation.mutateAsync,
     deleteProject: deleteMutation.mutateAsync,
     isCreating: createMutation.isPending,
+    isUpdating: updateMutation.isPending,
     isDeleting: deleteMutation.isPending,
   };
 }
@@ -193,7 +207,7 @@ export function useProjectMembers(workspaceId: string | null, projectId: string 
   });
 
   return {
-    members: data?.members || [],
+    members: data?.members ?? EMPTY_ARRAY,
     isLoading,
     error,
     refetch,
@@ -253,7 +267,7 @@ export function useProjectTeams(workspaceId: string | null, projectId: string | 
   });
 
   return {
-    teams: data?.teams || [],
+    teams: data?.teams ?? EMPTY_ARRAY,
     isLoading,
     error,
     refetch,
@@ -293,7 +307,7 @@ export function useMyProjectPermissions(workspaceId: string | null, projectId: s
   };
 
   return {
-    permissions: data?.permissions || [],
+    permissions: data?.permissions ?? EMPTY_ARRAY,
     roleId: data?.role_id,
     roleName: data?.role_name,
     isWorkspaceOwner: data?.is_workspace_owner || false,
@@ -323,7 +337,7 @@ export function useProjectAccessibleWidgets(workspaceId: string | null, projectI
   });
 
   return {
-    accessibleWidgets: data?.widget_ids || [],
+    accessibleWidgets: data?.widget_ids ?? EMPTY_ARRAY,
     isLoading,
     error,
     refetch,

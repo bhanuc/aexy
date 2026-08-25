@@ -5,6 +5,8 @@ import {
   Building2,
   Shield,
   FolderGit2,
+  FileText,
+  Cpu,
   FolderKanban,
   ListChecks,
   TrendingUp,
@@ -140,6 +142,26 @@ export const settingsNavigation: SettingsNavCategory[] = [
         ],
       },
       {
+        id: "ai-models",
+        label: "AI Models",
+        href: "/settings/ai/models",
+        icon: Cpu,
+        description: "Which model each AI feature runs on, in one place",
+        permission: PERMISSIONS.CAN_MANAGE_WORKSPACE_SETTINGS,
+        keywords: [
+          "model",
+          "models",
+          "claude",
+          "gemini",
+          "gpt",
+          "sonnet",
+          "haiku",
+          "cost",
+          "spend",
+          "ai",
+        ],
+      },
+      {
         id: "notifications",
         label: "Notifications",
         href: "/settings/notifications",
@@ -162,6 +184,28 @@ export const settingsNavigation: SettingsNavCategory[] = [
         description: "Manage GitHub repositories for analysis and sync",
         permission: PERMISSIONS.CAN_MANAGE_INTEGRATIONS,
         keywords: ["github", "repo", "sync", "git", "code"],
+      },
+      {
+        id: "docs",
+        label: "Documentation",
+        href: "/settings/docs",
+        icon: FileText,
+        description: "How the AI drafts edits to Word documents, and who hears about it",
+        // Workspace settings rather than a docs permission: there is no
+        // `can_manage_docs` on the backend — only view/create/edit/delete — and
+        // inventing one here would fail the settings-navigation test, which
+        // parses models/permissions.py.
+        permission: PERMISSIONS.CAN_MANAGE_WORKSPACE_SETTINGS,
+        keywords: [
+          "docs",
+          "word",
+          "docx",
+          "ai",
+          "tracked changes",
+          "redline",
+          "comments",
+          "review",
+        ],
       },
       {
         id: "identity",
@@ -292,6 +336,15 @@ export const settingsNavigation: SettingsNavCategory[] = [
         description: "Accounts, vendors, and products the desk classifies tickets against",
         permission: PERMISSIONS.CAN_MANAGE_TICKETS,
         keywords: ["master", "data", "accounts", "partners", "customers", "vendors", "insurers", "products", "taxonomy"],
+      },
+      {
+        id: "service-desk-stakeholders",
+        label: "Pending-With Buckets",
+        href: "/settings/service-desk/stakeholders",
+        icon: Users,
+        description: "The parties a ticket can be waiting on, and which department owns each",
+        permission: PERMISSIONS.CAN_MANAGE_TICKETS,
+        keywords: ["stakeholder", "pending", "bucket", "queue", "handoff", "tech", "product", "department", "taxonomy"],
       },
       {
         id: "service-desk-hours",
