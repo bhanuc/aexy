@@ -106,9 +106,32 @@ redaction is trustworthy enough to run that unattended onto a public page. The
 thread is recorded on the ticket afterwards, so the next person to open it can
 see the answer is already public instead of writing a second one.
 
+A document gets "Discuss this page" instead, opening one public thread per
+document — and the thread's opening post is an intro somebody writes, not a copy
+of the document. A document is edited after it is published, and a stale copy of
+it sitting on a public forum page is worse than no copy, so the thread links back
+to the living document.
+
 A community that has not gone live still accepts published threads; they are
 simply not served yet. "Publish the answers, go live on Monday" is an ordinary
 way to launch.
+
+### Changed: a channel called "Members" keeps working
+
+`/community/{slug}/search` and `/community/{slug}/members/…` are fixed paths, and
+a fixed path always wins over the channel slug beside it. A channel slugged
+exactly `search` or `members` would therefore have worked everywhere inside the
+product and 404'd on the forum — and "Members" is an entirely reasonable channel
+for a community to want. Those two names now get a short suffix when the slug is
+minted, and any channel already carrying one is repaired. Nothing that ever
+resolved can break: those URLs never resolved.
+
+### Changed: public search has a per-address budget
+
+It is the one anonymous page that runs a query rather than serving a cached copy.
+Thirty searches a minute per address — loose on purpose, because an office behind
+one connection is many readers sharing an address, and a limit set too low makes
+a working forum look broken.
 
 ### Fixed: signing in from a forum no longer creates an internal account
 
