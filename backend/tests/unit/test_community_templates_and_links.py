@@ -299,3 +299,46 @@ async def test_a_community_that_is_not_live_still_accepts_published_threads(
         )
         is None
     )
+
+
+async def test_reapplying_a_template_keeps_your_participation_choices(db_session, env):
+    """The second click adds channels. It must not reset moderation policy."""
+    svc = CommunityService(db_session)
+    await svc.apply_template(env["ws"].id, env["admin"].id, "product_support")
+    await db_session.commit()
+
+    # The operator decides the forum should be read-only after all.
+    await svc.upsert_settings(
+        env["ws"].id,
+        allow_participation=False,
+        allow_new_topics=False,
+        post_moderation="pre",
+    )
+    await db_session.commit()
+
+    # …then re-applies a template whose defaults are wide open.
+    result = await svc.apply_template(
+        env["ws"].id, env["admin"].id, "open_source"
+    )
+    await db_session.commit()
+
+    assert result["settings_applied"] is False
+    settings = await svc.get_settings(env["ws"].id)
+    assert settings.allow_participation is False, "re-applying re-opened replies"
+    assert settings.allow_new_topics is False
+    assert settings.post_moderation == "pre"
+    # It still did the thing it was asked to do.
+    assert "General" in result["channels_created"]
+
+
+async def test_the_first_template_does_set_the_defaults(db_session, env):
+    svc = CommunityService(db_session)
+    result = await svc.apply_template(
+        env["ws"].id, env["admin"].id, "product_support"
+    )
+    await db_session.commit()
+
+    assert result["settings_applied"] is True
+    settings = await svc.get_settings(env["ws"].id)
+    assert settings.allow_participation is True
+    assert settings.allow_new_topics is True

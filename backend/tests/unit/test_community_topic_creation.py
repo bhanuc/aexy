@@ -341,3 +341,34 @@ async def test_a_held_post_notifies_about_the_review_queue(db_session, env):
     assert notification.event_type == "community_pending_review"
     # Pointing at a thread that has no public page yet would be a 404.
     assert notification.context["action_url"] == "/settings/community"
+
+
+async def test_the_queue_says_which_pending_posts_open_a_thread(db_session, env):
+    """A moderator rejecting an opener removes a thread, so they must be told."""
+    env["community"].post_moderation = "pre"
+    await db_session.commit()
+
+    svc = CommunityParticipationService(db_session)
+    opener = await svc.create_topic(
+        env["community"], env["channel"], env["outsider"].id, "A held thread", "Body"
+    )
+    await db_session.commit()
+
+    # A held reply on an already-public thread, for contrast.
+    public = ChatTopic(
+        id=str(uuid4()),
+        channel_id=env["channel"].id,
+        name="Already public",
+        slug="already-public",
+        public_short_id="pub7654321",
+    )
+    db_session.add(public)
+    await db_session.commit()
+    reply = await svc.post_reply(
+        env["community"], env["channel"], public, env["outsider"].id, "A held reply"
+    )
+    await db_session.commit()
+
+    queue = {row["id"]: row for row in await svc.list_pending(env["ws"].id)}
+    assert queue[opener["id"]]["is_thread_opener"] is True
+    assert queue[reply["id"]]["is_thread_opener"] is False

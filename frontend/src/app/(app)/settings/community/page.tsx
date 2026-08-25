@@ -28,6 +28,9 @@ interface PendingPost {
   channel_name: string;
   topic_name: string;
   sender_id: string;
+  // True when this post opens a held thread. Approving publishes the whole
+  // thread including its title; rejecting removes the thread, not one post.
+  is_thread_opener?: boolean;
 }
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://aexy.io";
@@ -140,6 +143,10 @@ export default function CommunitySettingsPage() {
             threads: result.topics_created,
           }),
         );
+        // Re-applying adds channels but leaves participation alone. Say so,
+        // rather than letting the card's "anyone can reply" line imply the
+        // template's defaults just took effect.
+        if (!result.settings_applied) toast.info(t("toast.templateSettingsKept"));
       } else {
         // Idempotent by channel slug, so a second click is safe — but saying
         // "done" when nothing happened would be a lie.
@@ -468,6 +475,11 @@ export default function CommunitySettingsPage() {
                     #{p.channel_name} · {p.topic_name}
                   </p>
                   <p className="break-words text-sm text-foreground">{p.content}</p>
+                  {p.is_thread_opener && (
+                    <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                      {t("moderation.wholeThread")}
+                    </p>
+                  )}
                 </div>
                 <div className="flex shrink-0 gap-1">
                   <button

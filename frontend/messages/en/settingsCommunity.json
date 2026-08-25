@@ -48,7 +48,8 @@
     "moderation": {
       "title": "Pending review ({count})",
       "approve": "Approve",
-      "reject": "Reject"
+      "reject": "Reject",
+      "wholeThread": "This opens a new thread — approving publishes its title too, and rejecting removes the whole thread."
     },
     "appearance": {
       "title": "How you appear publicly",
@@ -67,7 +68,8 @@
       "prefFailed": "Could not save your display preference",
       "templateApplied": "Created {channels, plural, one {# channel} other {# channels}} and {threads, plural, one {# thread} other {# threads}}",
       "templateNothingToDo": "Those channels already exist — nothing to add",
-      "templateFailed": "Could not apply the template (admin required?)"
+      "templateFailed": "Could not apply the template (admin required?)",
+      "templateSettingsKept": "Your existing participation settings were kept"
     }
   }
 }

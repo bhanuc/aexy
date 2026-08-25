@@ -81,6 +81,11 @@ class DocumentResponse(BaseModel):
     is_template: bool = False
     is_published: bool = False
     published_at: datetime | None = None
+    # The public community thread discussing this document, if the workspace
+    # opted into that link. Just the id — the editor resolves the URL lazily,
+    # rather than every document read paying for three joins on a feature that
+    # ships switched off.
+    community_topic_id: str | None = None
     visibility: DocumentVisibility = "workspace"
     generation_status: DocumentStatus = "draft"
     last_generated_at: datetime | None = None

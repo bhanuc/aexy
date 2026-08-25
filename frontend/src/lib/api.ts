@@ -6832,6 +6832,8 @@ export interface Document {
   cover_image: string | null;
   is_template: boolean;
   is_published: boolean;
+  /** Set when a public community thread discusses this document. */
+  community_topic_id?: string | null;
   published_at: string | null;
   visibility: DocumentVisibility;
   generation_status: DocumentStatus;
@@ -7244,6 +7246,52 @@ export interface DocumentAncestor {
 // ============ Document API ============
 
 export const documentApi = {
+  /** Where a document's answers may be discussed publicly, if anywhere. */
+  communityTargets: async (
+    workspaceId: string,
+  ): Promise<{
+    enabled: boolean;
+    community_slug: string | null;
+    channels: Array<{ id: string; slug: string; name: string }>;
+  }> => {
+    const response = await api.get(`/workspaces/${workspaceId}/documents/community/targets`);
+    return response.data;
+  },
+
+  /** The thread discussing this document. 404s when it has none. */
+  communityThread: async (
+    workspaceId: string,
+    documentId: string,
+  ): Promise<{ topic_id: string; community_slug: string; path: string | null; live: boolean }> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/documents/${documentId}/community-thread`,
+    );
+    return response.data;
+  },
+
+  /**
+   * Open (or return) the public thread for discussing this document.
+   * Idempotent — a document already linked returns its thread rather than
+   * opening a second one, so "Discuss this page" stays one conversation.
+   */
+  discussInCommunity: async (
+    workspaceId: string,
+    documentId: string,
+    data: { channel_id?: string; title?: string; content?: string },
+  ): Promise<{
+    topic_id: string;
+    community_slug: string;
+    path: string | null;
+    live: boolean;
+    already_linked: boolean;
+  }> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/documents/${documentId}/discuss-in-community`,
+      data,
+    );
+    return response.data;
+  },
+
   // ---- Word documents ----
   //
   // Bytes go through the API rather than a presigned URL: uploads are private,
@@ -23982,6 +24030,11 @@ export interface CommunityTemplateApplyResult {
   topics_created: number;
   enabled: boolean;
   community_slug: string;
+  /**
+   * False when the community already existed, so the template's participation
+   * defaults were deliberately not written over the operator's own choices.
+   */
+  settings_applied: boolean;
 }
 
 export interface MemberPublicPref {

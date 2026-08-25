@@ -303,6 +303,10 @@ class CommunityTemplateApplyResult(BaseModel):
     topics_created: int = 0
     enabled: bool = False
     community_slug: str
+    # False when the community already existed, so the template's participation
+    # defaults were deliberately *not* written over the operator's own choices.
+    # The UI needs this to avoid claiming the template's settings took effect.
+    settings_applied: bool = True
 
 
 class MemberPublicPrefUpdate(BaseModel):

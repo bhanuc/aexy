@@ -48,7 +48,8 @@
     "moderation": {
       "title": "समीक्षा बाकी ({count})",
       "approve": "मंज़ूर करें",
-      "reject": "अस्वीकार करें"
+      "reject": "अस्वीकार करें",
+      "wholeThread": "यह एक नया थ्रेड शुरू करता है — मंज़ूरी देने पर इसका शीर्षक भी प्रकाशित होगा, और अस्वीकार करने पर पूरा थ्रेड हट जाएगा।"
     },
     "appearance": {
       "title": "आप सार्वजनिक रूप से कैसे दिखते हैं",
@@ -67,7 +68,8 @@
       "prefFailed": "आपकी display पसंद सहेजी नहीं जा सकी",
       "templateApplied": "{channels, plural, one {# चैनल} other {# चैनल}} और {threads, plural, one {# थ्रेड} other {# थ्रेड}} बनाए गए",
       "templateNothingToDo": "वे चैनल पहले से मौजूद हैं — जोड़ने के लिए कुछ नहीं",
-      "templateFailed": "टेम्पलेट लागू नहीं हो सका (admin आवश्यक?)"
+      "templateFailed": "टेम्पलेट लागू नहीं हो सका (admin आवश्यक?)",
+      "templateSettingsKept": "आपकी मौजूदा भागीदारी सेटिंग्स बनी रहीं"
     }
   }
 }

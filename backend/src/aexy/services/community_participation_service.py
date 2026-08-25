@@ -561,17 +561,27 @@ class CommunityParticipationService:
                 .order_by(ChatMessage.created_at.asc())
             )
         ).all()
-        return [
-            {
-                "id": m.id,
-                "content": m.content,
-                "created_at": m.created_at,
-                "channel_name": ch.name,
-                "topic_name": t.name,
-                "sender_id": m.sender_id,
-            }
-            for m, t, ch in rows
-        ]
+        # One extra query per pending post, to say whether it opens a thread.
+        # Deliberate: the queue is admin-only and short by construction (it is
+        # the backlog somebody is about to clear), and the alternative is a
+        # moderator not being told that "reject" here removes a whole thread.
+        out: list[dict] = []
+        for m, t, ch in rows:
+            out.append(
+                {
+                    "id": m.id,
+                    "content": m.content,
+                    "created_at": m.created_at,
+                    "channel_name": ch.name,
+                    "topic_name": t.name,
+                    "sender_id": m.sender_id,
+                    # Both decisions are bigger than they look on an opener:
+                    # approving publishes the thread and its title, rejecting
+                    # removes the thread rather than one post.
+                    "is_thread_opener": await self._is_held_thread_opener(t, m),
+                }
+            )
+        return out
 
     async def _get_pending_message(
         self, workspace_id: str, message_id: str

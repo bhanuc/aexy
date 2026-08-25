@@ -45,7 +45,14 @@ export async function generateMetadata({
     // duplicate of page 1 that gets dropped from the index.
     alternates: {
       canonical: page === 0 ? base : `${base}?page=${page + 1}`,
-      types: { "application/rss+xml": `${base}/rss.xml` },
+      // The per-channel feed is a query on the community's feed, not a route of
+      // its own — `{base}/rss.xml` would be a 404, and advertising a feed URL
+      // that does not resolve is worse than advertising none.
+      types: {
+        "application/rss+xml":
+          `${siteBaseUrl()}/community/${communitySlug}/rss.xml` +
+          `?channel=${encodeURIComponent(channelSlug)}`,
+      },
     },
     robots: community.noindex ? { index: false, follow: false } : undefined,
     openGraph: { title, description, url: base, type: "website" },

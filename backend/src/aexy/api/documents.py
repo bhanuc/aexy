@@ -129,6 +129,9 @@ def document_to_response(doc) -> DocumentResponse:
         is_template=doc.is_template,
         is_published=doc.is_published,
         published_at=doc.published_at,
+        community_topic_id=(
+            str(doc.community_topic_id) if doc.community_topic_id else None
+        ),
         visibility=doc.visibility,
         generation_status=doc.generation_status,
         last_generated_at=doc.last_generated_at,
@@ -3075,6 +3078,64 @@ async def document_community_targets(
     }
 
 
+async def _resolve_community_thread(db, document, community) -> dict | None:
+    """The public path of the thread discussing this document, if it has one."""
+    if not document.community_topic_id:
+        return None
+
+    from aexy.models.chat import ChatChannel, ChatTopic
+
+    topic = await db.get(ChatTopic, document.community_topic_id)
+    if topic is None:
+        return None
+    channel = await db.get(ChatChannel, topic.channel_id)
+    return {
+        "topic_id": topic.id,
+        "community_slug": community.community_slug,
+        "path": (
+            f"/community/{community.community_slug}/{channel.slug}"
+            f"/{topic.slug}-{topic.public_short_id}"
+            if channel is not None and topic.slug and topic.public_short_id
+            else None
+        ),
+        "live": community.enabled,
+    }
+
+
+@router.get("/{document_id}/community-thread")
+async def get_document_community_thread(
+    workspace_id: str,
+    document_id: str,
+    current_user: Developer = Depends(get_current_developer),
+    db: AsyncSession = Depends(get_db),
+):
+    """Where this document's discussion thread lives, or 404.
+
+    A read, so it is a GET. Fetched lazily by the editor only when the document
+    actually carries a thread id — the alternative was resolving three joins on
+    every document load for a feature that ships switched off.
+    """
+    await check_workspace_permission(workspace_id, current_user, db, "viewer")
+
+    from aexy.models.documentation import Document
+    from aexy.services.community_publishing_service import CommunityPublishingService
+
+    document = await db.get(Document, document_id)
+    if document is None or str(document.workspace_id) != str(workspace_id):
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    community = await CommunityPublishingService(db).linked_community(
+        workspace_id, "docs"
+    )
+    if community is None:
+        raise HTTPException(status_code=404, detail="No linked community")
+
+    thread = await _resolve_community_thread(db, document, community)
+    if thread is None:
+        raise HTTPException(status_code=404, detail="No thread for this document")
+    return thread
+
+
 @router.post("/{document_id}/discuss-in-community", status_code=status.HTTP_201_CREATED)
 async def discuss_document_in_community(
     workspace_id: str,
@@ -3114,24 +3175,9 @@ async def discuss_document_in_community(
             detail="Discussing documents in the community is switched off",
         )
 
-    if document.community_topic_id:
-        from aexy.models.chat import ChatChannel, ChatTopic
-
-        topic = await db.get(ChatTopic, document.community_topic_id)
-        if topic is not None:
-            channel = await db.get(ChatChannel, topic.channel_id)
-            return {
-                "topic_id": topic.id,
-                "community_slug": community.community_slug,
-                "path": (
-                    f"/community/{community.community_slug}/{channel.slug}"
-                    f"/{topic.slug}-{topic.public_short_id}"
-                    if channel is not None
-                    else None
-                ),
-                "live": community.enabled,
-                "already_linked": True,
-            }
+    existing = await _resolve_community_thread(db, document, community)
+    if existing is not None:
+        return {**existing, "already_linked": True}
 
     channel_id = (payload or {}).get("channel_id")
     intro = ((payload or {}).get("content") or "").strip()

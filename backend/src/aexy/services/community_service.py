@@ -131,6 +131,13 @@ class CommunityService:
         if template is None:
             raise ValueError(f"Unknown community template: {template_id}")
 
+        # A template's participation settings are *defaults*, so they are only
+        # written when there is nothing to overwrite. Re-applying one to add a
+        # channel must not quietly re-open replies on a forum whose owner
+        # deliberately closed them — the second click is meant to be safe, and
+        # "safe" cannot mean "resets your moderation policy".
+        first_time = await self.get_settings(workspace_id) is None
+
         from aexy.services.chat_service import ChatService
 
         chat = ChatService(self.db)
@@ -169,12 +176,19 @@ class CommunityService:
                 )
                 topics_created += 1
 
+        defaults = (
+            {
+                "allow_participation": template.allow_participation,
+                "allow_new_topics": template.allow_new_topics,
+                "post_moderation": template.post_moderation,
+            }
+            if first_time
+            else {}
+        )
         settings = await self.upsert_settings(
             workspace_id,
-            allow_participation=template.allow_participation,
-            allow_new_topics=template.allow_new_topics,
-            post_moderation=template.post_moderation,
             enabled=True if publish else None,
+            **defaults,
         )
 
         return {
@@ -184,6 +198,9 @@ class CommunityService:
             "topics_created": topics_created,
             "enabled": settings.enabled,
             "community_slug": settings.community_slug,
+            # So the UI can say "channels added, your existing participation
+            # settings kept" rather than implying the template's defaults won.
+            "settings_applied": first_time,
         }
 
     # ── Per-member public display prefs ───────────────────────────────
