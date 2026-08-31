@@ -96,8 +96,19 @@ export function middleware(request: NextRequest) {
   // React Query cache fragments before the client-side redirect fires.
   if (isAuthRequiredPath(pathname) && !request.cookies.get("aexy_authed")?.value) {
     const url = request.nextUrl.clone();
+    // The whole address, not just the path. `/sprints?tab=epics` and `/sprints`
+    // are different screens — Epics and Projects — so returning somebody to the
+    // path alone silently lands them somewhere they did not ask for, and reads
+    // as the tab they clicked having done nothing. The same is true of every
+    // filtered list in the app, all of which keep their state in the query.
+    const next = pathname + request.nextUrl.search;
+    // Clearing first matters: `clone()` carries the original query, so without
+    // this the params of the page they were denied leak onto the landing page
+    // alongside `next` — which is how `/sprints?tab=epics` arrived here as
+    // `/?tab=epics&next=%2Fsprints`.
+    url.search = "";
     url.pathname = "/";
-    url.searchParams.set("next", pathname);
+    url.searchParams.set("next", next);
     return NextResponse.redirect(url);
   }
 
