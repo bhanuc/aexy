@@ -119,6 +119,18 @@ async function setup(page: Page, canManage: boolean) {
     if (url.includes("/apps/effective") || url.includes("/app-access/")) return json(mockEffectiveAccess);
     if (url.includes("/organization/my-permissions")) return json({ can_manage: canManage });
     if (url.includes("/organization/people")) return json(mockPeople);
+    // The function catalogue labels the Function column. It was unmocked, so
+    // the `{}` catch-all answered — which is how a missing `options` guard on
+    // that page threw and put the whole thing in its error boundary. Mocked
+    // now so the labels are actually exercised rather than merely survived.
+    if (url.match(/\/organization\/functions$/))
+      return json({
+        options: [
+          { key: "ops_kam", label: "Operations / KAM", is_custom: false },
+          { key: "hr", label: "People", is_custom: false },
+        ],
+        unclaimed_stakeholder_functions: [],
+      });
     // Order matters: the by-id detail route is a prefix match on /departments.
     if (url.match(/\/organization\/departments\/[^/]+$/)) return json(mockDepartmentDetail);
     if (url.includes("/organization/departments")) return json(mockDepartments);
@@ -137,8 +149,8 @@ test.describe("Organization UI", () => {
     await expect(page.getByRole("heading", { name: "Departments", level: 1 })).toBeVisible({ timeout: 15000 });
 
     // Data renders
-    await expect(page.getByText("Operations")).toBeVisible();
-    await expect(page.getByText("Human Resources")).toBeVisible();
+    await expect(page.getByText("Operations", { exact: true })).toBeVisible();
+    await expect(page.getByText("Human Resources", { exact: true })).toBeVisible();
     await expect(page.getByText("CC-100")).toBeVisible();
 
     // Editing affordances are offered
@@ -153,8 +165,8 @@ test.describe("Organization UI", () => {
     await expect(page.getByRole("heading", { name: "Departments", level: 1 })).toBeVisible({ timeout: 15000 });
 
     // Data is still visible ...
-    await expect(page.getByText("Operations")).toBeVisible();
-    await expect(page.getByText("Human Resources")).toBeVisible();
+    await expect(page.getByText("Operations", { exact: true })).toBeVisible();
+    await expect(page.getByText("Human Resources", { exact: true })).toBeVisible();
     // ... but nothing is editable, and the reason is stated.
     await expect(page.getByText(/read-only access/i)).toBeVisible();
     await expect(page.getByRole("button", { name: "New Department" })).toHaveCount(0);
@@ -171,7 +183,12 @@ test.describe("Organization UI", () => {
 
     await expect(page.getByRole("dialog")).toBeVisible();
     await expect(page.getByText("Neha Placed")).toBeVisible();
-    await expect(page.getByText("Senior KAM")).toBeVisible();
+    // The roster row, not the "Position" dropdowns that also list this title —
+    // there are three "Senior KAM" nodes in the dialog and only one of them is
+    // the assertion this test means.
+    await expect(
+      page.getByRole("dialog").getByRole("listitem").getByText("Senior KAM"),
+    ).toBeVisible();
 
     // The person in no department is offered, and flagged as unassigned.
     const picker = page.getByRole("dialog").getByLabel("Add", { exact: true });
