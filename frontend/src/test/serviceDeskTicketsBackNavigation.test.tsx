@@ -64,6 +64,9 @@ vi.mock("@/hooks/useServiceDesk", () => ({
   }),
   useProducts: () => ({ data: [{ id: "prod-1", name: "Motor" }] }),
   useAccounts: () => ({ data: [{ id: "acct-1", name: "Acme" }] }),
+  // The detail page gained a "publish to community" card; this file is about the
+  // back link above it, so the card just needs its hook to exist.
+  useCommunityPublishTargets: () => ({ data: undefined, isLoading: false }),
   useServiceDeskMutations: () => ({
     createManual: { mutateAsync: vi.fn() },
     changePendingWith: { mutateAsync: vi.fn(), isPending: false },
