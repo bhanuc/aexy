@@ -1,3 +1,6 @@
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 
@@ -56,5 +59,83 @@ describe("auth-gate return address", () => {
     expect(safeInternalPath("/sprints?tab=epics")).toBe("/sprints?tab=epics");
     expect(safeInternalPath("//evil.com?next=/sprints")).toBeNull();
     expect(safeInternalPath("/\\evil.com?x=1")).toBeNull();
+  });
+});
+
+/** Does the gate redirect this path for an anonymous visitor? */
+const isGated = (path: string) =>
+  middleware(new NextRequest(new URL(path, "https://aexy.io")))
+    .headers.get("location") !== null;
+
+/**
+ * The prefix list is a hand-maintained copy of the route directories, and it
+ * had drifted badly: twenty-one sections of the app had no entry, so each
+ * served the signed-in shell to an anonymous visitor until the client-side
+ * redirect fired — the leak the gate's own comment says it exists to prevent.
+ * Two entries, `/email` and `/leaves`, looked like cover for `/email-marketing`
+ * and `/leave` and matched neither.
+ *
+ * Deriving the expectation from the filesystem is the only version of this test
+ * worth having. Listing the paths by hand would be a second copy to drift.
+ */
+const APP_DIR = join(process.cwd(), "src/app");
+const routeSegments = (group: string) =>
+  readdirSync(join(APP_DIR, group), { withFileTypes: true })
+    .filter((e) => e.isDirectory() && !/^[([_]/.test(e.name))
+    .map((e) => `/${e.name}`);
+
+describe("every protected section is gated", () => {
+  for (const group of ["(app)", "(admin)"]) {
+    for (const path of routeSegments(group)) {
+      it(`gates ${path}`, () => {
+        expect(isGated(path)).toBe(true);
+        // Sub-paths too — a prefix that only matched the section's own index
+        // would leave every page beneath it open.
+        expect(isGated(`${path}/anything`)).toBe(true);
+      });
+    }
+  }
+});
+
+/**
+ * The other half, and the reason this change was the risky kind: a prefix that
+ * reaches a path it should not locks out visitors who are supposed to get in.
+ */
+describe("public surfaces stay public", () => {
+  const publicPaths = [
+    "/", "/pricing", "/about", "/blog", "/careers", "/contact", "/security",
+    "/privacy", "/terms", "/story", "/mission", "/manifesto", "/handbook",
+    "/changelog", "/guides", "/products", "/compare", "/use-cases", "/take",
+    // The anonymous booking flow, and the rewrite source that reaches it.
+    // Middleware runs before rewrites, so `/book/*` is what this sees — and
+    // `/booking` must not capture it.
+    "/book/acme/intro-call",
+    "/public/book/acme/intro-call",
+    // Forms, RSVPs, shared tables and the customer ticket portal: namespaced
+    // under /public so no section prefix can reach them.
+    "/public/forms/f-1", "/public/rsvp/r-1", "/public/tables/t-1",
+    "/public/tickets/tk-1",
+    // Embeds are iframed into customer pages by design.
+    "/embed/tables/t-1",
+    // Public profile slugs, the forum, and the auth entry points.
+    "/p/some-slug", "/community", "/login", "/auth/callback", "/oauth/consent",
+    "/invite/abc123",
+    // The existing exception: reachable during signup, before the cookie exists.
+    "/onboarding/connect",
+  ];
+
+  for (const path of publicPaths) {
+    it(`leaves ${path} alone`, () => {
+      expect(isGated(path)).toBe(false);
+    });
+  }
+
+  it("does not confuse a section with a longer public path", () => {
+    // `/t` is the task short-link resolver. It must match itself and `/t/…`
+    // without swallowing `/take` or `/terms`.
+    expect(isGated("/t")).toBe(true);
+    expect(isGated("/t/acme/1042")).toBe(true);
+    expect(isGated("/take")).toBe(false);
+    expect(isGated("/terms")).toBe(false);
   });
 });

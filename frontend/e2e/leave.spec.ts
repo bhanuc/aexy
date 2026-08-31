@@ -38,6 +38,17 @@ async function setupLeaveMocks(page: Page) {
     localStorage.setItem("current_workspace_id", "ws-1");
   });
 
+  // The middleware-visible presence cookie a real signed-in browser carries.
+  // `useAuth` mirrors it from localStorage, but a test that injects the token
+  // directly never runs that, so without this the auth gate bounces every
+  // navigation through the landing page. Set on the context, not via
+  // addInitScript: init scripts run on document load, by which point the
+  // middleware has already decided.
+  await page.context().addCookies([
+    { name: "aexy_authed", value: "1", url: "http://localhost:3000" },
+  ]);
+
+
   // Catch-all FIRST (checked LAST by Playwright)
   await page.route(`${API_BASE}/**`, (route) => {
     route.fulfill({
