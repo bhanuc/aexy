@@ -18,9 +18,9 @@ import { DataTable, DataTableColumn } from "@/components/ui/data-table";
 import { formatDistanceToNow } from "date-fns";
 import { useTranslations } from "next-intl";
 import {
-  SettingsPage,
   SettingsSkeleton,
 } from "@/components/settings/SettingsPrimitives";
+import { SettingsGroupPage } from "@/components/settings/SettingsGroupPage";
 
 const ACTION_LABELS: Record<string, string> = {
   template_created: "Template Created",
@@ -138,7 +138,8 @@ export default function AccessLogsPage() {
 
   if (!isEnterprise) {
     return (
-      <SettingsPage
+      <SettingsGroupPage
+      group="access"
         title={t("title")}
         description={t("description")}
       >
@@ -154,12 +155,13 @@ export default function AccessLogsPage() {
             <Button>{t("upsell.cta")}</Button>
           </Link>
         </div>
-      </SettingsPage>
+      </SettingsGroupPage>
     );
   }
 
   return (
-    <SettingsPage
+    <SettingsGroupPage
+      group="access"
       title={t("title")}
       description={t("description")}
       width="wide"
@@ -259,6 +261,6 @@ export default function AccessLogsPage() {
           />
         )}
       </div>
-    </SettingsPage>
+    </SettingsGroupPage>
   );
 }

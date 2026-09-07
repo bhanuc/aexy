@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import {
   Package,
   Plus,
@@ -27,7 +26,7 @@ import { useWorkspace } from "@/hooks/useWorkspace";
 import { useAppAccessTemplates } from "@/hooks/useAppAccess";
 import { getAllApps, AppAccessConfig } from "@/config/appDefinitions";
 import { useTranslations } from "next-intl";
-import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import { SettingsGroupPage } from "@/components/settings/SettingsGroupPage";
 
 // Icon mapping for templates
 const TEMPLATE_ICONS: Record<string, React.ReactNode> = {
@@ -169,7 +168,8 @@ export default function AccessTemplatesPage() {
   const isSaving = isCreating || isUpdating;
 
   return (
-    <SettingsPage
+    <SettingsGroupPage
+      group="access"
       title={t("title")}
       description={t("description")}
       width="wide"
@@ -519,6 +519,6 @@ export default function AccessTemplatesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </SettingsPage>
+    </SettingsGroupPage>
   );
 }

@@ -29,7 +29,8 @@
       "high": "High",
       "medium": "Medium",
       "low": "Low"
-    }
+    },
+    "settings": "Settings"
   },
   "saved": "Saved",
   "deleted": "Deleted"

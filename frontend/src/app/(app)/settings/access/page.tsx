@@ -28,7 +28,7 @@ import { useAdminAccessRequests } from "@/hooks/useAccessRequests";
 import { MemberAppAccessModal } from "@/components/members/MemberAppAccessModal";
 import { getAllApps } from "@/config/appDefinitions";
 import { useTranslations } from "next-intl";
-import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import { SettingsGroupPage } from "@/components/settings/SettingsGroupPage";
 import { DepartmentProfilesPanel } from "@/components/access/DepartmentProfilesPanel";
 
 /** Departments first in the URL contract, since that is where access is decided. */
@@ -200,7 +200,8 @@ export default function AccessControlPage() {
   const reviewedRequests = requests.filter((r) => r.status !== "pending");
 
   return (
-    <SettingsPage
+    <SettingsGroupPage
+      group="access"
       title={t("title")}
       description={t("description")}
       width="wide"
@@ -742,6 +743,6 @@ export default function AccessControlPage() {
           developerName={editingMember.developerName}
         />
       )}
-    </SettingsPage>
+    </SettingsGroupPage>
   );
 }
