@@ -369,7 +369,7 @@ test.describe("project-scoped status categories", () => {
   });
 });
 
-test("a label with no Latin characters is refused with the reason", async ({
+test("a label with no letters or digits is refused with the reason", async ({
   page,
 }) => {
   const createdCategories: unknown[] = [];
@@ -379,14 +379,17 @@ test("a label with no Latin characters is refused with the reason", async ({
     .getByRole("button", { name: "Add Category" })
     .click();
 
-  // `slugify` keeps only Latin letters and digits, so a Devanagari label
-  // reduces to an empty slug — which the API rejects on min_length. The modal
-  // says so instead of posting it.
+  // A Devanagari label now slugifies faithfully — the two `slugify`
+  // implementations agree on marks, so this is a normal, creatable category.
   await page.getByLabel("Label").fill("डिज़ाइन समीक्षा");
+  await expect(page.getByLabel("Slug")).toHaveValue("डिज़ाइन_समीक्षा");
+
+  // What is actually refused is a label with no letters or digits at all.
+  await page.getByLabel("Label").fill("🎉🎉");
   await expect(page.getByLabel("Slug")).toHaveValue("");
   await page.getByRole("button", { name: /Save|Create/ }).click();
 
-  await expect(page.getByText(/built from Latin letters/i)).toBeVisible();
+  await expect(page.getByText(/at least one letter or digit/i)).toBeVisible();
   expect(createdCategories).toHaveLength(0);
 
   // Adding Latin characters clears the way.

@@ -14,7 +14,7 @@
       "saving": "Saving…",
       "errors": {
         "labelRequired": "Label is required",
-        "slugEmpty": "The slug is built from Latin letters and numbers, and this label has none. Include some — you can rename the label afterwards.",
+        "slugEmpty": "A slug needs at least one letter or digit, and this label has none. Add some — the label itself can stay as it is afterwards.",
         "slugExists": "A category with that slug already exists.",
         "saveFailed": "Failed to save category"
       },
