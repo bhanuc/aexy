@@ -33,8 +33,9 @@ customized are unaffected and keep inheriting.
 `scripts/migrate_status_categories_project_backfill.sql` puts the missing
 inherited buckets back, keeping the workspace's own wording for any that were
 renamed, and reorders so the inherited ones come first and the project's
-additions follow. It is additive and safe to re-run; projects still inheriting
-are left alone. To see what a workspace actually looks like first — which
+additions follow in the order they were added. It is additive and safe to
+re-run; projects still inheriting are left alone, and so is any project whose
+category order was already deliberate. To see what a workspace actually looks like first — which
 projects are affected, whether any scope has lost its default status or has
 nowhere to put finished work, and whether any task's status matches no column —
 run `docker exec aexy-backend python scripts/diagnose_status_config.py
@@ -48,14 +49,36 @@ changing every other project that inherits it. Those rows are now shown as
 inherited, with a note saying so and where to edit them for the whole
 workspace. Adding a category is still offered, and now says what it does.
 
+Workspace task settings had no way to edit a category to send anyone to — its
+Status Categories panel was a fixed legend of three names that did not reflect
+the workspace's real buckets. It is now the editor for them, following the same
+scope picker as the statuses above it: add, rename, recolour and change the
+semantics of the workspace's own categories, or pick a project to work on that
+project's. A project that is still inheriting shows the same inherited note
+there rather than letting an edit reach every other project. The panel is a
+labelled landmark, so it is reachable by region on a page that is otherwise one
+long form.
+
 ### Fixed: a project could not delete its own copy of a category
 
 Once a project has its own categories, each copy shares a slug with the
 workspace original. The check that stops a category being deleted while
 statuses still use it looked across the whole workspace, so a project's copy of
 Done or To Do counted the workspace's statuses as users of it and refused to be
-deleted, permanently. The check now stays inside the category's own scope, and
-ignores statuses that have already been deleted.
+deleted, permanently. The check now counts only the statuses that actually
+resolve to the category being deleted, and ignores statuses that have already
+been deleted.
+
+Which statuses those are is not simply "the ones in the same scope". A project
+can have its own categories while its statuses still come from the workspace —
+adding a category forks the categories only — so for a project's category the
+check follows wherever that project's board is drawn from, and a project cannot
+delete a bucket the board it is showing still uses. In the other direction, a
+workspace category is kept in use by the workspace's own statuses and by every
+project that inherits the slug, but not by a project holding its own copy of it:
+those statuses point at the copy. Without that, one project forking its
+categories was enough to make an unused workspace category undeletable for
+good.
 
 ## [0.37.0] - 2026-09-06
 

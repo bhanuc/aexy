@@ -3,7 +3,7 @@
 import re
 from uuid import uuid4
 
-from sqlalchemy import select, func, update
+from sqlalchemy import or_, select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aexy.models.sprint import (
@@ -125,6 +125,26 @@ class TaskConfigService:
         if own:
             return own
         return await self.get_statuses(workspace_id, include_inactive=include_inactive)
+
+    async def _project_has_own_statuses(
+        self,
+        workspace_id: str,
+        project_id: str,
+    ) -> bool:
+        """Whether ``get_statuses_for_project`` resolves to this project's own
+        rows rather than the workspace defaults.
+
+        Matches that resolver exactly — active rows only, so a project whose
+        only status rows are soft-deleted counts as still inheriting.
+        """
+        stmt = (
+            select(WorkspaceTaskStatus.id)
+            .where(WorkspaceTaskStatus.workspace_id == workspace_id)
+            .where(WorkspaceTaskStatus.project_id == project_id)
+            .where(WorkspaceTaskStatus.is_active == True)  # noqa: E712
+            .limit(1)
+        )
+        return (await self.db.execute(stmt)).first() is not None
 
     async def get_status(self, status_id: str) -> WorkspaceTaskStatus | None:
         """Get a status by ID."""
@@ -665,13 +685,50 @@ class TaskConfigService:
             .where(WorkspaceTaskStatus.is_active.is_(True))
         )
         if category.project_id is not None:
-            # A project-scoped category can only be referenced from that
-            # project's own statuses — a status elsewhere resolves the slug
-            # against its own scope, never this one. Without this filter a
+            # Only the statuses this project actually renders can reference
+            # this row: statuses in another scope resolve the slug against
+            # their own scope, never this one. Without a scope filter a
             # cloned project category (`done`, `todo`, …) looks permanently
             # in-use because the workspace defaults share its slug.
+            #
+            # Which rows those are depends on where the project's statuses
+            # come from — a project can fork its categories without forking
+            # its statuses (`create_category` clones categories only), and
+            # then its board is still drawn from the workspace defaults.
+            # Filtering on `project_id == this project` in that state finds
+            # nothing and lets the project delete a bucket its own board is
+            # using, which is what leaves a status with no column.
+            if await self._project_has_own_statuses(
+                str(category.workspace_id), str(category.project_id)
+            ):
+                in_use_stmt = in_use_stmt.where(
+                    WorkspaceTaskStatus.project_id == category.project_id
+                )
+            else:
+                in_use_stmt = in_use_stmt.where(
+                    WorkspaceTaskStatus.project_id.is_(None)
+                )
+        else:
+            # A workspace default is referenced by the workspace's own
+            # statuses plus the statuses of every project whose category
+            # scope doesn't define this slug — those resolve it by falling
+            # back here. A project holding its own copy of the slug points at
+            # that copy instead, so counting it would make an unused
+            # workspace category permanently undeletable the moment any
+            # project forks its categories.
+            shadowing_projects = (
+                select(WorkspaceStatusCategory.project_id)
+                .where(
+                    WorkspaceStatusCategory.workspace_id == category.workspace_id
+                )
+                .where(WorkspaceStatusCategory.project_id.is_not(None))
+                .where(WorkspaceStatusCategory.slug == category.slug)
+            )
             in_use_stmt = in_use_stmt.where(
-                WorkspaceTaskStatus.project_id == category.project_id
+                or_(
+                    WorkspaceTaskStatus.project_id.is_(None),
+                    WorkspaceTaskStatus.project_id.not_in(shadowing_projects),
+                )
             )
         if (await self.db.execute(in_use_stmt)).scalar():
             raise TaskValidationError("category_in_use")

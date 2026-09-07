@@ -270,7 +270,7 @@ export default function ProjectStatusesPage() {
                 copies the full set into this project first, so nothing here
                 disappears — after that the project keeps its own buckets and
                 workspace changes no longer reach it. To rename or recolor a
-                shared bucket, edit it in{" "}
+                shared bucket for every project, use Status Categories in{" "}
                 <Link
                   href="/settings/task-config"
                   className="text-primary-400 hover:text-primary-300 underline"

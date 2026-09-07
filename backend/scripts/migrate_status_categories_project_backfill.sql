@@ -74,19 +74,42 @@ WHERE NOT EXISTS (
 )
 ON CONFLICT (workspace_id, COALESCE(project_id::text, ''), slug) DO NOTHING;
 
--- 3. Renumber the affected project scopes. The truncating insert took
+-- 3. Renumber the scopes step 2 repaired. The truncating insert took
 --    position 0 (the scope looked empty), so after the backfill several rows
---    would share a position and `ORDER BY position` would be arbitrary.
---    Inherited buckets take the workspace ordering; the project's own
---    additions land after them, alphabetically by slug for determinism.
-WITH ordered AS (
+--    share a position and `ORDER BY position` is arbitrary. Inherited
+--    buckets take the workspace ordering; the project's own additions land
+--    after them, keeping the order they were added in.
+--
+--    Restricted to scopes whose positions actually collide. A scope repaired
+--    by step 2 always collides — the truncating insert took position 0 and
+--    so does the first backfilled workspace bucket — while a scope that
+--    already held the full set has distinct positions and keeps whatever
+--    order an admin gave it through the reorder endpoint. Without this the
+--    statement would rewrite the ordering of scopes it has no business
+--    touching, and re-running the file would undo a deliberate reorder.
+WITH ambiguous_scopes AS (
+    SELECT workspace_id, project_id
+    FROM workspace_status_categories
+    WHERE project_id IS NOT NULL
+    GROUP BY workspace_id, project_id
+    HAVING count(*) <> count(DISTINCT position)
+),
+ordered AS (
     SELECT
         c.id,
         ROW_NUMBER() OVER (
             PARTITION BY c.workspace_id, c.project_id
-            ORDER BY COALESCE(ws.position, 1000), c.slug
+            -- `c.position` before `c.slug`: the project's own additions
+            -- already carry their insertion order (0, 1, 2 …) and no
+            -- workspace row to sort them by, so falling straight to slug
+            -- would reorder them alphabetically and lose that. Slug is only
+            -- the last resort for rows that genuinely tie.
+            ORDER BY COALESCE(ws.position, 1000), c.position, c.slug
         ) - 1 AS new_position
     FROM workspace_status_categories c
+    JOIN ambiguous_scopes a
+      ON a.workspace_id = c.workspace_id
+     AND a.project_id = c.project_id
     LEFT JOIN workspace_status_categories ws
       ON ws.workspace_id = c.workspace_id
      AND ws.project_id IS NULL
