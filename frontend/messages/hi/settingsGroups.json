@@ -1,0 +1,37 @@
+{
+  "settingsGroups": {
+    "access": {
+      "title": "एक्सेस नियंत्रण",
+      "navLabel": "एक्सेस नियंत्रण",
+      "tabs": {
+        "overview": "अवलोकन",
+        "templates": "टेम्पलेट",
+        "logs": "एक्सेस लॉग",
+        "gmailExclusions": "Gmail अपवाद"
+      }
+    },
+    "identity": {
+      "title": "पहचान",
+      "navLabel": "पहचान",
+      "tabs": {
+        "overview": "कमिट स्वामित्व",
+        "ghosts": "घोस्ट डेवलपर"
+      }
+    },
+    "serviceDesk": {
+      "title": "Service Desk",
+      "navLabel": "Service Desk सेटिंग्स",
+      "tabs": {
+        "identity": "डेस्क पहचान",
+        "intake": "टिकट इनटेक",
+        "mailboxes": "मेलबॉक्स",
+        "stakeholders": "Pending-with बकेट",
+        "masterData": "मास्टर डेटा",
+        "hours": "कार्य समय",
+        "scorecard": "स्कोरकार्ड",
+        "digest": "डाइजेस्ट",
+        "ai": "AI वर्गीकरण"
+      }
+    }
+  }
+}

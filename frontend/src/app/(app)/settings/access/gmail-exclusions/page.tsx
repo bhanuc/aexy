@@ -19,7 +19,7 @@ import { Ban, EyeOff, Loader2, ScrollText } from "lucide-react";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { googleIntegrationApi, WorkspaceExclusions } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/utils";
-import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import { SettingsGroupPage } from "@/components/settings/SettingsGroupPage";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -58,7 +58,8 @@ export default function GmailExclusionsAdminPage() {
   }, [workspaceId]);
 
   return (
-    <SettingsPage
+    <SettingsGroupPage
+      group="access"
       title="Gmail exclusions"
       description="Addresses and domains people have kept out of Gmail sync. Opening this page is recorded."
       width="wide"
@@ -137,6 +138,6 @@ export default function GmailExclusionsAdminPage() {
           </Card>
         </div>
       )}
-    </SettingsPage>
+    </SettingsGroupPage>
   );
 }
