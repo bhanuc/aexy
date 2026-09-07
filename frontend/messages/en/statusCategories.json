@@ -1,0 +1,43 @@
+{
+  "statusCategories": {
+    "modal": {
+      "createTitle": "Create Category",
+      "editTitle": "Edit Category",
+      "labelField": "Label",
+      "labelHint": "What the bucket is called on the board. Rename it any time.",
+      "slugField": "Slug",
+      "slugHintNew": "Generated from the label, and fixed once saved: statuses reference it.",
+      "slugHintExisting": "Fixed — statuses already reference it.",
+      "semanticsField": "Semantics",
+      "semanticsHint": "Burndown and velocity branch on semantics — slugs are user-facing.",
+      "colorField": "Color",
+      "saving": "Saving…",
+      "errors": {
+        "labelRequired": "Label is required",
+        "slugEmpty": "The slug is built from Latin letters and numbers, and this label has none. Include some — you can rename the label afterwards.",
+        "slugExists": "A category with that slug already exists.",
+        "saveFailed": "Failed to save category"
+      },
+      "labelPlaceholder": "Design Review",
+      "slugPlaceholder": "design_review"
+    },
+    "semantics": {
+      "open": {
+        "label": "Open",
+        "hint": "Queued — remaining work"
+      },
+      "active": {
+        "label": "Active",
+        "hint": "In flight — counts toward WIP"
+      },
+      "done": {
+        "label": "Done",
+        "hint": "Completed — counts toward velocity"
+      },
+      "cancelled": {
+        "label": "Cancelled",
+        "hint": "Closed without completing"
+      }
+    }
+  }
+}
