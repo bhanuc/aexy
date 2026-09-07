@@ -6,6 +6,13 @@ import { AlertCircle, Check, RefreshCw } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
+import {
   CategorySemantics,
   WorkspaceStatusCategory,
 } from "@/lib/api";
@@ -94,21 +101,21 @@ export function CategoryModal({ category, onClose, onSave, isSaving }: CategoryM
     }
   };
 
+  // Mounted only while open (`{showCategoryModal && <CategoryModal …>}`), so
+  // `open` is constant and closing is delegated to the caller — which keeps
+  // Radix's Escape handling and backdrop click going through the same path as
+  // the Cancel button.
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      {/* See StatusModal: the overlay needs modal semantics of its own. */}
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="category-modal-title"
-        className="bg-card rounded-xl w-full max-w-md p-6"
-      >
-        <h3
-          id="category-modal-title"
-          className="text-xl font-semibold text-foreground mb-4"
-        >
-          {isEdit ? t("modal.editTitle") : t("modal.createTitle")}
-        </h3>
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      {/* No descriptive paragraph in this dialog, so opt out explicitly —
+          Radix warns otherwise, and a wrong `aria-describedby` is worse
+          than none. */}
+      <DialogContent className="max-w-md" aria-describedby={undefined}>
+        <DialogHeader>
+          <DialogTitle className="text-xl">
+            {isEdit ? t("modal.editTitle") : t("modal.createTitle")}
+          </DialogTitle>
+        </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
@@ -262,7 +269,7 @@ export function CategoryModal({ category, onClose, onSave, isSaving }: CategoryM
             </button>
           </div>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

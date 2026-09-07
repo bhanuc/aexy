@@ -1756,7 +1756,8 @@ export function MasterDataSections() {
               <span key={l.id} className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-sm">
                 {l.name}
                 {canManage && (
-                  <button onClick={() => m.deleteProduct.mutate(l.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="h-3 w-3" /></button>
+                  <button onClick={() => m.deleteProduct.mutate(l.id)}
+                  aria-label={`Delete ${l.name ?? "item"}`} className="text-muted-foreground hover:text-destructive"><Trash2 className="h-3 w-3" /></button>
                 )}
               </span>
             ))}

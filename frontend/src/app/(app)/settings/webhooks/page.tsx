@@ -165,6 +165,7 @@ function WebhookRow({
         </div>
         <div className="relative flex-shrink-0">
           <button
+            aria-label={`Manage webhook ${webhook.name}`}
             onClick={() => setShowMenu(!showMenu)}
             className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition"
           >
@@ -450,6 +451,7 @@ export default function WebhooksSettingsPage() {
           {testResult.message}
           <button
             onClick={() => setTestResult(null)}
+            aria-label="Dismiss test result"
             className="ml-auto text-muted-foreground hover:text-foreground"
           >
             <X className="h-3.5 w-3.5" />

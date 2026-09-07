@@ -893,7 +893,8 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                                 className="flex items-center gap-1 px-2 py-1 bg-blue-500/20 text-blue-400 rounded text-xs"
                               >
                                 {keyword}
-                                <button onClick={() => removeSubjectKeyword(keyword)}>
+                                <button onClick={() => removeSubjectKeyword(keyword)}
+                                aria-label={`Remove keyword ${keyword}`}>
                                   <X className="w-3 h-3" />
                                 </button>
                               </span>
@@ -930,7 +931,8 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                                 className="flex items-center gap-1 px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs"
                               >
                                 {domain}
-                                <button onClick={() => removeDomain(domain)}>
+                                <button onClick={() => removeDomain(domain)}
+                                aria-label={`Remove domain ${domain}`}>
                                   <X className="w-3 h-3" />
                                 </button>
                               </span>

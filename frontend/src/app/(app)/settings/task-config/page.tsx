@@ -160,6 +160,7 @@ function SortableFieldItem({ field, isAdmin, onEdit, onDelete }: SortableFieldIt
       {isAdmin && (
         <div className="relative">
           <button
+            aria-label={`Manage field ${field.name}`}
             onClick={() => setShowMenu(!showMenu)}
             className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition"
           >
@@ -326,6 +327,7 @@ function FieldModal({ field, onClose, onSave, isSaving }: FieldModalProps) {
                       <button
                         type="button"
                         onClick={() => handleRemoveOption(index)}
+                        aria-label="Remove option"
                         className="p-1.5 text-muted-foreground hover:text-red-400 transition"
                       >
                         <Trash2 className="h-4 w-4" />

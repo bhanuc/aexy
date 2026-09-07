@@ -155,6 +155,7 @@ function FormRow({ form, onDuplicate, onDelete, isDuplicating, isDeleting, templ
           </button>
           <div className="relative">
             <button
+              aria-label={`Manage form ${form.name}`}
               onClick={() => setShowMenu(!showMenu)}
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition"
             >

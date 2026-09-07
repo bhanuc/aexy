@@ -224,11 +224,19 @@ long form.
 
 ### Fixed: icon-only buttons in settings were announced as just "button"
 
-Eleven controls across settings had nothing but an icon inside them and no
-label, so a screen reader read each as "button" and nothing more: two add-option
-buttons, two deletes, a remove, two reorder handles, a row menu, a copy-URL and
-two add-to-list buttons. They now say what they do, and name the row they act
-on where there is one.
+Twenty-seven controls across settings had nothing but an icon inside them and no
+label, so a screen reader read each as "button" and nothing more: row menus,
+deletes, removes, reorder handles, add-to-list buttons, a copy-URL. They now say
+what they do, and name the row they act on where there is one — "Manage webhook
+Billing sync" rather than one of a column of identical "button"s.
+
+### Fixed: the status and category dialogs behaved like plain divs
+
+Both were hand-rolled overlays: no dialog role, no name, no focus trap, and
+Tab walked straight out of them into the page behind. They use the same dialog
+component as the rest of the app now, which also closes them on Escape and
+stops the page behind from scrolling. The delete-status dialog keeps its own
+design — a sheet on small screens — and gains the same behaviour.
 
 ### Fixed: settings areas that had no shared navigation
 
