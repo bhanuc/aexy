@@ -213,6 +213,9 @@ async function setup(page: Page, options: SetupOptions = {}) {
     // straight away, so the catch-all's `{}` puts it in its error boundary.
     if (url.includes("/integrations/google/exclusions"))
       return json({ rules: [], audit: [] });
+    // The Service Desk sections spread their lists (`[...(rows ?? [])]`), so
+    // the catch-all's `{}` is not iterable and takes the page down.
+    if (url.includes("/service-desk/")) return json([]);
     if (url.includes("/repositories")) return json([]);
     // The settings shell gates this page on can_manage_workspace_settings;
     // without it the whole page is replaced by the access-denied panel.
@@ -280,6 +283,24 @@ const GROUPS = [
       ["/settings/identity", "Commit ownership"],
       ["/settings/identity/admin", "Ghost developers"],
     ],
+  },
+  {
+    area: "Service Desk settings",
+    tabs: [
+      "Desk identity",
+      "Ticket intake",
+      "Mailboxes",
+      "Pending-with buckets",
+      "Master data",
+      "Working hours",
+      "Scorecard",
+      "Digest",
+      "AI categorisation",
+    ],
+    // One page is enough here: the strip's content and active-tab derivation
+    // for all nine routes is covered by src/test/settingsGroupNav.test.tsx,
+    // which needs no page data. This proves it renders on a real one.
+    pages: [["/settings/service-desk/hours", "Working hours"]],
   },
 ] as const;
 

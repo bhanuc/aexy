@@ -59,6 +59,23 @@ there rather than letting an edit reach every other project. The panel is a
 labelled landmark, so it is reachable by region on a page that is otherwise one
 long form.
 
+### Fixed: settings areas that had no shared navigation
+
+Four pages had no way out. `/settings/access/templates`, `/settings/access/logs`,
+`/settings/access/gmail-exclusions` and `/settings/identity/admin` are absent
+from the settings sidebar and carried no breadcrumbs and no link to their
+parent: the access hub links down to its three children and none of them links
+back, so the browser's back button was the only exit.
+
+Service Desk's nine settings pages were all reachable from the sidebar, but
+none of them linked to another and each named itself from a differently-shaped
+key, so the area read as nine unrelated screens rather than one.
+
+Each of these areas now has one header: the area's name, a breadcrumb trail
+that leads back to it, and a strip of its sibling pages with the current one
+marked. The tab list is defined once per area and the current tab is worked out
+from the URL, so a page cannot disagree with the strip above it.
+
 ### Changed: the status dialog is translated, and names its buckets
 
 The status dialog was hardcoded English, and it printed each category's

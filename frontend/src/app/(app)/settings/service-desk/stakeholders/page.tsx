@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 
-import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import { SettingsGroupPage } from "@/components/settings/SettingsGroupPage";
 import { ReadOnlyNotice } from "@/components/settings/service-desk/sections";
 import { StakeholdersSection } from "@/components/settings/service-desk/StakeholdersSection";
 
@@ -10,7 +10,8 @@ export default function ServiceDeskStakeholdersSettingsPage() {
   const t = useTranslations("serviceDesk");
 
   return (
-    <SettingsPage
+    <SettingsGroupPage
+      group="serviceDesk"
       title={t("stakeholders.title")}
       description={t("stakeholders.description")}
     >
@@ -18,6 +19,6 @@ export default function ServiceDeskStakeholdersSettingsPage() {
         <ReadOnlyNotice />
         <StakeholdersSection />
       </div>
-    </SettingsPage>
+    </SettingsGroupPage>
   );
 }
