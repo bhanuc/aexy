@@ -109,6 +109,22 @@ and the whole dialog is translated in `en` and `hi`. Both dialogs also announce
 themselves as dialogs; they were anonymous overlays a screen reader neither
 named nor confined the user to.
 
+### Fixed: a name in Hindi produced a corrupted slug
+
+Naming a status "समीक्षा में" stored its slug as "समकष_म" — every vowel sign
+stripped. The slug is built by discarding anything that is not a letter, digit
+or space, and combining marks fell outside that, so the name did not fail, it
+silently lost characters. Devanagari, Arabic, Thai and Hebrew were all affected;
+Chinese, Japanese and Korean were fine.
+
+Marks are kept now, in every script, and the two places that build a slug — the
+server for statuses and fields, the browser for categories — agree. They did
+not before: the browser's rule was Latin-only, so a category could not be given
+a Hindi name at all while a status could and was mangled. Both round-trip
+faithfully, and a name with no letters or digits in it at all (only emoji) gets
+a generated slug rather than an empty one, keeping the name as typed. Existing
+slugs are untouched, and nothing changes for names written in Latin.
+
 ### Fixed: a category label in a non-Latin script was rejected without a reason
 
 The slug is derived from the label by keeping Latin letters and digits, so a

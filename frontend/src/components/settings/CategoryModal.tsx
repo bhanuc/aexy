@@ -30,10 +30,21 @@ const PRESET_COLORS = [
   "#8B5CF6", "#EC4899", "#14B8A6", "#F97316", "#6366F1",
 ];
 
+/**
+ * Mirror of the backend's `slugify` (task_config_service.py).
+ *
+ * JavaScript's `\w` is ASCII-only, so the previous version reduced any
+ * non-Latin label to an empty slug — a Hindi category simply could not be
+ * created. `\p{L}\p{N}\p{M}` with the `u` flag matches what the backend
+ * keeps, marks included, so the two agree on every script.
+ *
+ * Still returns "" for a label with no letters or digits at all (emoji only);
+ * the caller refuses that with an explanation rather than posting it.
+ */
 function slugify(text: string): string {
   return text
     .toLowerCase()
-    .replace(/[^\w\s-]/g, "")
+    .replace(/[^\p{L}\p{N}\p{M}_\s-]/gu, "")
     .replace(/[-\s]+/g, "_")
     .replace(/^_|_$/g, "");
 }
@@ -73,11 +84,10 @@ export function CategoryModal({ category, onClose, onSave, isSaving }: CategoryM
       setError(t("modal.errors.labelRequired"));
       return;
     }
-    // `slugify` keeps only Latin letters, digits and `_`, so a label written in
-    // a non-Latin script reduces to an empty slug — which the API rejects on
-    // `min_length`. Caught here, with the reason, rather than posting it and
-    // surfacing a validation error nobody can act on. Only on create: an
-    // existing category already has its slug.
+    // A label with no letters or digits at all — emoji only — slugifies to
+    // nothing, which the API rejects on `min_length`. Caught here with the
+    // reason rather than posting it and surfacing a validation error nobody
+    // can act on. Only on create: an existing category already has its slug.
     if (!isEdit && !slugify(label)) {
       setError(t("modal.errors.slugEmpty"));
       return;
