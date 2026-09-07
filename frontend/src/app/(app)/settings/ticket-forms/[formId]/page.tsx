@@ -265,6 +265,7 @@ function FieldEditor({
                 />
                 <button
                   onClick={handleAddOption}
+                  aria-label="Add option"
                   className="px-3 py-2 bg-muted hover:bg-accent text-foreground rounded-lg transition"
                 >
                   <Plus className="h-4 w-4" />
@@ -717,6 +718,7 @@ export default function FormBuilderPage() {
                 />
                 <button
                   onClick={handleCopyUrl}
+                  aria-label="Copy form URL"
                   className="px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg transition"
                 >
                   <Copy className="h-4 w-4" />
