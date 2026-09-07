@@ -4,7 +4,32 @@
       "subtitle": "Project settings"
     },
     "permissions": {
-      "subtitle": "Permissions and members"
+      "subtitle": "Permissions and members",
+      "loading": "Loading permissions…",
+      "notFoundDescription": "The project you're looking for doesn't exist.",
+      "membersHeading": "Project Members",
+      "membersSubtitle": "Assign project-specific roles to override organization roles",
+      "useOrgRoleInherited": "Use org role (inherited)",
+      "noMembers": "No members in this project yet",
+      "addFromWorkspace": "Workspace Members",
+      "inviteByEmail": "Invite by Email",
+      "memberLabel": "Member",
+      "selectMember": "Select member…",
+      "projectRoleOptional": "Project Role (optional)",
+      "useOrganizationRole": "Use organization role",
+      "useDefaultRole": "Use default role",
+      "adding": "Adding…",
+      "addMember": "Add Member",
+      "emailsLabel": "Email addresses (comma or newline separated)",
+      "guestNote": "Users will be added as guests if not already in the workspace",
+      "inviting": "Inviting…",
+      "sendInvites": "Send Invites",
+      "aboutRoles": "About Project Roles",
+      "inheritanceLabel": "Inheritance:",
+      "overrideLabel": "Override:",
+      "manageOrgRoles": "Manage organization roles →",
+      "removeFromProject": "Remove from project",
+      "confirmRemoveMember": "Remove this member from the project?"
     },
     "statuses": {
       "subtitle": "Task statuses"
@@ -25,6 +50,12 @@
     "breadcrumbs": {
       "settings": "Settings",
       "projects": "Projects"
-    }
+    },
+    "notFoundTitle": "Project Not Found",
+    "notFoundCta": "Back to Projects",
+    "usingWorkspaceDefaults": "Using workspace defaults",
+    "statusesEmptyTitle": "No Statuses",
+    "statusesEmptyDescription": "Add the project's first status to define its workflow.",
+    "categoriesHeading": "Categories"
   }
 }

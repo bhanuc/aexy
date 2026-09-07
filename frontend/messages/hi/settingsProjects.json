@@ -4,7 +4,32 @@
       "subtitle": "प्रोजेक्ट सेटिंग्स"
     },
     "permissions": {
-      "subtitle": "अनुमतियाँ और सदस्य"
+      "subtitle": "अनुमतियाँ और सदस्य",
+      "loading": "अनुमतियाँ लोड हो रही हैं…",
+      "notFoundDescription": "आप जो प्रोजेक्ट खोज रहे हैं वह मौजूद नहीं है।",
+      "membersHeading": "प्रोजेक्ट सदस्य",
+      "membersSubtitle": "संगठन भूमिकाओं के स्थान पर प्रोजेक्ट-विशिष्ट भूमिकाएँ सौंपें",
+      "useOrgRoleInherited": "संगठन भूमिका का उपयोग (विरासत में)",
+      "noMembers": "इस प्रोजेक्ट में अभी कोई सदस्य नहीं",
+      "addFromWorkspace": "वर्कस्पेस सदस्य",
+      "inviteByEmail": "ईमेल से आमंत्रित करें",
+      "memberLabel": "सदस्य",
+      "selectMember": "सदस्य चुनें…",
+      "projectRoleOptional": "प्रोजेक्ट भूमिका (वैकल्पिक)",
+      "useOrganizationRole": "संगठन भूमिका का उपयोग करें",
+      "useDefaultRole": "डिफ़ॉल्ट भूमिका का उपयोग करें",
+      "adding": "जोड़ा जा रहा है…",
+      "addMember": "सदस्य जोड़ें",
+      "emailsLabel": "ईमेल पते (कॉमा या नई पंक्ति से अलग)",
+      "guestNote": "जो उपयोगकर्ता वर्कस्पेस में नहीं हैं, उन्हें अतिथि के रूप में जोड़ा जाएगा",
+      "inviting": "आमंत्रित किया जा रहा है…",
+      "sendInvites": "आमंत्रण भेजें",
+      "aboutRoles": "प्रोजेक्ट भूमिकाओं के बारे में",
+      "inheritanceLabel": "विरासत:",
+      "overrideLabel": "ओवरराइड:",
+      "manageOrgRoles": "संगठन भूमिकाएँ प्रबंधित करें →",
+      "removeFromProject": "प्रोजेक्ट से हटाएँ",
+      "confirmRemoveMember": "इस सदस्य को प्रोजेक्ट से हटाएँ?"
     },
     "statuses": {
       "subtitle": "टास्क स्थितियाँ"
@@ -25,6 +50,12 @@
     "breadcrumbs": {
       "settings": "सेटिंग्स",
       "projects": "प्रोजेक्ट्स"
-    }
+    },
+    "notFoundTitle": "प्रोजेक्ट नहीं मिला",
+    "notFoundCta": "प्रोजेक्ट्स पर वापस",
+    "usingWorkspaceDefaults": "वर्कस्पेस डिफ़ॉल्ट का उपयोग",
+    "statusesEmptyTitle": "कोई स्थिति नहीं",
+    "statusesEmptyDescription": "इस प्रोजेक्ट का वर्कफ़्लो तय करने के लिए पहली स्थिति जोड़ें।",
+    "categoriesHeading": "श्रेणियाँ"
   }
 }
