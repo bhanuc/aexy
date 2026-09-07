@@ -94,8 +94,14 @@ export function CategoryModal({ category, onClose, onSave, isSaving }: CategoryM
         <form onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm text-muted-foreground mb-1">Label</label>
+              <label
+                htmlFor="category-label"
+                className="block text-sm text-muted-foreground mb-1"
+              >
+                Label
+              </label>
               <input
+                id="category-label"
                 type="text"
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
@@ -103,18 +109,40 @@ export function CategoryModal({ category, onClose, onSave, isSaving }: CategoryM
                 autoFocus
                 className="w-full px-4 py-2 bg-muted border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary-500"
               />
-              {!isEdit && label.trim() && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  slug: <span className="font-mono">{slugify(label)}</span>
-                </p>
-              )}
-              {isEdit && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  slug: <span className="font-mono">{category!.slug}</span>
-                  {" "}
-                  (locked — statuses reference it)
-                </p>
-              )}
+              <p className="mt-1 text-xs text-muted-foreground">
+                What the bucket is called on the board. Rename it any time.
+              </p>
+            </div>
+
+            {/* The slug as its own read-only field rather than a caption under
+                the label. Both are one word for buckets like `needs_revision`,
+                so a caption left people unsure which of the two they had just
+                typed — a field they cannot type into answers that by itself.
+                Read-only rather than disabled: still focusable, announced, and
+                copyable, which matters because a status's category is stored
+                as this string. */}
+            <div>
+              <label
+                htmlFor="category-slug"
+                className="block text-sm text-muted-foreground mb-1"
+              >
+                Slug
+              </label>
+              <input
+                id="category-slug"
+                type="text"
+                readOnly
+                aria-readonly="true"
+                aria-describedby="category-slug-hint"
+                value={isEdit ? category!.slug : slugify(label)}
+                placeholder="design_review"
+                className="w-full px-4 py-2 bg-muted/50 border border-dashed border-border rounded-lg font-mono text-sm text-muted-foreground placeholder-muted-foreground/60 focus:outline-none cursor-default"
+              />
+              <p id="category-slug-hint" className="mt-1 text-xs text-muted-foreground">
+                {isEdit
+                  ? "Fixed — statuses already reference it."
+                  : "Generated from the label, and fixed once saved: statuses reference it."}
+              </p>
             </div>
 
             <div>

@@ -222,6 +222,17 @@ there rather than letting an edit reach every other project. The panel is a
 labelled landmark, so it is reachable by region on a page that is otherwise one
 long form.
 
+### Changed: a category's slug is now a field you can see, not a caption
+
+Adding a category asks for a label and derives the slug from it. The slug was a
+small line of grey text under the input, and for a one-word bucket the two read
+identically — so it was genuinely unclear which of the two you had just typed.
+The slug is now its own field, filling in as you type the label and marked
+read-only, with a line under each saying which is which: the label is what the
+board shows and can be renamed any time, the slug is generated and fixed once
+saved because statuses reference it. Editing a category shows the existing slug
+in the same field. Nothing about what gets saved has changed.
+
 ### Fixed: project settings looked like a different place on each tab
 
 Every tab under a project's settings drew its own header, and they had drifted.
