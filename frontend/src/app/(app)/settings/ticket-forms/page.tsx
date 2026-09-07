@@ -36,6 +36,7 @@ import { useTicketForms, useTicketFormTemplates } from "@/hooks/useTicketing";
 import { TicketFormTemplateType, FormTemplate } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 // Maps the icon *name* returned by the templates API to a lucide component.
 // The picker is data-driven off the API, so any new backend template renders
@@ -212,9 +213,14 @@ function FormRow({ form, onDuplicate, onDelete, isDuplicating, isDeleting, templ
 
       {/* Duplicate Modal */}
       {showDuplicateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-card rounded-xl p-6 w-full max-w-md">
-            <h3 className="text-foreground font-medium mb-4">Duplicate Form</h3>
+        <Dialog
+          open
+          onOpenChange={(next) => {
+            if (!next) setShowDuplicateModal(false);
+          }}
+        >
+          <DialogContent className="max-w-md" aria-describedby={undefined}>
+            <DialogTitle className="text-foreground font-medium mb-4">Duplicate Form</DialogTitle>
             <div>
               <label className="block text-sm text-muted-foreground mb-1">New Form Name</label>
               <input
@@ -245,8 +251,8 @@ function FormRow({ form, onDuplicate, onDelete, isDuplicating, isDeleting, templ
                 Duplicate
               </button>
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
     </>
   );
@@ -385,9 +391,14 @@ export default function TicketFormsPage() {
 
       {/* Create Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-card rounded-xl p-6 w-full max-w-lg">
-            <h3 className="text-lg font-medium text-foreground mb-4">Create Ticket Form</h3>
+        <Dialog
+          open
+          onOpenChange={(next) => {
+            if (!next) setShowCreateModal(false);
+          }}
+        >
+          <DialogContent className="max-w-lg" aria-describedby={undefined}>
+            <DialogTitle className="text-lg font-medium text-foreground mb-4">Create Ticket Form</DialogTitle>
 
             {/* Mode Toggle */}
             <div className="flex gap-1 bg-muted p-1 rounded-lg mb-6">
@@ -501,8 +512,8 @@ export default function TicketFormsPage() {
                 )}
               </button>
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
     </SettingsPage>
   );

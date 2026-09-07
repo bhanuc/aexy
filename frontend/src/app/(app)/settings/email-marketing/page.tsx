@@ -53,6 +53,7 @@ import {
   SettingsPage,
   SettingsSection,
 } from "@/components/settings/SettingsPrimitives";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 type TabType = "domains" | "providers" | "pools" | "categories";
@@ -1097,10 +1098,15 @@ function EmailSettingsContent() {
 
       {/* Add Domain Modal */}
       {showAddDomain && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-          <div className="bg-background border border-border rounded-xl w-full max-w-md">
+        <Dialog
+          open
+          onOpenChange={(next) => {
+            if (!next) setShowAddDomain(false);
+          }}
+        >
+          <DialogContent className="max-w-md p-0" aria-describedby={undefined}>
             <div className="p-4 border-b border-border">
-              <h3 className="text-lg font-medium text-foreground">Add Sending Domain</h3>
+              <DialogTitle className="text-lg font-medium text-foreground">Add Sending Domain</DialogTitle>
             </div>
             <div className="p-4">
               <label className="block text-sm text-muted-foreground mb-2">Domain</label>
@@ -1130,16 +1136,21 @@ function EmailSettingsContent() {
                 Add Domain
               </button>
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* Add Provider Modal */}
       {showAddProvider && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-          <div className="bg-background border border-border rounded-xl w-full max-w-md">
+        <Dialog
+          open
+          onOpenChange={(next) => {
+            if (!next) setShowAddProvider(false);
+          }}
+        >
+          <DialogContent className="max-w-md p-0" aria-describedby={undefined}>
             <div className="p-4 border-b border-border">
-              <h3 className="text-lg font-medium text-foreground">Add Email Provider</h3>
+              <DialogTitle className="text-lg font-medium text-foreground">Add Email Provider</DialogTitle>
             </div>
             <div className="p-4 space-y-4">
               <div>
@@ -1185,18 +1196,23 @@ function EmailSettingsContent() {
                 Add Provider
               </button>
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* Edit Provider Modal */}
       {editingProvider && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-          <div className="bg-background border border-border rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <Dialog
+          open
+          onOpenChange={(next) => {
+            if (!next) setEditingProvider(null);
+          }}
+        >
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0" aria-describedby={undefined}>
             <div className="p-4 border-b border-border">
-              <h3 className="text-lg font-medium text-foreground">
+              <DialogTitle className="text-lg font-medium text-foreground">
                 Configure {editingProvider.provider_type.toUpperCase()} Provider
-              </h3>
+              </DialogTitle>
             </div>
             <div className="p-4 space-y-4">
               <div>
@@ -1292,16 +1308,21 @@ function EmailSettingsContent() {
                 Save Changes
               </button>
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* Add Category Modal */}
       {showAddCategory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-          <div className="bg-background border border-border rounded-xl w-full max-w-md">
+        <Dialog
+          open
+          onOpenChange={(next) => {
+            if (!next) setShowAddCategory(false);
+          }}
+        >
+          <DialogContent className="max-w-md p-0" aria-describedby={undefined}>
             <div className="p-4 border-b border-border">
-              <h3 className="text-lg font-medium text-foreground">Add Subscription Category</h3>
+              <DialogTitle className="text-lg font-medium text-foreground">Add Subscription Category</DialogTitle>
             </div>
             <div className="p-4 space-y-4">
               <div>
@@ -1369,16 +1390,21 @@ function EmailSettingsContent() {
                 Add Category
               </button>
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* Edit Category Modal */}
       {editingCategory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-          <div className="bg-background border border-border rounded-xl w-full max-w-md">
+        <Dialog
+          open
+          onOpenChange={(next) => {
+            if (!next) setEditingCategory(null);
+          }}
+        >
+          <DialogContent className="max-w-md p-0" aria-describedby={undefined}>
             <div className="p-4 border-b border-border">
-              <h3 className="text-lg font-medium text-foreground">Edit Category</h3>
+              <DialogTitle className="text-lg font-medium text-foreground">Edit Category</DialogTitle>
             </div>
             <div className="p-4 space-y-4">
               <div>
@@ -1431,8 +1457,8 @@ function EmailSettingsContent() {
                 Save Changes
               </button>
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
     </>
   );
