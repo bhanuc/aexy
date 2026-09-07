@@ -73,6 +73,7 @@ export function SortableStatusItem({
         <button
           {...attributes}
           {...listeners}
+          aria-label={`Reorder ${status.name}`}
           className="p-1 text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing"
         >
           <GripVertical className="h-4 w-4" />

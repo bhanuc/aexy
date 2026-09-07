@@ -134,6 +134,7 @@ function SortableFieldItem({ field, isAdmin, onEdit, onDelete }: SortableFieldIt
         <button
           {...attributes}
           {...listeners}
+          aria-label={`Reorder ${field.name}`}
           className="p-1 text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing"
         >
           <GripVertical className="h-4 w-4" />
@@ -348,6 +349,7 @@ function FieldModal({ field, onClose, onSave, isSaving }: FieldModalProps) {
                     <button
                       type="button"
                       onClick={handleAddOption}
+                      aria-label="Add option"
                       className="p-1.5 text-muted-foreground hover:text-primary-400 transition"
                     >
                       <Plus className="h-4 w-4" />

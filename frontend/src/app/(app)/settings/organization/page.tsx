@@ -269,6 +269,8 @@ function MemberRow({
             <button
               ref={buttonRef}
               onClick={handleOpenMenu}
+              aria-label={`Manage ${member.developer_name || member.developer_email || "member"}`}
+              aria-haspopup="menu"
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition"
             >
               <MoreVertical className="h-4 w-4" />

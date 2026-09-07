@@ -222,6 +222,14 @@ there rather than letting an edit reach every other project. The panel is a
 labelled landmark, so it is reachable by region on a page that is otherwise one
 long form.
 
+### Fixed: icon-only buttons in settings were announced as just "button"
+
+Eleven controls across settings had nothing but an icon inside them and no
+label, so a screen reader read each as "button" and nothing more: two add-option
+buttons, two deletes, a remove, two reorder handles, a row menu, a copy-URL and
+two add-to-list buttons. They now say what they do, and name the row they act
+on where there is one.
+
 ### Fixed: settings areas that had no shared navigation
 
 Four pages had no way out. `/settings/access/templates`, `/settings/access/logs`,

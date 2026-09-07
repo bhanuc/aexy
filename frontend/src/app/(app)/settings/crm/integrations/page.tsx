@@ -880,6 +880,7 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                             />
                             <button
                               onClick={addSubjectKeyword}
+                              aria-label="Add subject keyword"
                               className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm"
                             >
                               <Plus className="w-4 h-4" />
@@ -916,6 +917,7 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                             />
                             <button
                               onClick={addDomain}
+                              aria-label="Add domain"
                               className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm"
                             >
                               <Plus className="w-4 h-4" />
