@@ -11,8 +11,6 @@ import {
   MoreVertical,
   Plus,
   RefreshCw,
-  Settings,
-  Shield,
   Trash2,
   UserMinus,
   Users,
@@ -31,6 +29,10 @@ import { Project, CustomRole } from "@/lib/api";
 import { UpgradeModal } from "@/components/PremiumGate";
 import { useTranslations } from "next-intl";
 import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import {
+  PROJECT_SETTINGS_TABS,
+  projectSettingsHref,
+} from "@/components/settings/ProjectSettingsPage";
 
 function getRoleBadgeColor(roleName: string | null) {
   if (!roleName) return "bg-muted text-muted-foreground";
@@ -202,6 +204,10 @@ function ProjectCard({
   onDelete,
   canUseProjectFeatures,
 }: ProjectCardProps) {
+  // The row menu's destinations are the project settings tabs, so their labels
+  // come from that namespace rather than this page's.
+  const tTabs = useTranslations("settingsProjects");
+  const tList = useTranslations("settingsProjectsList");
   const [expanded, setExpanded] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -324,6 +330,9 @@ function ProjectCard({
                   e.stopPropagation();
                   setShowMenu(!showMenu);
                 }}
+                aria-label={tList("manageProject", { name: project.name })}
+                aria-haspopup="menu"
+                aria-expanded={showMenu}
                 className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition"
               >
                 <MoreVertical className="h-4 w-4" />
@@ -331,24 +340,30 @@ function ProjectCard({
               {showMenu && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
-                  <div className="absolute right-0 top-full mt-1 w-48 bg-muted rounded-lg shadow-xl z-20 py-1">
-                    <Link
-                      href={`/settings/projects/${project.id}`}
-                      className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-accent flex items-center gap-2"
-                      onClick={() => setShowMenu(false)}
-                    >
-                      <Settings className="h-4 w-4" />
-                      Project Settings
-                    </Link>
-                    <Link
-                      href={`/settings/projects/${project.id}/permissions`}
-                      className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-accent flex items-center gap-2"
-                      onClick={() => setShowMenu(false)}
-                    >
-                      <Shield className="h-4 w-4" />
-                      Permissions
-                    </Link>
+                  <div
+                    role="menu"
+                    aria-label={project.name}
+                    className="absolute right-0 top-full mt-1 w-48 bg-muted rounded-lg shadow-xl z-20 py-1"
+                  >
+                    {/* Same destinations as the settings tab strip, from the
+                        same list — this menu used to offer two of the five, so
+                        Repositories, Statuses and Tracker were reachable only
+                        by opening a project first. */}
+                    {PROJECT_SETTINGS_TABS.map((tab) => (
+                      <Link
+                        key={tab.key}
+                        role="menuitem"
+                        href={projectSettingsHref(project.id, tab)}
+                        className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-accent flex items-center gap-2"
+                        onClick={() => setShowMenu(false)}
+                      >
+                        <tab.icon className="h-4 w-4" />
+                        {tTabs(tab.menuLabelKey ?? tab.labelKey)}
+                      </Link>
+                    ))}
+                    <div className="my-1 border-t border-border" />
                     <button
+                      role="menuitem"
                       onClick={() => {
                         onDelete(project.id);
                         setShowMenu(false);
@@ -356,7 +371,7 @@ function ProjectCard({
                       className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-accent flex items-center gap-2"
                     >
                       <Trash2 className="h-4 w-4" />
-                      Delete Project
+                      {tList("deleteProject")}
                     </button>
                   </div>
                 </>

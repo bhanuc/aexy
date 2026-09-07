@@ -59,6 +59,30 @@ there rather than letting an edit reach every other project. The panel is a
 labelled landmark, so it is reachable by region on a page that is otherwise one
 long form.
 
+### Fixed: project settings looked like a different place on each tab
+
+Every tab under a project's settings drew its own header, and they had drifted.
+General and Tracker listed all five tabs; Permissions and Statuses listed three,
+so there was no way to reach Repositories or Tracker from either; Repositories
+had no tab strip at all. The titles disagreed too — some tabs showed the
+project's name, others a generic page title — so the same project read as three
+unrelated screens. Tracker labelled its own tab from a translation key, leaving
+the strip reading one thing on four pages and another on the fifth.
+
+There is now one header. It renders the project's name, a consistent breadcrumb
+trail, and the full tab strip, and it works out which tab is current from the
+URL rather than being told, so a page cannot mark the wrong one. The tab labels
+were already translated in `en` and `hi` and had never been used; they are now.
+
+The row menu on the projects list offered two of those five destinations, so
+Repositories, Statuses and Tracker could only be reached by opening a project
+first. It reads the same list as the tab strip. Its trigger also had no
+accessible name, and the menu was a plain `div` — it is a named menu now.
+
+Not folded in: **On-call**. It sits under the project settings URL but reads
+that id as a *team*, so it is a team page wearing a project's address. Putting
+it in the strip would have offered a tab that resolves to a different thing.
+
 ### Fixed: kanban columns on the workspace task board had no name
 
 Each column on **Sprints → Tasks** was an unnamed `div`, so a screen reader
