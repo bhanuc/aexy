@@ -96,8 +96,17 @@ export function CategoryModal({ category, onClose, onSave, isSaving }: CategoryM
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-card rounded-xl w-full max-w-md p-6">
-        <h3 className="text-xl font-semibold text-foreground mb-4">
+      {/* See StatusModal: the overlay needs modal semantics of its own. */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="category-modal-title"
+        className="bg-card rounded-xl w-full max-w-md p-6"
+      >
+        <h3
+          id="category-modal-title"
+          className="text-xl font-semibold text-foreground mb-4"
+        >
           {isEdit ? t("modal.editTitle") : t("modal.createTitle")}
         </h3>
         <form onSubmit={handleSubmit}>

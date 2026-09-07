@@ -222,6 +222,15 @@ there rather than letting an edit reach every other project. The panel is a
 labelled landmark, so it is reachable by region on a page that is otherwise one
 long form.
 
+### Changed: the status dialog is translated, and names its buckets
+
+The status dialog was hardcoded English, and it printed each category's
+semantics as the raw slug — `active`, `cancelled` — under the bucket name. It
+now reads the same words the category dialog defines, so the two cannot drift,
+and the whole dialog is translated in `en` and `hi`. Both dialogs also announce
+themselves as dialogs; they were anonymous overlays a screen reader neither
+named nor confined the user to.
+
 ### Fixed: a category label in a non-Latin script was rejected without a reason
 
 The slug is derived from the label by keeping Latin letters and digits, so a
