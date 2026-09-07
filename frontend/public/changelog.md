@@ -5,6 +5,81 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.37.1] - 2026-09-07
+
+Adding a status category to a project no longer empties the project's category
+list.
+
+### Fixed: adding one category left the project with only that category
+
+A project's status settings lists the six categories it inherits from the
+workspace — Backlog, To Do, In Progress, In Review, Done, Cancelled — with an
+Add Category button beside them. Adding a seventh left the project showing
+exactly one: the one just added. The status modal's bucket dropdown showed the
+same single option, so no status could be filed anywhere else.
+
+Nothing was deleted. A project either has its own categories or inherits the
+workspace's, never both, and that button wrote the new category into the
+project. So the project stopped inheriting, and the six it had been showing a
+moment earlier were still in place but no longer being read. The same button
+for statuses had always copied the workspace set into the project before adding
+to it; the one for categories had not.
+
+Adding a category to a project now copies the inherited set in first, keeping
+each bucket's label, colour and semantics. Projects that have not been
+customized are unaffected and keep inheriting.
+
+**Recovering a project this already happened to:**
+`scripts/migrate_status_categories_project_backfill.sql` puts the missing
+inherited buckets back, keeping the workspace's own wording for any that were
+renamed, and reorders so the inherited ones come first and the project's
+additions follow in the order they were added. It is additive and safe to
+re-run; projects still inheriting are left alone, and so is any project whose
+category order was already deliberate. To see what a workspace actually looks like first — which
+projects are affected, whether any scope has lost its default status or has
+nowhere to put finished work, and whether any task's status matches no column —
+run `docker exec aexy-backend python scripts/diagnose_status_config.py
+<workspace_id>`, which reads and changes nothing.
+
+### Fixed: editing a project's inherited category changed every other project
+
+The inherited categories on a project's status page were offered with a full
+edit and delete menu, and using it edited the workspace's category — silently
+changing every other project that inherits it. Those rows are now shown as
+inherited, with a note saying so and where to edit them for the whole
+workspace. Adding a category is still offered, and now says what it does.
+
+Workspace task settings had no way to edit a category to send anyone to — its
+Status Categories panel was a fixed legend of three names that did not reflect
+the workspace's real buckets. It is now the editor for them, following the same
+scope picker as the statuses above it: add, rename, recolour and change the
+semantics of the workspace's own categories, or pick a project to work on that
+project's. A project that is still inheriting shows the same inherited note
+there rather than letting an edit reach every other project. The panel is a
+labelled landmark, so it is reachable by region on a page that is otherwise one
+long form.
+
+### Fixed: a project could not delete its own copy of a category
+
+Once a project has its own categories, each copy shares a slug with the
+workspace original. The check that stops a category being deleted while
+statuses still use it looked across the whole workspace, so a project's copy of
+Done or To Do counted the workspace's statuses as users of it and refused to be
+deleted, permanently. The check now counts only the statuses that actually
+resolve to the category being deleted, and ignores statuses that have already
+been deleted.
+
+Which statuses those are is not simply "the ones in the same scope". A project
+can have its own categories while its statuses still come from the workspace —
+adding a category forks the categories only — so for a project's category the
+check follows wherever that project's board is drawn from, and a project cannot
+delete a bucket the board it is showing still uses. In the other direction, a
+workspace category is kept in use by the workspace's own statuses and by every
+project that inherits the slug, but not by a project holding its own copy of it:
+those statuses point at the copy. Without that, one project forking its
+categories was enough to make an unused workspace category undeletable for
+good.
+
 ## [0.37.0] - 2026-09-06
 
 Agents get an identity, a gate that is closed by default, a ledger of what they

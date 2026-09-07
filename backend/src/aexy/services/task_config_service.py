@@ -3,7 +3,7 @@
 import re
 from uuid import uuid4
 
-from sqlalchemy import select, func, update
+from sqlalchemy import or_, select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aexy.models.sprint import (
@@ -125,6 +125,26 @@ class TaskConfigService:
         if own:
             return own
         return await self.get_statuses(workspace_id, include_inactive=include_inactive)
+
+    async def _project_has_own_statuses(
+        self,
+        workspace_id: str,
+        project_id: str,
+    ) -> bool:
+        """Whether ``get_statuses_for_project`` resolves to this project's own
+        rows rather than the workspace defaults.
+
+        Matches that resolver exactly — active rows only, so a project whose
+        only status rows are soft-deleted counts as still inheriting.
+        """
+        stmt = (
+            select(WorkspaceTaskStatus.id)
+            .where(WorkspaceTaskStatus.workspace_id == workspace_id)
+            .where(WorkspaceTaskStatus.project_id == project_id)
+            .where(WorkspaceTaskStatus.is_active == True)  # noqa: E712
+            .limit(1)
+        )
+        return (await self.db.execute(stmt)).first() is not None
 
     async def get_status(self, status_id: str) -> WorkspaceTaskStatus | None:
         """Get a status by ID."""
@@ -535,6 +555,45 @@ class TaskConfigService:
                 return in_project
         return await self.get_category_by_slug(workspace_id, slug, project_id=None)
 
+    async def clone_workspace_categories_to_project(
+        self,
+        workspace_id: str,
+        project_id: str,
+    ) -> list[WorkspaceStatusCategory]:
+        """Copy workspace-default categories into a project so it can diverge.
+
+        Mirror of ``clone_workspace_statuses_to_project``. Idempotent: skips
+        if the project already has categories of its own. Lazy-seeds the
+        workspace defaults for workspaces predating the categories table so
+        the project never forks off an empty set.
+        """
+        existing = await self.get_categories(workspace_id, project_id=project_id)
+        if existing:
+            return existing
+
+        defaults = await self.get_categories(workspace_id, project_id=None)
+        if not defaults:
+            await self.seed_default_categories(workspace_id)
+            defaults = await self.get_categories(workspace_id, project_id=None)
+
+        cloned: list[WorkspaceStatusCategory] = []
+        for src in defaults:
+            row = WorkspaceStatusCategory(
+                id=str(uuid4()),
+                workspace_id=workspace_id,
+                project_id=project_id,
+                slug=src.slug,
+                label=src.label,
+                color=src.color,
+                semantics=src.semantics,
+                position=src.position,
+                is_default=src.is_default,
+            )
+            self.db.add(row)
+            cloned.append(row)
+        await self.db.flush()
+        return cloned
+
     async def create_category(
         self,
         workspace_id: str,
@@ -545,7 +604,19 @@ class TaskConfigService:
         is_default: bool = False,
         project_id: str | None = None,
     ) -> WorkspaceStatusCategory:
-        """Create a category in a workspace (or project) scope."""
+        """Create a category in a workspace (or project) scope.
+
+        For a project-scoped create on a project that's currently on fallback
+        (zero project rows), clone the workspace categories in first — the
+        same guard ``create_status`` applies. Without it the resolver in
+        ``get_categories_for_project`` flips from "N inherited categories" to
+        "1 manually-added category" the moment the first project row lands,
+        which reads to the operator as "adding a category deleted all the
+        others".
+        """
+        if project_id is not None:
+            await self.clone_workspace_categories_to_project(workspace_id, project_id)
+
         existing = await self.get_category_by_slug(workspace_id, slug, project_id=project_id)
         if existing is not None:
             raise TaskValidationError("category_slug_exists")
@@ -611,7 +682,54 @@ class TaskConfigService:
             select(func.count(WorkspaceTaskStatus.id))
             .where(WorkspaceTaskStatus.workspace_id == category.workspace_id)
             .where(WorkspaceTaskStatus.category == category.slug)
+            .where(WorkspaceTaskStatus.is_active.is_(True))
         )
+        if category.project_id is not None:
+            # Only the statuses this project actually renders can reference
+            # this row: statuses in another scope resolve the slug against
+            # their own scope, never this one. Without a scope filter a
+            # cloned project category (`done`, `todo`, …) looks permanently
+            # in-use because the workspace defaults share its slug.
+            #
+            # Which rows those are depends on where the project's statuses
+            # come from — a project can fork its categories without forking
+            # its statuses (`create_category` clones categories only), and
+            # then its board is still drawn from the workspace defaults.
+            # Filtering on `project_id == this project` in that state finds
+            # nothing and lets the project delete a bucket its own board is
+            # using, which is what leaves a status with no column.
+            if await self._project_has_own_statuses(
+                str(category.workspace_id), str(category.project_id)
+            ):
+                in_use_stmt = in_use_stmt.where(
+                    WorkspaceTaskStatus.project_id == category.project_id
+                )
+            else:
+                in_use_stmt = in_use_stmt.where(
+                    WorkspaceTaskStatus.project_id.is_(None)
+                )
+        else:
+            # A workspace default is referenced by the workspace's own
+            # statuses plus the statuses of every project whose category
+            # scope doesn't define this slug — those resolve it by falling
+            # back here. A project holding its own copy of the slug points at
+            # that copy instead, so counting it would make an unused
+            # workspace category permanently undeletable the moment any
+            # project forks its categories.
+            shadowing_projects = (
+                select(WorkspaceStatusCategory.project_id)
+                .where(
+                    WorkspaceStatusCategory.workspace_id == category.workspace_id
+                )
+                .where(WorkspaceStatusCategory.project_id.is_not(None))
+                .where(WorkspaceStatusCategory.slug == category.slug)
+            )
+            in_use_stmt = in_use_stmt.where(
+                or_(
+                    WorkspaceTaskStatus.project_id.is_(None),
+                    WorkspaceTaskStatus.project_id.not_in(shadowing_projects),
+                )
+            )
         if (await self.db.execute(in_use_stmt)).scalar():
             raise TaskValidationError("category_in_use")
 

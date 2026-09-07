@@ -28,10 +28,20 @@ import { useWorkspace, useWorkspaceMembers } from "@/hooks/useWorkspace";
 import { useTaskStatuses, useStatusCategories, useCustomFields } from "@/hooks/useTaskConfig";
 import { useProjects } from "@/hooks/useProjects";
 import { useAuth } from "@/hooks/useAuth";
+import { CategoryModal } from "@/components/settings/CategoryModal";
 import { DeleteStatusModal } from "@/components/settings/DeleteStatusModal";
+import { SortableCategoryItem } from "@/components/settings/SortableCategoryItem";
 import { SortableStatusItem } from "@/components/settings/SortableStatusItem";
 import { StatusModal } from "@/components/settings/StatusModal";
-import { TaskStatusConfig, CustomField, StatusCategory, CustomFieldType, CustomFieldOption } from "@/lib/api";
+import {
+  TaskStatusConfig,
+  CustomField,
+  CategorySemantics,
+  StatusCategory,
+  WorkspaceStatusCategory,
+  CustomFieldType,
+  CustomFieldOption,
+} from "@/lib/api";
 import {
   DndContext,
   closestCenter,
@@ -56,12 +66,6 @@ import {
 } from "@/components/settings/SettingsPrimitives";
 
 type TabType = "statuses" | "fields";
-
-const STATUS_CATEGORIES: { value: StatusCategory; label: string; color: string }[] = [
-  { value: "todo", label: "To Do", color: "bg-blue-500" },
-  { value: "in_progress", label: "In Progress", color: "bg-yellow-500" },
-  { value: "done", label: "Done", color: "bg-green-500" },
-];
 
 const FIELD_TYPES: { value: CustomFieldType; label: string; icon: React.ReactNode; description: string }[] = [
   { value: "text", label: "Text", icon: <Type className="h-4 w-4" />, description: "Single line text" },
@@ -467,10 +471,16 @@ export default function TaskConfigPage() {
     isDeleting: isDeletingStatus,
   } = useTaskStatuses(currentWorkspaceId, selectedProjectId);
 
-  const { categories: statusCategories } = useStatusCategories(
-    currentWorkspaceId,
-    selectedProjectId,
-  );
+  const {
+    categories: statusCategories,
+    isLoading: categoriesLoading,
+    createCategory,
+    updateCategory,
+    deleteCategory,
+    isCreating: isCreatingCategory,
+    isUpdating: isUpdatingCategory,
+    isUsingWorkspaceFallback: categoriesInherited,
+  } = useStatusCategories(currentWorkspaceId, selectedProjectId);
 
   const {
     fields,
@@ -486,7 +496,10 @@ export default function TaskConfigPage() {
   const [activeTab, setActiveTab] = useState<TabType>("statuses");
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showFieldModal, setShowFieldModal] = useState(false);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [editingStatus, setEditingStatus] = useState<TaskStatusConfig | null>(null);
+  const [editingCategory, setEditingCategory] =
+    useState<WorkspaceStatusCategory | null>(null);
   const [editingField, setEditingField] = useState<CustomField | null>(null);
   // The status the operator clicked Delete on — drives the confirm modal.
   const [deletingStatus, setDeletingStatus] = useState<TaskStatusConfig | null>(null);
@@ -553,6 +566,57 @@ export default function TaskConfigPage() {
         console.error("Failed to delete field:", error);
         toast.error("Failed to delete field");
       }
+    }
+  };
+
+  const handleSaveCategory = async (data: {
+    slug?: string;
+    label: string;
+    color: string;
+    semantics: CategorySemantics;
+  }) => {
+    if (editingCategory) {
+      await updateCategory({
+        categoryId: editingCategory.id,
+        data: {
+          label: data.label,
+          color: data.color,
+          semantics: data.semantics,
+        },
+      });
+      toast.success("Category updated");
+    } else {
+      await createCategory({
+        slug: data.slug!,
+        label: data.label,
+        color: data.color,
+        semantics: data.semantics,
+      });
+      toast.success("Category created");
+    }
+    setEditingCategory(null);
+  };
+
+  const handleDeleteCategory = async (cat: WorkspaceStatusCategory) => {
+    // Advisory only — the server runs the authoritative scope-aware check.
+    const inUse = statuses.some((s) => s.category === cat.slug);
+    if (inUse) {
+      toast.error(
+        `Can't delete "${cat.label}" — statuses still use it. Reassign them first.`,
+      );
+      return;
+    }
+    if (!confirm(`Delete category "${cat.label}"?`)) return;
+    try {
+      await deleteCategory(cat.id);
+      toast.success("Category deleted");
+    } catch (err) {
+      const msg = getApiErrorMessage(err, "Failed to delete");
+      toast.error(
+        /category_in_use/i.test(msg)
+          ? "This category is still in use by one or more statuses."
+          : msg,
+      );
     }
   };
 
@@ -775,24 +839,97 @@ export default function TaskConfigPage() {
                   </div>
                 )}
 
-                {/* Category Legend */}
-                <div className="mt-6 p-4 bg-card/50 rounded-lg">
-                  <h4 className="text-sm font-medium text-foreground mb-2">Status Categories</h4>
-                  <div className="flex flex-wrap gap-4 text-sm">
-                    {STATUS_CATEGORIES.map((cat) => (
-                      <div key={cat.value} className="flex items-center gap-2">
-                        <div className={`w-3 h-3 ${cat.color} rounded-full`} />
-                        <span className="text-muted-foreground">{cat.label}</span>
-                        <span className="text-muted-foreground">-</span>
-                        <span className="text-muted-foreground">
-                          {cat.value === "todo" && "Not started tasks"}
-                          {cat.value === "in_progress" && "Active work in progress"}
-                          {cat.value === "done" && "Completed tasks"}
-                        </span>
-                      </div>
-                    ))}
+                {/* Status Categories — the buckets statuses belong to, in
+                    whichever scope the picker above selects. This is the
+                    workspace-level editor for them; the project status page
+                    links here for shared buckets, so it has to actually be
+                    able to edit them. */}
+                <section
+                  className="mt-8"
+                  aria-labelledby="status-categories-heading"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                    <div>
+                      <h2
+                        id="status-categories-heading"
+                        className="text-lg font-medium text-foreground"
+                      >
+                        Status Categories
+                      </h2>
+                      <p className="text-muted-foreground text-sm">
+                        Buckets that statuses belong to. Each carries a
+                        semantics flag (Open / Active / Done / Cancelled) used
+                        for burndown and velocity.
+                      </p>
+                    </div>
+                    {isAdmin && (
+                      <button
+                        onClick={() => {
+                          setEditingCategory(null);
+                          setShowCategoryModal(true);
+                        }}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-muted hover:bg-accent text-foreground rounded-lg transition text-sm whitespace-nowrap"
+                      >
+                        <Plus className="h-4 w-4" />
+                        Add Category
+                      </button>
+                    )}
                   </div>
-                </div>
+
+                  {/* Same rule as the project status page: rows shown for a
+                      project that hasn't forked are the workspace's, so
+                      editing them here would change every other project that
+                      inherits them. Switch the picker to Workspace defaults
+                      to edit them deliberately. */}
+                  {categoriesInherited && (
+                    <div className="mb-4 flex items-start gap-3 rounded-lg border border-border bg-muted/40 p-3">
+                      <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                      <p className="text-sm text-muted-foreground">
+                        These categories are inherited from the workspace.
+                        Adding one copies the full set into this project first,
+                        so nothing here disappears — after that the project
+                        keeps its own buckets and workspace changes no longer
+                        reach it. To rename or recolor a shared bucket for
+                        every project, switch the scope above to{" "}
+                        <span className="text-foreground">
+                          Workspace defaults
+                        </span>
+                        .
+                      </p>
+                    </div>
+                  )}
+
+                  {categoriesLoading ? (
+                    <div className="space-y-2">
+                      {[1, 2, 3].map((i) => (
+                        <div
+                          key={i}
+                          className="h-14 bg-card rounded-lg animate-pulse"
+                        />
+                      ))}
+                    </div>
+                  ) : statusCategories.length > 0 ? (
+                    <div className="space-y-2">
+                      {statusCategories.map((cat) => (
+                        <SortableCategoryItem
+                          key={cat.id}
+                          category={cat}
+                          isAdmin={isAdmin && !categoriesInherited}
+                          onEdit={(c) => {
+                            setEditingCategory(c);
+                            setShowCategoryModal(true);
+                          }}
+                          onDelete={handleDeleteCategory}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="bg-card rounded-xl p-8 text-center text-sm text-muted-foreground">
+                      No categories yet — they&apos;ll seed automatically when
+                      you save your first status.
+                    </div>
+                  )}
+                </section>
               </div>
             )}
 
@@ -898,6 +1035,18 @@ export default function TaskConfigPage() {
           }}
           onSave={handleSaveStatus}
           isSaving={isCreatingStatus || isUpdatingStatus}
+        />
+      )}
+
+      {showCategoryModal && (
+        <CategoryModal
+          category={editingCategory}
+          onClose={() => {
+            setShowCategoryModal(false);
+            setEditingCategory(null);
+          }}
+          onSave={handleSaveCategory}
+          isSaving={isCreatingCategory || isUpdatingCategory}
         />
       )}
 
