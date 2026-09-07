@@ -247,6 +247,7 @@ function FieldEditor({
                     />
                     <button
                       onClick={() => handleRemoveOption(index)}
+                      aria-label="Remove option"
                       className="p-2 text-muted-foreground hover:text-red-400 hover:bg-accent rounded-lg transition"
                     >
                       <Trash2 className="h-4 w-4" />

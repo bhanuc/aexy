@@ -478,6 +478,7 @@ function ConnectedIntegration({
           <ConnectionStatusBadge connected />
           <div className="relative">
             <button
+              aria-label={`Manage ${type === "jira" ? "Jira" : "GitHub"} integration`}
               onClick={() => setShowMenu(!showMenu)}
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition"
             >
@@ -1166,6 +1167,7 @@ function IntegrationsPageContent() {
                             </div>
                             <button
                               onClick={() => removeSlackChannel(channel.id)}
+                              aria-label="Remove Slack channel"
                               className="p-1.5 text-muted-foreground hover:text-red-400 hover:bg-accent rounded transition"
                             >
                               <Trash2 className="h-4 w-4" />

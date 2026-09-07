@@ -291,6 +291,7 @@ function RoutingRulesEditor({
             <button
               type="button"
               onClick={() => onChange(rules.filter((_, idx) => idx !== i))}
+              aria-label="Remove rule"
               className="text-muted-foreground hover:text-red-400"
             >
               <X className="h-4 w-4" />

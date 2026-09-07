@@ -530,11 +530,13 @@ export default function EscalationSettingsPage() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => startEditing(matrix)}
+                      aria-label={`Edit ${matrix.name}`}
                       className="p-2 text-muted-foreground hover:text-foreground transition"
                     >
                       <Edit2 className="h-4 w-4" />
                     </button>
                     <button
+                      aria-label={`Delete ${matrix.name}`}
                       onClick={() => {
                         if (confirm("Are you sure you want to delete this escalation matrix?")) {
                           deleteMutation.mutate(matrix.id);

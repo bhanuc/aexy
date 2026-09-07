@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { AlertTriangle, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
 import { cn } from "@/lib/utils";
-import { useShortcut } from "@/hooks/useKeyboardShortcuts";
 import { taskConfigApi, TaskStatusConfig } from "@/lib/api";
 
 export interface DeleteStatusModalProps {
@@ -47,7 +47,6 @@ export function DeleteStatusModal({
     return sameCategory?.id ?? eligible[0]?.id ?? "";
   });
 
-  useShortcut("escape", onClose, { enabled: !isDeleting });
 
   const confirmDisabled =
     isDeleting ||
@@ -60,33 +59,52 @@ export function DeleteStatusModal({
     await onConfirm(taskCount > 0 ? migrateTo : null);
   };
 
+  // Composed with `asChild` rather than swapped for the default
+  // `DialogContent`: this modal is a bottom sheet under `sm` and centred above
+  // it, with its own entrance, and the stock content is centred-only. Radix
+  // supplies what the hand-rolled overlay lacked — the dialog role, a name, a
+  // focus trap, Escape, and scroll lock — while the motion markup and the
+  // design survive intact.
   return (
-    <motion.div
-      className="fixed inset-0 z-50 flex items-end justify-center sm:items-center bg-background/70 backdrop-blur-sm px-3 sm:px-0 pb-3 sm:pb-0"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.12 }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !isDeleting) onClose();
+    <DialogPrimitive.Root
+      open
+      onOpenChange={(next) => {
+        if (!next && !isDeleting) onClose();
       }}
     >
-      <motion.div
-        initial={{ y: 24, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: 24, opacity: 0 }}
-        transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-        className="relative w-full max-w-md rounded-2xl border border-border bg-muted/95 backdrop-blur-xl shadow-2xl shadow-black/40 ring-1 ring-white/5"
-      >
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay asChild>
+          <motion.div
+            className="fixed inset-0 z-50 bg-background/70 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.12 }}
+          />
+        </DialogPrimitive.Overlay>
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center px-3 sm:px-0 pb-3 sm:pb-0 pointer-events-none">
+          <DialogPrimitive.Content
+            asChild
+            onInteractOutside={(e) => {
+              if (isDeleting) e.preventDefault();
+            }}
+          >
+            <motion.div
+              initial={{ y: 24, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 24, opacity: 0 }}
+              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+              className="pointer-events-auto relative w-full max-w-md rounded-2xl border border-border bg-muted/95 backdrop-blur-xl shadow-2xl shadow-black/40 ring-1 ring-white/5"
+            >
         <div className="flex items-start justify-between px-5 py-4 border-b border-border/60">
           <div className="flex items-center gap-3">
             <div className="rounded-full bg-red-500/10 p-2">
               <AlertTriangle className="h-4 w-4 text-red-400" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold tracking-tight text-foreground">
+              <DialogPrimitive.Title className="text-sm font-semibold tracking-tight text-foreground">
                 Delete status
-              </h2>
+              </DialogPrimitive.Title>
               <p className="text-xs text-muted-foreground mt-0.5">
                 <span
                   className="inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle"
@@ -184,7 +202,10 @@ export function DeleteStatusModal({
             {isDeleting ? "Deleting…" : "Delete status"}
           </button>
         </div>
-      </motion.div>
-    </motion.div>
+            </motion.div>
+          </DialogPrimitive.Content>
+        </div>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }
