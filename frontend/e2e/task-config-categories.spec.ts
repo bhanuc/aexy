@@ -197,7 +197,8 @@ async function setup(page: Page, options: SetupOptions = {}) {
 
 /** The Status Categories section, scoped so status rows can't match. */
 function categorySection(page: Page) {
-  return page.getByRole("region", { name: "Status Categories" });
+  // The area is named from messages, so match either locale.
+  return page.getByRole("region", { name: /Status Categories|स्थिति श्रेणियाँ/ });
 }
 
 test.describe("workspace status categories", () => {
@@ -406,8 +407,9 @@ test("the modal is translated, not hardcoded English", async ({ page }) => {
     { name: "NEXT_LOCALE", value: "hi", url: "http://localhost:3000" },
   ]);
   await page.goto("/settings/task-config");
+  // The page itself is translated now, so the button is Hindi too.
   await categorySection(page)
-    .getByRole("button", { name: /Add Category|श्रेणी/ })
+    .getByRole("button", { name: "श्रेणी जोड़ें" })
     .click();
 
   // Heading, both field labels and the derived-slug hint all come from
@@ -447,7 +449,7 @@ test("the status dialog is translated too", async ({ page }) => {
     { name: "NEXT_LOCALE", value: "hi", url: "http://localhost:3000" },
   ]);
   await page.goto("/settings/task-config");
-  await page.getByRole("button", { name: /Add Status/ }).first().click();
+  await page.getByRole("button", { name: "स्थिति जोड़ें" }).first().click();
 
   const dialog = page.getByRole("dialog", { name: "स्थिति बनाएँ" });
   await expect(dialog).toBeVisible({ timeout: 20000 });

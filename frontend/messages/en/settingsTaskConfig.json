@@ -1,6 +1,76 @@
 {
   "settingsTaskConfig": {
     "title": "Task configuration",
-    "description": "The custom statuses and fields every sprint board renders."
+    "description": "The custom statuses and fields every sprint board renders.",
+    "tabs": {
+      "statuses": "Statuses",
+      "fields": "Custom Fields"
+    },
+    "noWorkspace": {
+      "title": "No Workspace",
+      "description": "Create a workspace first to configure task settings.",
+      "cta": "Go to Organization Settings"
+    },
+    "scope": {
+      "label": "Status scope",
+      "workspaceDefaults": "Workspace defaults"
+    },
+    "statuses": {
+      "heading": "Task Statuses",
+      "subtitle": "Define the workflow statuses for tasks. Drag to reorder.",
+      "add": "Add Status",
+      "emptyTitle": "No Statuses",
+      "emptyDescription": "Create your first status to define your task workflow.",
+      "forkTitle": "This project uses the workspace defaults",
+      "forkDescription": "Customizing here will fork the workspace statuses into a project-scoped copy. Other projects keep using the workspace defaults.",
+      "forkCta": "Customize for this project",
+      "forkCopying": "Copying…",
+      "copied": "Statuses copied to project",
+      "copyFailed": "Failed to copy statuses",
+      "deleted": "Status deleted"
+    },
+    "categories": {
+      "heading": "Status Categories",
+      "subtitle": "Buckets that statuses belong to. Each carries a semantics flag (Open / Active / Done / Cancelled) used for burndown and velocity.",
+      "add": "Add Category",
+      "inherited": "These categories are inherited from the workspace. Adding one copies the full set into this project first, so nothing here disappears — after that the project keeps its own buckets and workspace changes no longer reach it. To rename or recolor a shared bucket for every project, switch the scope above to Workspace defaults.",
+      "empty": "No categories yet — they'll seed automatically when you save your first status.",
+      "created": "Category created",
+      "updated": "Category updated",
+      "deleted": "Category deleted",
+      "inUse": "Can't delete \"{label}\" — statuses still use it. Reassign them first.",
+      "inUseServer": "This category is still in use by one or more statuses.",
+      "confirmDelete": "Delete category \"{label}\"?"
+    },
+    "fields": {
+      "heading": "Custom Fields",
+      "subtitle": "Add custom metadata fields to your tasks. Drag to reorder.",
+      "add": "Add Field",
+      "emptyTitle": "No Custom Fields",
+      "emptyDescription": "Create custom fields to add extra metadata to your tasks.",
+      "availableTypes": "Available Field Types",
+      "required": "Required",
+      "deleted": "Field deleted",
+      "deleteFailed": "Failed to delete field",
+      "confirmDelete": "Are you sure you want to delete this field? Field data will be removed from all tasks.",
+      "reorder": "Reorder {name}",
+      "manage": "Manage field {name}"
+    },
+    "fieldModal": {
+      "createTitle": "Create Field",
+      "editTitle": "Edit Field",
+      "name": "Name",
+      "namePlaceholder": "Sprint Goal",
+      "type": "Field Type",
+      "options": "Options",
+      "addOption": "Add option",
+      "addOptionPlaceholder": "Add option…",
+      "removeOption": "Remove option",
+      "defaultValue": "Default Value (optional)",
+      "defaultValuePlaceholder": "Enter default value…",
+      "requiredField": "Required field",
+      "saving": "Saving…",
+      "saveFailed": "Failed to save field"
+    }
   }
 }
