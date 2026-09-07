@@ -1,6 +1,8 @@
 {
   "settingsProjectsList": {
     "title": "Projects",
-    "description": "Manage projects, members, and permissions."
+    "description": "Manage projects, members, and permissions.",
+    "manageProject": "Manage project {name}",
+    "deleteProject": "Delete Project"
   }
 }

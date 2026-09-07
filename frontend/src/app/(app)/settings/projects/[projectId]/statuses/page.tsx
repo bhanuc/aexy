@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { AlertCircle, ArrowLeft, Clock, FolderKanban, Layers, Plus, RefreshCw, Shield, Workflow } from "lucide-react";
+import { AlertCircle, ArrowLeft, Clock, FolderKanban, Layers, Plus, RefreshCw } from "lucide-react";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
 
@@ -20,7 +20,7 @@ import { DeleteStatusModal } from "@/components/settings/DeleteStatusModal";
 import { CategoryModal } from "@/components/settings/CategoryModal";
 import { SortableCategoryItem } from "@/components/settings/SortableCategoryItem";
 import { useTranslations } from "next-intl";
-import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import { ProjectSettingsPage } from "@/components/settings/ProjectSettingsPage";
 
 export default function ProjectStatusesPage() {
   const t = useTranslations("settingsProjects");
@@ -191,41 +191,9 @@ export default function ProjectStatusesPage() {
   }
 
   return (
-    <SettingsPage
-      title={project.name}
-      description={t("statuses.subtitle")}
-      width="wide"
-      breadcrumbs={[
-        { label: "Settings", href: "/settings" },
-        { label: "Projects", href: "/settings/projects" },
-        { label: project.name, href: `/settings/projects/${projectId}` },
-        { label: "Statuses" },
-      ]}
-    >
+    <ProjectSettingsPage projectId={projectId} description={t("statuses.subtitle")}>
 
       <div>
-        <div className="flex gap-2 mb-8">
-          <Link
-            href={`/settings/projects/${projectId}`}
-            className="px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg text-sm font-medium transition"
-          >
-            General
-          </Link>
-          <Link
-            href={`/settings/projects/${projectId}/permissions`}
-            className="px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg text-sm font-medium transition flex items-center gap-2"
-          >
-            <Shield className="h-4 w-4" />
-            Permissions
-          </Link>
-          <Link
-            href={`/settings/projects/${projectId}/statuses`}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium flex items-center gap-2"
-          >
-            <Workflow className="h-4 w-4" />
-            Statuses
-          </Link>
-        </div>
 
         {/* Categories section — the buckets statuses can belong to. Ships
             with six canonical buckets (backlog, todo, in_progress,
@@ -456,6 +424,6 @@ export default function ProjectStatusesPage() {
           isDeleting={isDeleting}
         />
       )}
-    </SettingsPage>
+    </ProjectSettingsPage>
   );
 }

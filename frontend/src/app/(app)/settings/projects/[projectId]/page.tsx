@@ -6,12 +6,9 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
-  FolderGit2,
   FolderKanban,
-  Activity,
   Save,
   RefreshCw,
-  Shield,
   Globe,
   Lock,
   Check,
@@ -25,7 +22,6 @@ import {
   ExternalLink,
   Calendar,
   Vote,
-  Workflow,
 } from "lucide-react";
 import { HelpTooltip } from "@/components/ui/tooltip";
 import { useWorkspace, useWorkspaceMembers } from "@/hooks/useWorkspace";
@@ -33,7 +29,7 @@ import { useProject } from "@/hooks/useProjects";
 import { useAuth } from "@/hooks/useAuth";
 import { ProjectStatus, projectTabsApi } from "@/lib/api";
 import { useTranslations } from "next-intl";
-import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import { ProjectSettingsPage } from "@/components/settings/ProjectSettingsPage";
 
 const STATUS_OPTIONS = [
   { value: "active", label: "Active", color: "bg-green-500" },
@@ -67,7 +63,7 @@ const PUBLIC_TABS = [
   { id: "sprints", label: "Sprints", icon: Map, description: "Sprint list and progress" },
 ];
 
-export default function ProjectSettingsPage() {
+export default function ProjectGeneralSettingsPage() {
   const t = useTranslations("settingsProjects");
   const params = useParams();
   const router = useRouter();
@@ -226,55 +222,9 @@ export default function ProjectSettingsPage() {
   }
 
   return (
-    <SettingsPage
-      title={project.name}
-      description={t("general.subtitle")}
-      width="wide"
-      breadcrumbs={[
-        { label: "Settings", href: "/settings" },
-        { label: "Projects", href: "/settings/projects" },
-        { label: project.name },
-      ]}
-    >
+    <ProjectSettingsPage projectId={projectId} description={t("general.subtitle")}>
 
       <div>
-        {/* Navigation Tabs */}
-        <div className="flex gap-2 mb-8">
-          <Link
-            href={`/settings/projects/${projectId}`}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium"
-          >
-            General
-          </Link>
-          <Link
-            href={`/settings/projects/${projectId}/permissions`}
-            className="px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg text-sm font-medium transition flex items-center gap-2"
-          >
-            <Shield className="h-4 w-4" />
-            Permissions
-          </Link>
-          <Link
-            href={`/settings/projects/${projectId}/repositories`}
-            className="px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg text-sm font-medium transition flex items-center gap-2"
-          >
-            <FolderGit2 className="h-4 w-4" />
-            Repositories
-          </Link>
-          <Link
-            href={`/settings/projects/${projectId}/statuses`}
-            className="px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg text-sm font-medium transition flex items-center gap-2"
-          >
-            <Workflow className="h-4 w-4" />
-            Statuses
-          </Link>
-          <Link
-            href={`/settings/projects/${projectId}/tracker`}
-            className="px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg text-sm font-medium transition flex items-center gap-2"
-          >
-            <Activity className="h-4 w-4" />
-            Tracker
-          </Link>
-        </div>
 
         {/* Settings Form */}
         <div className="bg-card rounded-xl p-6 space-y-6">
@@ -562,6 +512,6 @@ export default function ProjectSettingsPage() {
           </dl>
         </div>
       </div>
-    </SettingsPage>
+    </ProjectSettingsPage>
   );
 }

@@ -13,10 +13,8 @@ import {
   teamRepositoriesApi,
   WorkspaceRepositoryItem,
 } from "@/lib/api";
-import {
-  SettingsPage,
-  SettingsSkeleton,
-} from "@/components/settings/SettingsPrimitives";
+import { SettingsSkeleton } from "@/components/settings/SettingsPrimitives";
+import { ProjectSettingsPage } from "@/components/settings/ProjectSettingsPage";
 
 export default function ProjectRepositoriesPage() {
   const t = useTranslations("settingsProjectRepositories");
@@ -79,16 +77,7 @@ export default function ProjectRepositoriesPage() {
   if (loading) return <SettingsSkeleton rows={1} />;
 
   return (
-    <SettingsPage
-      title={t("title")}
-      description={t("description")}
-      width="wide"
-      breadcrumbs={[
-        { label: "Settings", href: "/settings" },
-        { label: "Projects", href: "/settings/projects" },
-        { label: t("title") },
-      ]}
-    >
+    <ProjectSettingsPage projectId={projectId} description={t("description")}>
       {catalog.length === 0 ? (
         <div className="rounded-xl border border-border bg-surface p-8 text-center">
           <FolderGit2 className="mx-auto mb-3 h-10 w-10 text-muted-foreground" aria-hidden />
@@ -154,6 +143,6 @@ export default function ProjectRepositoriesPage() {
           </ul>
         </div>
       )}
-    </SettingsPage>
+    </ProjectSettingsPage>
   );
 }

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, FolderKanban, Shield, Users, ChevronDown, Check, X, Crown, RefreshCw, UserMinus, Plus, Mail, UserPlus, AlertCircle, CheckCircle, Workflow } from "lucide-react";
+import { ArrowLeft, FolderKanban, Shield, Users, ChevronDown, Check, X, Crown, RefreshCw, UserMinus, Plus, Mail, UserPlus, AlertCircle, CheckCircle } from "lucide-react";
 import { useWorkspace, useWorkspaceMembers } from "@/hooks/useWorkspace";
 import { useProject, useProjectMembers } from "@/hooks/useProjects";
 import { useRoles } from "@/hooks/useRoles";
@@ -13,7 +13,7 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { UpgradeModal } from "@/components/PremiumGate";
 import { ProjectInviteResult } from "@/lib/api";
 import { useTranslations } from "next-intl";
-import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import { ProjectSettingsPage } from "@/components/settings/ProjectSettingsPage";
 
 function getRoleBadgeColor(roleName: string | null) {
   if (!roleName) return "bg-muted text-muted-foreground";
@@ -182,42 +182,12 @@ export default function ProjectPermissionsPage() {
   }
 
   return (
-    <SettingsPage
-      title={project.name}
+    <ProjectSettingsPage
+      projectId={projectId}
       description={t("permissions.subtitle")}
-      width="wide"
-      breadcrumbs={[
-        { label: "Settings", href: "/settings" },
-        { label: "Projects", href: "/settings/projects" },
-        { label: project.name, href: `/settings/projects/${projectId}` },
-        { label: "Permissions" },
-      ]}
     >
 
       <div>
-        {/* Navigation Tabs */}
-        <div className="flex gap-2 mb-8">
-          <Link
-            href={`/settings/projects/${projectId}`}
-            className="px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg text-sm font-medium transition"
-          >
-            General
-          </Link>
-          <Link
-            href={`/settings/projects/${projectId}/permissions`}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium flex items-center gap-2"
-          >
-            <Shield className="h-4 w-4" />
-            Permissions
-          </Link>
-          <Link
-            href={`/settings/projects/${projectId}/statuses`}
-            className="px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg text-sm font-medium transition flex items-center gap-2"
-          >
-            <Workflow className="h-4 w-4" />
-            Statuses
-          </Link>
-        </div>
 
         {/* Members Section */}
         <div className="bg-card rounded-xl">
@@ -619,6 +589,6 @@ export default function ProjectPermissionsPage() {
       {showUpgradeModal && (
         <UpgradeModal feature="team_features" onClose={() => setShowUpgradeModal(false)} />
       )}
-    </SettingsPage>
+    </ProjectSettingsPage>
   );
 }
