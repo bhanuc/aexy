@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 
-import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import { SettingsGroupPage } from "@/components/settings/SettingsGroupPage";
 import {
   ReadOnlyNotice,
   WorkingHoursSections,
@@ -12,7 +12,8 @@ export default function ServiceDeskHoursSettingsPage() {
   const t = useTranslations("serviceDesk");
 
   return (
-    <SettingsPage
+    <SettingsGroupPage
+      group="serviceDesk"
       title={t("workingHours.title")}
       description={t("workingHours.description")}
     >
@@ -20,6 +21,6 @@ export default function ServiceDeskHoursSettingsPage() {
         <ReadOnlyNotice />
         <WorkingHoursSections />
       </div>
-    </SettingsPage>
+    </SettingsGroupPage>
   );
 }
