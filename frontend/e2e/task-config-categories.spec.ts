@@ -368,3 +368,52 @@ test.describe("project-scoped status categories", () => {
     ).toHaveCount(7);
   });
 });
+
+test("a label with no Latin characters is refused with the reason", async ({
+  page,
+}) => {
+  const createdCategories: unknown[] = [];
+  await setup(page, { createdCategories });
+  await page.goto("/settings/task-config");
+  await categorySection(page)
+    .getByRole("button", { name: "Add Category" })
+    .click();
+
+  // `slugify` keeps only Latin letters and digits, so a Devanagari label
+  // reduces to an empty slug — which the API rejects on min_length. The modal
+  // says so instead of posting it.
+  await page.getByLabel("Label").fill("डिज़ाइन समीक्षा");
+  await expect(page.getByLabel("Slug")).toHaveValue("");
+  await page.getByRole("button", { name: /Save|Create/ }).click();
+
+  await expect(page.getByText(/built from Latin letters/i)).toBeVisible();
+  expect(createdCategories).toHaveLength(0);
+
+  // Adding Latin characters clears the way.
+  await page.getByLabel("Label").fill("Design Review 2");
+  await expect(page.getByLabel("Slug")).toHaveValue("design_review_2");
+  await page.getByRole("button", { name: /Save|Create/ }).click();
+  await expect.poll(() => createdCategories.length).toBe(1);
+});
+
+test("the modal is translated, not hardcoded English", async ({ page }) => {
+  await setup(page);
+  // next-intl reads the locale from this cookie (no URL prefix).
+  await page.context().addCookies([
+    { name: "NEXT_LOCALE", value: "hi", url: "http://localhost:3000" },
+  ]);
+  await page.goto("/settings/task-config");
+  await categorySection(page)
+    .getByRole("button", { name: /Add Category|श्रेणी/ })
+    .click();
+
+  // Heading, both field labels and the derived-slug hint all come from
+  // messages now. `Slug` stays Latin in hi by design — it is the wire value.
+  await expect(page.getByRole("heading", { name: "श्रेणी बनाएँ" })).toBeVisible();
+  await expect(page.getByLabel("लेबल")).toBeVisible();
+  await expect(page.getByText(/लेबल से बनता है/)).toBeVisible();
+  // Semantics options are translated too.
+  await expect(page.getByRole("button", { name: /खुला/ })).toBeVisible();
+  // And the footer uses the shared common strings.
+  await expect(page.getByRole("button", { name: "रद्द करें" })).toBeVisible();
+});

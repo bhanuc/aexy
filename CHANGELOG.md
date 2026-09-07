@@ -59,6 +59,20 @@ there rather than letting an edit reach every other project. The panel is a
 labelled landmark, so it is reachable by region on a page that is otherwise one
 long form.
 
+### Fixed: a category label in a non-Latin script was rejected without a reason
+
+The slug is derived from the label by keeping Latin letters and digits, so a
+label written in Devanagari reduced to an empty slug and the API refused it on
+length — with a validation message nobody could act on. The modal now says what
+the constraint is before sending anything, and the slug field shows the empty
+result as you type.
+
+The category dialog is also translated now rather than hardcoded English, in
+both `en` and `hi`, including the four semantics buckets and their hints. Two
+things stay Latin in every locale by design: the slug itself, which is the value
+statuses store, and the example label, because a translated example would
+promise a derivation that does not work.
+
 ### Changed: a category's slug is now a field you can see, not a caption
 
 Adding a category asks for a label and derives the slug from it. The slug was a
