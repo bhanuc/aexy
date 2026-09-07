@@ -27,7 +27,9 @@
       "forkCopying": "Copying…",
       "copied": "Statuses copied to project",
       "copyFailed": "Failed to copy statuses",
-      "deleted": "Status deleted"
+      "deleted": "Status deleted",
+      "created": "Status created",
+      "updated": "Status updated"
     },
     "categories": {
       "heading": "Status Categories",
