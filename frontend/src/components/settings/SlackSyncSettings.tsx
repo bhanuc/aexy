@@ -17,6 +17,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { slackSyncApi, SlackChannel, SlackConfiguredChannel, SlackUserMappingStats } from "@/lib/api";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 interface SlackSyncSettingsProps {
   integrationId: string;
@@ -374,9 +375,14 @@ export function SlackSyncSettings({ integrationId, teamId, slackTeamId = "", isC
 
       {/* Add Channel Modal */}
       {showAddChannel && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-muted rounded-xl p-6 w-full max-w-md mx-4 border border-border">
-            <h3 className="text-lg font-semibold text-foreground mb-4">Add Channel to Monitor</h3>
+        <Dialog
+          open
+          onOpenChange={(next) => {
+            if (!next) setShowAddChannel(false);
+          }}
+        >
+          <DialogContent className="max-w-md" aria-describedby={undefined}>
+            <DialogTitle className="text-lg font-semibold text-foreground mb-4">Add Channel to Monitor</DialogTitle>
 
             <div className="space-y-4">
               {/* Channel Select */}
@@ -479,8 +485,8 @@ export function SlackSyncSettings({ integrationId, teamId, slackTeamId = "", isC
                 Add Channel
               </button>
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

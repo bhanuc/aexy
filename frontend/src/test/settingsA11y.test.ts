@@ -127,6 +127,29 @@ describe("settings accessibility", () => {
     expect(buttons.filter((b) => isIconOnly(b.body)).length).toBeGreaterThan(50);
   });
 
+  it("has no hand-rolled modal overlays left", () => {
+    // Settings had 14 of these: a `fixed inset-0` backdrop with a card inside,
+    // no dialog role, no name, no focus trap, no Escape, no scroll lock. They
+    // use `components/ui/dialog` now — the Radix wrapper 30 other files in the
+    // app already used and settings had adopted in exactly 2.
+    //
+    // A dropdown's click-away layer is also `fixed inset-0`, so the marker is
+    // a backdrop *colour*: nothing but a modal dims the page behind it. Radix's
+    // own overlay is exempt — DeleteStatusModal composes it with `asChild` to
+    // keep its sheet-on-mobile design.
+    const offenders: string[] = [];
+    for (const file of ALL_FILES) {
+      const src = readFileSync(file, "utf8");
+      src.split("\n").forEach((line, i) => {
+        if (!/fixed inset-0/.test(line)) return;
+        if (!/bg-black\/|bg-background\//.test(line)) return;
+        if (/DialogPrimitive|DialogOverlay/.test(src)) return;
+        offenders.push(`${file.slice(file.indexOf("/src/") + 1)}:${i + 1}`);
+      });
+    }
+    expect(offenders).toEqual([]);
+  });
+
   it("does not mistake a button with text for an icon-only one", () => {
     expect(isIconOnly('<Icon className="h-4" />')).toBe(true);
     expect(isIconOnly('<Icon className="h-4" />{item.label}')).toBe(false);

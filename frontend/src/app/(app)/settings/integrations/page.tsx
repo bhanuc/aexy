@@ -37,6 +37,7 @@ import { StatusMapping, slackApi, authApi } from "@/lib/api";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 type TabType = "github" | "jira" | "linear" | "slack";
 
@@ -1229,9 +1230,16 @@ function IntegrationsPageContent() {
 
             {/* Add Channel Modal */}
             {showSlackChannelModal && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                <div className="bg-card rounded-xl p-6 w-full max-w-md">
-                  <h3 className="text-foreground font-medium mb-4">Add Channel</h3>
+              <Dialog
+                open
+                onOpenChange={(next) => {
+                  if (!next) setShowSlackChannelModal(false);
+                }}
+              >
+                <DialogContent className="max-w-md" aria-describedby={undefined}>
+                  <DialogTitle className="text-foreground font-medium mb-4">
+                    Add Channel
+                  </DialogTitle>
 
                   {isLoadingSlackChannels ? (
                     <div className="flex items-center justify-center py-8">
@@ -1297,8 +1305,8 @@ function IntegrationsPageContent() {
                       </div>
                     </div>
                   )}
-                </div>
-              </div>
+                </DialogContent>
+              </Dialog>
             )}
           </>
         )}

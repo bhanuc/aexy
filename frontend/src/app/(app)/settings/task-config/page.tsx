@@ -29,6 +29,12 @@ import { useTaskStatuses, useStatusCategories, useCustomFields } from "@/hooks/u
 import { useProjects } from "@/hooks/useProjects";
 import { useAuth } from "@/hooks/useAuth";
 import { CategoryModal } from "@/components/settings/CategoryModal";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { DeleteStatusModal } from "@/components/settings/DeleteStatusModal";
 import { SortableCategoryItem } from "@/components/settings/SortableCategoryItem";
 import { SortableStatusItem } from "@/components/settings/SortableStatusItem";
@@ -263,12 +269,19 @@ function FieldModal({ field, onClose, onSave, isSaving }: FieldModalProps) {
     }
   };
 
+  // Mounted only while open, so `open` is constant and closing is delegated to
+  // the caller — Escape and a backdrop click take the same path as Cancel.
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-card rounded-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
-        <h3 className="text-xl font-semibold text-foreground mb-4">
-          {field ? "Edit Field" : "Create Field"}
-        </h3>
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent
+        className="max-w-md max-h-[90vh] overflow-y-auto"
+        aria-describedby={undefined}
+      >
+        <DialogHeader>
+          <DialogTitle className="text-xl">
+            {field ? "Edit Field" : "Create Field"}
+          </DialogTitle>
+        </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
@@ -419,8 +432,8 @@ function FieldModal({ field, onClose, onSave, isSaving }: FieldModalProps) {
             </button>
           </div>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

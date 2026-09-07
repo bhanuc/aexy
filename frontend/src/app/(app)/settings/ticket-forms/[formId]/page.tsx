@@ -36,6 +36,7 @@ import {
 } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 const PRIORITY_OPTIONS: { value: TicketPriority; label: string }[] = [
   { value: "low", label: "Low" },
@@ -757,9 +758,14 @@ export default function FormBuilderPage() {
 
       {/* Add Field Modal */}
       {showAddField && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-card rounded-xl p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto">
-            <h3 className="text-lg font-medium text-foreground mb-4">Add Field</h3>
+        <Dialog
+          open
+          onOpenChange={(next) => {
+            if (!next) setShowAddField(false);
+          }}
+        >
+          <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto" aria-describedby={undefined}>
+            <DialogTitle className="text-lg font-medium text-foreground mb-4">Add Field</DialogTitle>
             <div className="grid grid-cols-2 gap-3">
               {(Object.keys(FIELD_TYPE_CONFIG) as TicketFieldType[]).map((type) => {
                 const config = FIELD_TYPE_CONFIG[type];
@@ -789,8 +795,8 @@ export default function FormBuilderPage() {
                 Cancel
               </button>
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
     </SettingsPage>
   );

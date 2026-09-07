@@ -424,9 +424,11 @@ function InviteMemberModal({ onClose, onInvite, isInviting, workspaceId }: Invit
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-card rounded-xl w-full max-w-md p-6">
-        <h3 className="text-xl font-semibold text-foreground mb-4">Invite Team Member</h3>
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent className="max-w-md" aria-describedby={undefined}>
+        <DialogHeader>
+          <DialogTitle className="text-xl">Invite Team Member</DialogTitle>
+        </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
@@ -585,8 +587,8 @@ function InviteMemberModal({ onClose, onInvite, isInviting, workspaceId }: Invit
             </button>
           </div>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -628,9 +630,11 @@ function CreateWorkspaceModal({ onClose, onCreate, isCreating, organizations }: 
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-card rounded-xl w-full max-w-md p-6">
-        <h3 className="text-xl font-semibold text-foreground mb-4">Create Workspace</h3>
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent className="max-w-md" aria-describedby={undefined}>
+        <DialogHeader>
+          <DialogTitle className="text-xl">Create Workspace</DialogTitle>
+        </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
@@ -732,8 +736,8 @@ function CreateWorkspaceModal({ onClose, onCreate, isCreating, organizations }: 
             </button>
           </div>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -846,6 +850,12 @@ function PendingInviteRow({ invite, onRevoke, onResend, isRevoking }: PendingInv
 import { APP_CATALOG } from "@/config/appDefinitions";
 import { useTranslations } from "next-intl";
 import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const APP_LABELS: Record<string, { label: string; description: string }> = Object.fromEntries(
   Object.entries(APP_CATALOG)

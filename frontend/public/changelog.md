@@ -230,13 +230,21 @@ deletes, removes, reorder handles, add-to-list buttons, a copy-URL. They now say
 what they do, and name the row they act on where there is one — "Manage webhook
 Billing sync" rather than one of a column of identical "button"s.
 
-### Fixed: the status and category dialogs behaved like plain divs
+### Fixed: settings dialogs behaved like plain divs
 
-Both were hand-rolled overlays: no dialog role, no name, no focus trap, and
-Tab walked straight out of them into the page behind. They use the same dialog
-component as the rest of the app now, which also closes them on Escape and
-stops the page behind from scrolling. The delete-status dialog keeps its own
-design — a sheet on small screens — and gains the same behaviour.
+Fourteen dialogs across settings were hand-rolled overlays: no dialog role, no
+name, no focus trap — Tab walked straight out into the page behind — no Escape
+in most cases, and the page behind kept scrolling. Inviting a member, creating
+a workspace, creating a role, adding a sending domain or an email provider,
+editing either, adding or editing a subscription category, adding a Slack
+channel from two different pages, creating or duplicating a ticket form, adding
+a form field, adding a task field, and the status, category and delete-status
+dialogs.
+
+They all use the same dialog component as the rest of the app now, which brings
+the role, the name, focus containment, Escape and scroll lock with it. The
+delete-status dialog keeps its own design — a sheet on small screens — and
+gains the same behaviour.
 
 ### Fixed: settings areas that had no shared navigation
 
