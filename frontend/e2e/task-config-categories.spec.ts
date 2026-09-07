@@ -259,9 +259,15 @@ test.describe("workspace status categories", () => {
     await expect(section.getByRole("button", { name: "Delete" })).toBeVisible();
 
     await section.getByRole("button", { name: "Edit" }).click();
-    // The edit modal opens on that row, with the slug locked.
+    // The edit modal opens on that row: the label is editable, and the slug
+    // shows the existing value in the same read-only field, with the reason.
     await expect(page.getByRole("heading", { name: "Edit Category" })).toBeVisible();
-    await expect(page.getByText(/locked — statuses reference it/)).toBeVisible();
+    await expect(page.getByLabel("Label")).toHaveValue("Code Review");
+    await expect(page.getByLabel("Slug")).toHaveValue("in_review");
+    await expect(page.getByLabel("Slug")).toHaveAttribute("readonly", "");
+    await expect(
+      page.getByText(/statuses already reference it/),
+    ).toBeVisible();
   });
 
   test("adding a workspace category posts no project scope", async ({ page }) => {
@@ -277,9 +283,24 @@ test.describe("workspace status categories", () => {
       .click();
     await expect(page.getByRole("heading", { name: "Create Category" })).toBeVisible();
 
-    await page.getByPlaceholder("Design Review").fill("Design Review");
-    // The slug is derived and shown before saving.
-    await expect(page.getByText("design_review")).toBeVisible();
+    const labelField = page.getByLabel("Label");
+    const slugField = page.getByLabel("Slug");
+
+    // Empty until something is typed, so it reads as derived rather than as a
+    // second thing to fill in.
+    await expect(slugField).toHaveValue("");
+
+    await labelField.fill("Design Review");
+    // The slug tracks the label live, and is its own field rather than a
+    // caption — the two are identical for one-word buckets, which is what
+    // left people unsure which of them they had just typed.
+    await expect(slugField).toHaveValue("design_review");
+    // Not typeable — the label is the only way to change it. (Asserted, not
+    // attempted: `fill()` waits for editability and would just time out.)
+    await expect(slugField).not.toBeEditable();
+    await expect(slugField).toHaveAttribute("readonly", "");
+    await expect(labelField).toBeEditable();
+
     await page.getByRole("button", { name: /Save|Create/ }).click();
 
     await expect.poll(() => createdCategories.length).toBe(1);
