@@ -417,3 +417,44 @@ test("the modal is translated, not hardcoded English", async ({ page }) => {
   // And the footer uses the shared common strings.
   await expect(page.getByRole("button", { name: "रद्द करें" })).toBeVisible();
 });
+
+test("the status dialog shows category semantics as words, translated", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.goto("/settings/task-config");
+  await page.getByRole("button", { name: "Add Status" }).first().click();
+
+  const dialog = page.getByRole("dialog", { name: "Create Status" });
+  await expect(dialog).toBeVisible({ timeout: 20000 });
+
+  // The category cells used to print the raw semantics slug. They read the
+  // same messages the category dialog defines, so the two can't drift.
+  const shipped = dialog.getByRole("button", { name: /Shipped/ });
+  await expect(shipped).toContainText("Done");
+  await expect(shipped).toHaveAttribute(
+    "title",
+    "Completed — counts toward velocity",
+  );
+});
+
+test("the status dialog is translated too", async ({ page }) => {
+  await setup(page);
+  await page.context().addCookies([
+    { name: "NEXT_LOCALE", value: "hi", url: "http://localhost:3000" },
+  ]);
+  await page.goto("/settings/task-config");
+  await page.getByRole("button", { name: /Add Status/ }).first().click();
+
+  const dialog = page.getByRole("dialog", { name: "स्थिति बनाएँ" });
+  await expect(dialog).toBeVisible({ timeout: 20000 });
+  await expect(dialog.getByLabel("नाम")).toBeVisible();
+  await expect(dialog.getByText("श्रेणी", { exact: true })).toBeVisible();
+  await expect(
+    dialog.getByText(/नए टास्क के लिए डिफ़ॉल्ट स्थिति/),
+  ).toBeVisible();
+  // Semantics come through the shared category namespace.
+  await expect(dialog.getByRole("button", { name: /Shipped/ })).toContainText(
+    "पूर्ण",
+  );
+});
