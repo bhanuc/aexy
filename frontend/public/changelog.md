@@ -59,6 +59,15 @@ there rather than letting an edit reach every other project. The panel is a
 labelled landmark, so it is reachable by region on a page that is otherwise one
 long form.
 
+### Fixed: kanban columns on the workspace task board had no name
+
+Each column on **Sprints → Tasks** was an unnamed `div`, so a screen reader
+read the cards in it with nothing to say which column they were in. Columns are
+now labelled groups carrying their status name. The board's own regression test
+had been holding a column by its Tailwind width class, which stopped existing
+when the column width moved into a shared layout constant; it holds the name
+now.
+
 ### Fixed: a project could not delete its own copy of a category
 
 Once a project has its own categories, each copy shares a slug with the
