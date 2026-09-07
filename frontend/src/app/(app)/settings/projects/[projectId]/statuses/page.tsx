@@ -55,6 +55,7 @@ export default function ProjectStatusesPage() {
     deleteCategory,
     isCreating: isCreatingCategory,
     isUpdating: isUpdatingCategory,
+    isUsingWorkspaceFallback: categoriesInherited,
   } = useStatusCategories(currentWorkspaceId, projectId);
 
   const [showStatusModal, setShowStatusModal] = useState(false);
@@ -257,6 +258,30 @@ export default function ProjectStatusesPage() {
             )}
           </div>
 
+          {/* Inherited categories are workspace rows, not this project's.
+              Editing one here would change every other project too, and
+              adding one forks the whole set into the project — say both
+              out loud rather than letting the list imply otherwise. */}
+          {categoriesInherited && (
+            <div className="mb-4 flex items-start gap-3 rounded-lg border border-border bg-muted/40 p-3">
+              <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+              <p className="text-sm text-muted-foreground">
+                These categories are inherited from the workspace. Adding one
+                copies the full set into this project first, so nothing here
+                disappears — after that the project keeps its own buckets and
+                workspace changes no longer reach it. To rename or recolor a
+                shared bucket, edit it in{" "}
+                <Link
+                  href="/settings/task-config"
+                  className="text-primary-400 hover:text-primary-300 underline"
+                >
+                  workspace task settings
+                </Link>
+                .
+              </p>
+            </div>
+          )}
+
           {categoriesLoading ? (
             <div className="space-y-2">
               {[1, 2, 3].map((i) => (
@@ -269,7 +294,7 @@ export default function ProjectStatusesPage() {
                 <SortableCategoryItem
                   key={cat.id}
                   category={cat}
-                  isAdmin={isAdmin}
+                  isAdmin={isAdmin && !categoriesInherited}
                   onEdit={(c) => {
                     setEditingCategory(c);
                     setShowCategoryModal(true);

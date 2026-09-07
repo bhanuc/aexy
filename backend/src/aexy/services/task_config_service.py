@@ -535,6 +535,45 @@ class TaskConfigService:
                 return in_project
         return await self.get_category_by_slug(workspace_id, slug, project_id=None)
 
+    async def clone_workspace_categories_to_project(
+        self,
+        workspace_id: str,
+        project_id: str,
+    ) -> list[WorkspaceStatusCategory]:
+        """Copy workspace-default categories into a project so it can diverge.
+
+        Mirror of ``clone_workspace_statuses_to_project``. Idempotent: skips
+        if the project already has categories of its own. Lazy-seeds the
+        workspace defaults for workspaces predating the categories table so
+        the project never forks off an empty set.
+        """
+        existing = await self.get_categories(workspace_id, project_id=project_id)
+        if existing:
+            return existing
+
+        defaults = await self.get_categories(workspace_id, project_id=None)
+        if not defaults:
+            await self.seed_default_categories(workspace_id)
+            defaults = await self.get_categories(workspace_id, project_id=None)
+
+        cloned: list[WorkspaceStatusCategory] = []
+        for src in defaults:
+            row = WorkspaceStatusCategory(
+                id=str(uuid4()),
+                workspace_id=workspace_id,
+                project_id=project_id,
+                slug=src.slug,
+                label=src.label,
+                color=src.color,
+                semantics=src.semantics,
+                position=src.position,
+                is_default=src.is_default,
+            )
+            self.db.add(row)
+            cloned.append(row)
+        await self.db.flush()
+        return cloned
+
     async def create_category(
         self,
         workspace_id: str,
@@ -545,7 +584,19 @@ class TaskConfigService:
         is_default: bool = False,
         project_id: str | None = None,
     ) -> WorkspaceStatusCategory:
-        """Create a category in a workspace (or project) scope."""
+        """Create a category in a workspace (or project) scope.
+
+        For a project-scoped create on a project that's currently on fallback
+        (zero project rows), clone the workspace categories in first — the
+        same guard ``create_status`` applies. Without it the resolver in
+        ``get_categories_for_project`` flips from "N inherited categories" to
+        "1 manually-added category" the moment the first project row lands,
+        which reads to the operator as "adding a category deleted all the
+        others".
+        """
+        if project_id is not None:
+            await self.clone_workspace_categories_to_project(workspace_id, project_id)
+
         existing = await self.get_category_by_slug(workspace_id, slug, project_id=project_id)
         if existing is not None:
             raise TaskValidationError("category_slug_exists")
@@ -611,7 +662,17 @@ class TaskConfigService:
             select(func.count(WorkspaceTaskStatus.id))
             .where(WorkspaceTaskStatus.workspace_id == category.workspace_id)
             .where(WorkspaceTaskStatus.category == category.slug)
+            .where(WorkspaceTaskStatus.is_active.is_(True))
         )
+        if category.project_id is not None:
+            # A project-scoped category can only be referenced from that
+            # project's own statuses — a status elsewhere resolves the slug
+            # against its own scope, never this one. Without this filter a
+            # cloned project category (`done`, `todo`, …) looks permanently
+            # in-use because the workspace defaults share its slug.
+            in_use_stmt = in_use_stmt.where(
+                WorkspaceTaskStatus.project_id == category.project_id
+            )
         if (await self.db.execute(in_use_stmt)).scalar():
             raise TaskValidationError("category_in_use")
 

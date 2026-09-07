@@ -209,3 +209,105 @@ async def test_create_status_rejects_duplicate_display_name(
         # Case-insensitive — `on hold` would still collide with the existing row.
         await service.create_status(workspace_id=ws.id, name="on hold", category="todo")
     assert exc.value.code == "status_name_exists"
+
+
+@pytest.mark.asyncio
+async def test_project_scoped_create_preserves_inherited_categories(
+    db_session: AsyncSession,
+) -> None:
+    """Regression: adding a project category used to look like a wipe.
+
+    ``get_categories_for_project`` resolves project rows *or* workspace
+    defaults — never a union. So the first project-scoped insert flipped the
+    project from "6 inherited categories" to "1 category", and the status
+    admin rendered exactly one bucket. Creating a project category must fork
+    the workspace set first, the way ``create_status`` already does.
+    """
+    ws = await _make_workspace(db_session, "ws-cats-fork")
+    project = await _make_project(db_session, ws, "p-cats-fork")
+    service = TaskConfigService(db_session)
+    await service.seed_default_statuses(ws.id)
+    await db_session.commit()
+
+    await service.create_category(
+        workspace_id=ws.id,
+        slug="needs_revision",
+        label="Needs Revision",
+        semantics="open",
+        project_id=project.id,
+    )
+    await db_session.commit()
+
+    resolved = await service.get_categories_for_project(ws.id, project.id)
+    slugs = {c.slug for c in resolved}
+    # The new bucket plus every inherited one, now owned by the project.
+    assert slugs == {c["slug"] for c in DEFAULT_CATEGORIES} | {"needs_revision"}
+    assert all(c.project_id == project.id for c in resolved)
+
+    # Workspace defaults are untouched — other projects keep inheriting them.
+    ws_cats = await service.get_categories(ws.id, project_id=None)
+    assert {c.slug for c in ws_cats} == {c["slug"] for c in DEFAULT_CATEGORIES}
+
+
+@pytest.mark.asyncio
+async def test_second_project_category_does_not_reclone(
+    db_session: AsyncSession,
+) -> None:
+    """The fork happens once; later creates just append."""
+    ws = await _make_workspace(db_session, "ws-cats-fork2")
+    project = await _make_project(db_session, ws, "p-cats-fork2")
+    service = TaskConfigService(db_session)
+    await service.seed_default_statuses(ws.id)
+    await db_session.commit()
+
+    for slug in ("needs_revision", "blocked"):
+        await service.create_category(
+            workspace_id=ws.id,
+            slug=slug,
+            label=slug,
+            project_id=project.id,
+        )
+    await db_session.commit()
+
+    rows = await service.get_categories(ws.id, project_id=project.id)
+    assert len(rows) == len(DEFAULT_CATEGORIES) + 2
+    # No duplicate slugs from a second clone pass.
+    assert len({r.slug for r in rows}) == len(rows)
+
+
+@pytest.mark.asyncio
+async def test_delete_project_category_ignores_workspace_statuses(
+    db_session: AsyncSession,
+) -> None:
+    """A cloned project category shares its slug with the workspace default.
+
+    The in-use check has to stay inside the category's own scope, otherwise
+    every forked bucket is permanently undeletable because some *other*
+    project's (or the workspace's) status references the same slug.
+    """
+    ws = await _make_workspace(db_session, "ws-cats-delscope")
+    project = await _make_project(db_session, ws, "p-cats-delscope")
+    service = TaskConfigService(db_session)
+    await service.seed_default_statuses(ws.id)
+    # Forks both categories and statuses into the project.
+    await service.create_category(
+        workspace_id=ws.id,
+        slug="needs_revision",
+        label="Needs Revision",
+        project_id=project.id,
+    )
+    await db_session.commit()
+
+    project_cancelled = await service.get_category_by_slug(
+        ws.id, "cancelled", project_id=project.id
+    )
+    assert project_cancelled is not None
+    # Nothing in this project uses `cancelled` (default statuses stop at Done),
+    # so the delete must go through despite workspace rows existing.
+    assert await service.delete_category(project_cancelled.id) is True
+    await db_session.commit()
+
+    remaining = await service.get_categories(ws.id, project_id=project.id)
+    assert "cancelled" not in {c.slug for c in remaining}
+    # Workspace default survives.
+    assert await service.get_category_by_slug(ws.id, "cancelled") is not None

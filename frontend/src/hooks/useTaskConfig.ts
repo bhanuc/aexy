@@ -235,11 +235,22 @@ export function useStatusCategories(
     },
   });
 
+  // True when the rows being shown for a project are the workspace defaults
+  // (the project has no category overrides of its own). Mirrors
+  // `useTaskStatuses.isUsingWorkspaceFallback`. Creating a project-scoped
+  // category forks the whole set server-side, so the UI has to say so
+  // instead of presenting inherited rows as editable project rows.
+  const isUsingWorkspaceFallback =
+    !!projectId &&
+    (categories ?? EMPTY_ARRAY).length > 0 &&
+    (categories ?? EMPTY_ARRAY).every((c) => c.project_id === null);
+
   return {
     categories: categories ?? EMPTY_ARRAY,
     isLoading,
     error,
     refetch,
+    isUsingWorkspaceFallback,
     createCategory: createMutation.mutateAsync,
     updateCategory: updateMutation.mutateAsync,
     deleteCategory: deleteMutation.mutateAsync,
