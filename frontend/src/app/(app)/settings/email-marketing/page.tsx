@@ -128,6 +128,7 @@ function DNSRecordRow({
   label: string;
   description?: string;
 }) {
+  const t = useTranslations("settingsEmailMarketing");
   const [copied, setCopied] = useState<"name" | "value" | null>(null);
 
   const copyToClipboard = async (text: string, field: "name" | "value") => {
@@ -168,7 +169,7 @@ function DNSRecordRow({
       {description && <p className="text-xs text-muted-foreground">{description}</p>}
       <div className="space-y-2">
         <div>
-          <label className="block text-xs text-muted-foreground mb-1">Host / Name</label>
+          <label className="block text-xs text-muted-foreground mb-1">{t("dns.hostLabel")}</label>
           <div className="flex items-center gap-2">
             <code className="flex-1 px-3 py-2 bg-background rounded text-sm text-foreground font-mono overflow-x-auto">
               {record.name}
@@ -176,14 +177,14 @@ function DNSRecordRow({
             <button
               onClick={() => copyToClipboard(record.name, "name")}
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition flex-shrink-0"
-              title="Copy host"
+              title={t("dns.copyHost")}
             >
               {copied === "name" ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
             </button>
           </div>
         </div>
         <div>
-          <label className="block text-xs text-muted-foreground mb-1">Value / Content</label>
+          <label className="block text-xs text-muted-foreground mb-1">{t("dns.valueLabel")}</label>
           <div className="flex items-center gap-2">
             <code className="flex-1 px-3 py-2 bg-background rounded text-sm text-foreground font-mono overflow-x-auto break-all">
               {record.value}
@@ -191,7 +192,7 @@ function DNSRecordRow({
             <button
               onClick={() => copyToClipboard(record.value, "value")}
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition flex-shrink-0"
-              title="Copy value"
+              title={t("dns.copyValue")}
             >
               {copied === "value" ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
             </button>
@@ -218,6 +219,8 @@ function DomainCard({
   onStartWarming: () => void;
   onDelete: () => void;
 }) {
+  const tc = useTranslations("common");
+  const t = useTranslations("settingsEmailMarketing");
   const [showDnsRecords, setShowDnsRecords] = useState(!domain.is_verified);
   const [isVerifying, setIsVerifying] = useState(false);
 
@@ -225,9 +228,9 @@ function DomainCard({
     setIsVerifying(true);
     try {
       await onVerify();
-      toast.success("DNS verification complete");
+      toast.success(t("dns.verified"));
     } catch (error) {
-      toast.error("Failed to verify DNS records");
+      toast.error(t("dns.verifyFailed"));
     } finally {
       setIsVerifying(false);
     }
@@ -270,12 +273,12 @@ function DomainCard({
               <h3 className="text-foreground font-medium">{domain.domain}</h3>
               {!domain.is_verified && (
                 <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded text-xs font-medium">
-                  Action Required
+                  {t("domain.actionRequired")}
                 </span>
               )}
               {domain.is_default && (
                 <span className="px-2 py-0.5 bg-sky-500/20 text-sky-400 rounded text-xs font-medium">
-                  Default
+                  {t("domain.default")}
                 </span>
               )}
             </div>
@@ -291,7 +294,7 @@ function DomainCard({
               onClick={handleVerify}
               disabled={isVerifying}
               className="p-2 text-amber-400 hover:bg-amber-500/20 rounded-lg transition disabled:opacity-50"
-              title="Verify DNS"
+              title={t("dns.verify")}
             >
               <RefreshCw className={`h-4 w-4 ${isVerifying ? "animate-spin" : ""}`} />
             </button>
@@ -300,7 +303,7 @@ function DomainCard({
             <button
               onClick={onStartWarming}
               className="p-2 text-emerald-400 hover:bg-emerald-500/20 rounded-lg transition"
-              title="Start Warming"
+              title={t("domain.startWarming")}
             >
               <TrendingUp className="h-4 w-4" />
             </button>
@@ -309,7 +312,7 @@ function DomainCard({
             <button
               onClick={onPause}
               className="p-2 text-muted-foreground hover:text-amber-400 hover:bg-muted rounded-lg transition"
-              title="Pause"
+              title={t("domain.pause")}
             >
               <Pause className="h-4 w-4" />
             </button>
@@ -317,7 +320,7 @@ function DomainCard({
             <button
               onClick={onResume}
               className="p-2 text-muted-foreground hover:text-emerald-400 hover:bg-muted rounded-lg transition"
-              title="Resume"
+              title={t("domain.resume")}
             >
               <Play className="h-4 w-4" />
             </button>
@@ -325,7 +328,7 @@ function DomainCard({
           <button
             onClick={onDelete}
             className="p-2 text-muted-foreground hover:text-red-400 hover:bg-muted rounded-lg transition"
-            title="Delete"
+            title={tc("delete")}
           >
             <Trash2 className="h-4 w-4" />
           </button>
@@ -335,15 +338,15 @@ function DomainCard({
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
         <div className="text-center p-3 bg-muted/50 rounded-lg">
           <p className="text-lg font-semibold text-foreground">{domain.health_score}%</p>
-          <p className="text-xs text-muted-foreground">Health Score</p>
+          <p className="text-xs text-muted-foreground">{t("domain.healthScore")}</p>
         </div>
         <div className="text-center p-3 bg-muted/50 rounded-lg">
           <p className="text-lg font-semibold text-foreground">{domain.daily_limit.toLocaleString()}</p>
-          <p className="text-xs text-muted-foreground">Daily Limit</p>
+          <p className="text-xs text-muted-foreground">{t("domain.dailyLimit")}</p>
         </div>
         <div className="text-center p-3 bg-muted/50 rounded-lg">
           <p className="text-lg font-semibold text-foreground">{domain.daily_sent.toLocaleString()}</p>
-          <p className="text-xs text-muted-foreground">Sent Today</p>
+          <p className="text-xs text-muted-foreground">{t("domain.sentToday")}</p>
         </div>
       </div>
 
@@ -356,9 +359,9 @@ function DomainCard({
           >
             <div className="flex items-center gap-2">
               <Shield className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium text-foreground">DNS Records</span>
+              <span className="text-sm font-medium text-foreground">{t("dns.heading")}</span>
               {!domain.is_verified && (
-                <span className="text-xs text-amber-400">Configuration required</span>
+                <span className="text-xs text-amber-400">{t("dns.configRequired")}</span>
               )}
             </div>
             {showDnsRecords ? (
@@ -371,7 +374,7 @@ function DomainCard({
           {showDnsRecords && (
             <div className="mt-4 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs text-muted-foreground">
-                <p>Add these DNS records to your domain registrar to enable email sending.</p>
+                <p>{t("dns.configRequiredHint")}</p>
                 <a
                   href="https://github.com/bhanuc/aexy"
                   target="_blank"
@@ -379,7 +382,7 @@ function DomainCard({
                   className="flex items-center gap-1 text-sky-400 hover:text-sky-300"
                 >
                   <ExternalLink className="h-3 w-3" />
-                  Documentation
+                  {t("dns.documentation")}
                 </a>
               </div>
 
@@ -419,7 +422,7 @@ function DomainCard({
               {!domain.is_verified && (
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-3 bg-muted/30 rounded-lg">
                   <p className="text-sm text-muted-foreground">
-                    After adding DNS records, click verify to check configuration.
+                    {t("dns.afterAdding")}
                   </p>
                   <button
                     onClick={handleVerify}
@@ -443,9 +446,9 @@ function DomainCard({
       {/* Fallback for domains without dns_records data */}
       {!hasDnsRecords && !domain.is_verified && (
         <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-          <p className="text-sm text-amber-400 mb-2">DNS records need verification</p>
+          <p className="text-sm text-amber-400 mb-2">{t("dns.needsVerification")}</p>
           <div className="text-xs text-muted-foreground space-y-1">
-            <p>Add these DNS records to verify your domain:</p>
+            <p>{t("dns.needsVerificationHint")}</p>
             <code className="block p-2 bg-muted rounded mt-2 text-foreground">
               TXT @ aexy-verification={domain.verification_token || domain.id?.slice(0, 8)}
             </code>
@@ -469,6 +472,7 @@ function ProviderCard({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const t = useTranslations("settingsEmailMarketing");
   const [isTesting, setIsTesting] = useState(false);
 
   const handleTest = async () => {
@@ -497,7 +501,7 @@ function ProviderCard({
         <div className="flex items-center gap-2">
           {!hasCredentials && (
             <span className="px-2 py-1 bg-amber-500/20 text-amber-400 rounded-full text-xs font-medium">
-              Setup Required
+              {t("provider.setupRequired")}
             </span>
           )}
           <span className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -509,7 +513,7 @@ function ProviderCard({
           </span>
           {provider.is_default && (
             <span className="px-2 py-1 bg-sky-500/20 text-sky-400 rounded-full text-xs font-medium">
-              Default
+              {t("provider.default")}
             </span>
           )}
         </div>
@@ -525,7 +529,7 @@ function ProviderCard({
           className="flex items-center gap-2 px-3 py-1.5 bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 rounded-lg transition text-sm"
         >
           <Settings className="h-4 w-4" />
-          Configure
+          {t("provider.configure")}
         </button>
         <button
           onClick={handleTest}
@@ -573,6 +577,8 @@ function CategoryCard({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const tc = useTranslations("common");
+  const t = useTranslations("settingsEmailMarketing");
   return (
     <div className="bg-background/50 border border-border rounded-xl p-5">
       <div className="flex items-start justify-between mb-3">
@@ -595,12 +601,12 @@ function CategoryCard({
           </span>
           {category.default_subscribed && (
             <span className="px-2 py-1 bg-sky-500/20 text-sky-400 rounded-full text-xs font-medium">
-              Default On
+              {t("category.defaultOn")}
             </span>
           )}
           {category.required && (
             <span className="px-2 py-1 bg-amber-500/20 text-amber-400 rounded-full text-xs font-medium">
-              Required
+              {t("category.required")}
             </span>
           )}
         </div>
@@ -616,7 +622,7 @@ function CategoryCard({
           className="flex items-center gap-2 px-3 py-1.5 bg-muted text-foreground hover:text-foreground rounded-lg transition text-sm"
         >
           <Edit3 className="h-4 w-4" />
-          Edit
+          {tc("edit")}
         </button>
         <button
           onClick={onToggle}
@@ -644,6 +650,7 @@ function CategoryCard({
 
 function EmailSettingsContent() {
   const t = useTranslations("settingsEmailMarketing");
+  const tc = useTranslations("common");
   const { currentWorkspace } = useWorkspace();
   useAuth(); // Auth check
   const workspaceId = currentWorkspace?.id || null;
@@ -735,13 +742,13 @@ function EmailSettingsContent() {
   };
 
   const handleDeleteDomain = async (id: string) => {
-    if (confirm("Are you sure you want to delete this domain?")) {
+    if (confirm(t("domain.confirmDelete"))) {
       await deleteDomain(id);
     }
   };
 
   const handleDeleteProvider = async (id: string) => {
-    if (confirm("Are you sure you want to delete this provider?")) {
+    if (confirm(t("provider.confirmDelete"))) {
       await deleteProvider(id);
     }
   };
@@ -867,7 +874,7 @@ function EmailSettingsContent() {
   };
 
   const handleDeleteCategory = async (id: string) => {
-    if (confirm("Are you sure you want to delete this category? Subscribers won't be able to manage their preferences for this category anymore.")) {
+    if (confirm(t("category.confirmDelete"))) {
       await deleteCategory(id);
     }
   };
@@ -1096,7 +1103,7 @@ function EmailSettingsContent() {
           )}
       </SettingsPage>
 
-      {/* Add Domain Modal */}
+      {/* {t("domain.add")} Modal */}
       {showAddDomain && (
         <Dialog
           open
@@ -1106,10 +1113,10 @@ function EmailSettingsContent() {
         >
           <DialogContent className="max-w-md p-0" aria-describedby={undefined}>
             <div className="p-4 border-b border-border">
-              <DialogTitle className="text-lg font-medium text-foreground">Add Sending Domain</DialogTitle>
+              <DialogTitle className="text-lg font-medium text-foreground">{t("domain.addTitle")}</DialogTitle>
             </div>
             <div className="p-4">
-              <label className="block text-sm text-muted-foreground mb-2">Domain</label>
+              <label className="block text-sm text-muted-foreground mb-2">{t("domain.field")}</label>
               <input
                 type="text"
                 value={newDomain}
@@ -1118,7 +1125,7 @@ function EmailSettingsContent() {
                 className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-sky-500"
               />
               <p className="text-xs text-muted-foreground mt-2">
-                You&apos;ll need to add DNS records to verify ownership
+                {t("domain.dnsNote")}
               </p>
             </div>
             <div className="p-4 border-t border-border flex justify-end gap-2">
@@ -1126,21 +1133,21 @@ function EmailSettingsContent() {
                 onClick={() => setShowAddDomain(false)}
                 className="px-4 py-2 text-muted-foreground hover:text-foreground transition"
               >
-                Cancel
+                {tc("cancel")}
               </button>
               <button
                 onClick={handleCreateDomain}
                 disabled={!newDomain}
                 className="px-4 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition disabled:opacity-50"
               >
-                Add Domain
+                {t("domain.add")}
               </button>
             </div>
           </DialogContent>
         </Dialog>
       )}
 
-      {/* Add Provider Modal */}
+      {/* {t("provider.add")} Modal */}
       {showAddProvider && (
         <Dialog
           open
@@ -1150,21 +1157,21 @@ function EmailSettingsContent() {
         >
           <DialogContent className="max-w-md p-0" aria-describedby={undefined}>
             <div className="p-4 border-b border-border">
-              <DialogTitle className="text-lg font-medium text-foreground">Add Email Provider</DialogTitle>
+              <DialogTitle className="text-lg font-medium text-foreground">{t("provider.addTitle")}</DialogTitle>
             </div>
             <div className="p-4 space-y-4">
               <div>
-                <label className="block text-sm text-muted-foreground mb-2">Provider Name</label>
+                <label className="block text-sm text-muted-foreground mb-2">{t("provider.name")}</label>
                 <input
                   type="text"
                   value={newProviderName}
                   onChange={(e) => setNewProviderName(e.target.value)}
-                  placeholder="My SES Provider"
+                  placeholder={t("provider.namePlaceholder")}
                   className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-sky-500"
                 />
               </div>
               <div>
-                <label className="block text-sm text-muted-foreground mb-2">Provider Type</label>
+                <label className="block text-sm text-muted-foreground mb-2">{t("provider.type")}</label>
                 <select
                   value={newProviderType}
                   onChange={(e) => setNewProviderType(e.target.value)}
@@ -1178,7 +1185,7 @@ function EmailSettingsContent() {
                 </select>
               </div>
               <p className="text-xs text-muted-foreground">
-                You can configure credentials after adding the provider
+                {t("provider.credentialsNote")}
               </p>
             </div>
             <div className="p-4 border-t border-border flex justify-end gap-2">
@@ -1186,14 +1193,14 @@ function EmailSettingsContent() {
                 onClick={() => setShowAddProvider(false)}
                 className="px-4 py-2 text-muted-foreground hover:text-foreground transition"
               >
-                Cancel
+                {tc("cancel")}
               </button>
               <button
                 onClick={handleCreateProvider}
                 disabled={!newProviderName}
                 className="px-4 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition disabled:opacity-50"
               >
-                Add Provider
+                {t("provider.add")}
               </button>
             </div>
           </DialogContent>
@@ -1216,28 +1223,28 @@ function EmailSettingsContent() {
             </div>
             <div className="p-4 space-y-4">
               <div>
-                <label className="block text-sm text-muted-foreground mb-2">Provider Name</label>
+                <label className="block text-sm text-muted-foreground mb-2">{t("provider.name")}</label>
                 <input
                   type="text"
                   value={newProviderName}
                   onChange={(e) => setNewProviderName(e.target.value)}
-                  placeholder="My Provider"
+                  placeholder={t("provider.editNamePlaceholder")}
                   className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-sky-500"
                 />
               </div>
               <div>
-                <label className="block text-sm text-muted-foreground mb-2">Description (optional)</label>
+                <label className="block text-sm text-muted-foreground mb-2">{t("provider.descriptionOptional")}</label>
                 <input
                   type="text"
                   value={providerDescription}
                   onChange={(e) => setProviderDescription(e.target.value)}
-                  placeholder="Production email provider"
+                  placeholder={t("provider.descriptionPlaceholder")}
                   className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-sky-500"
                 />
               </div>
 
               <div className="border-t border-border pt-4">
-                <h4 className="text-sm font-medium text-foreground mb-3">Credentials</h4>
+                <h4 className="text-sm font-medium text-foreground mb-3">{t("provider.credentials")}</h4>
                 <div className="space-y-3">
                   {getCredentialFields(editingProvider.provider_type).map((field) => (
                     <div key={field.key}>
@@ -1251,7 +1258,7 @@ function EmailSettingsContent() {
                           })}
                           className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-sky-500"
                         >
-                          <option value="">Select...</option>
+                          <option value="">{t("provider.select")}</option>
                           {field.options.map((opt) => (
                             <option key={opt.value} value={opt.value}>{opt.label}</option>
                           ))}
@@ -1267,7 +1274,7 @@ function EmailSettingsContent() {
                             })}
                             className="w-4 h-4 rounded border-border bg-muted text-sky-500 focus:ring-sky-500"
                           />
-                          <span className="text-sm text-foreground">Enable TLS encryption</span>
+                          <span className="text-sm text-foreground">{t("provider.enableTls")}</span>
                         </label>
                       ) : (
                         <input
@@ -1288,7 +1295,7 @@ function EmailSettingsContent() {
 
               <div className="bg-muted/50 rounded-lg p-3">
                 <p className="text-xs text-muted-foreground">
-                  <strong className="text-foreground">Security note:</strong> Credentials are encrypted and stored securely.
+                  <strong className="text-foreground">{t("provider.securityNote")}</strong> Credentials are encrypted and stored securely.
                   After saving, some credential values may be masked for security.
                 </p>
               </div>
@@ -1298,21 +1305,21 @@ function EmailSettingsContent() {
                 onClick={closeEditProvider}
                 className="px-4 py-2 text-muted-foreground hover:text-foreground transition"
               >
-                Cancel
+                {tc("cancel")}
               </button>
               <button
                 onClick={handleUpdateProvider}
                 disabled={!newProviderName}
                 className="px-4 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition disabled:opacity-50"
               >
-                Save Changes
+                {t("saveChanges")}
               </button>
             </div>
           </DialogContent>
         </Dialog>
       )}
 
-      {/* Add Category Modal */}
+      {/* {t("category.add")} Modal */}
       {showAddCategory && (
         <Dialog
           open
@@ -1322,21 +1329,21 @@ function EmailSettingsContent() {
         >
           <DialogContent className="max-w-md p-0" aria-describedby={undefined}>
             <div className="p-4 border-b border-border">
-              <DialogTitle className="text-lg font-medium text-foreground">Add Subscription Category</DialogTitle>
+              <DialogTitle className="text-lg font-medium text-foreground">{t("category.addTitle")}</DialogTitle>
             </div>
             <div className="p-4 space-y-4">
               <div>
-                <label className="block text-sm text-muted-foreground mb-2">Category Name *</label>
+                <label className="block text-sm text-muted-foreground mb-2">{t("category.name")}</label>
                 <input
                   type="text"
                   value={newCategoryName}
                   onChange={(e) => setNewCategoryName(e.target.value)}
-                  placeholder="Product Updates"
+                  placeholder={t("category.namePlaceholder")}
                   className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-sky-500"
                 />
               </div>
               <div>
-                <label className="block text-sm text-muted-foreground mb-2">Slug (optional)</label>
+                <label className="block text-sm text-muted-foreground mb-2">{t("category.slugOptional")}</label>
                 <input
                   type="text"
                   value={newCategorySlug}
@@ -1344,14 +1351,14 @@ function EmailSettingsContent() {
                   placeholder="product-updates"
                   className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-sky-500"
                 />
-                <p className="text-xs text-muted-foreground mt-1">Auto-generated from name if left empty</p>
+                <p className="text-xs text-muted-foreground mt-1">{t("category.slugAutoNote")}</p>
               </div>
               <div>
-                <label className="block text-sm text-muted-foreground mb-2">Description (optional)</label>
+                <label className="block text-sm text-muted-foreground mb-2">{t("provider.descriptionOptional")}</label>
                 <textarea
                   value={newCategoryDescription}
                   onChange={(e) => setNewCategoryDescription(e.target.value)}
-                  placeholder="Get notified about new features and improvements"
+                  placeholder={t("category.descriptionPlaceholder")}
                   rows={3}
                   className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-sky-500"
                 />
@@ -1365,7 +1372,7 @@ function EmailSettingsContent() {
                   className="w-4 h-4 rounded border-border bg-muted text-sky-500 focus:ring-sky-500"
                 />
                 <label htmlFor="defaultSubscribed" className="text-sm text-foreground">
-                  Subscribe new users by default
+                  {t("category.subscribeByDefault")}
                 </label>
               </div>
             </div>
@@ -1380,21 +1387,21 @@ function EmailSettingsContent() {
                 }}
                 className="px-4 py-2 text-muted-foreground hover:text-foreground transition"
               >
-                Cancel
+                {tc("cancel")}
               </button>
               <button
                 onClick={handleCreateCategory}
                 disabled={!newCategoryName}
                 className="px-4 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition disabled:opacity-50"
               >
-                Add Category
+                {t("category.add")}
               </button>
             </div>
           </DialogContent>
         </Dialog>
       )}
 
-      {/* Edit Category Modal */}
+      {/* {t("category.editTitle")} Modal */}
       {editingCategory && (
         <Dialog
           open
@@ -1404,35 +1411,35 @@ function EmailSettingsContent() {
         >
           <DialogContent className="max-w-md p-0" aria-describedby={undefined}>
             <div className="p-4 border-b border-border">
-              <DialogTitle className="text-lg font-medium text-foreground">Edit Category</DialogTitle>
+              <DialogTitle className="text-lg font-medium text-foreground">{t("category.editTitle")}</DialogTitle>
             </div>
             <div className="p-4 space-y-4">
               <div>
-                <label className="block text-sm text-muted-foreground mb-2">Category Name *</label>
+                <label className="block text-sm text-muted-foreground mb-2">{t("category.name")}</label>
                 <input
                   type="text"
                   value={newCategoryName}
                   onChange={(e) => setNewCategoryName(e.target.value)}
-                  placeholder="Product Updates"
+                  placeholder={t("category.namePlaceholder")}
                   className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-sky-500"
                 />
               </div>
               <div>
-                <label className="block text-sm text-muted-foreground mb-2">Slug</label>
+                <label className="block text-sm text-muted-foreground mb-2">{t("category.slug")}</label>
                 <input
                   type="text"
                   value={editingCategory.slug}
                   disabled
                   className="w-full px-3 py-2 bg-muted/50 border border-border rounded-lg text-muted-foreground cursor-not-allowed"
                 />
-                <p className="text-xs text-muted-foreground mt-1">Slug cannot be changed after creation</p>
+                <p className="text-xs text-muted-foreground mt-1">{t("category.slugLockedNote")}</p>
               </div>
               <div>
-                <label className="block text-sm text-muted-foreground mb-2">Description (optional)</label>
+                <label className="block text-sm text-muted-foreground mb-2">{t("provider.descriptionOptional")}</label>
                 <textarea
                   value={newCategoryDescription}
                   onChange={(e) => setNewCategoryDescription(e.target.value)}
-                  placeholder="Get notified about new features and improvements"
+                  placeholder={t("category.descriptionPlaceholder")}
                   rows={3}
                   className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-sky-500"
                 />
@@ -1447,14 +1454,14 @@ function EmailSettingsContent() {
                 }}
                 className="px-4 py-2 text-muted-foreground hover:text-foreground transition"
               >
-                Cancel
+                {tc("cancel")}
               </button>
               <button
                 onClick={handleUpdateCategory}
                 disabled={!newCategoryName}
                 className="px-4 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition disabled:opacity-50"
               >
-                Save Changes
+                {t("saveChanges")}
               </button>
             </div>
           </DialogContent>
