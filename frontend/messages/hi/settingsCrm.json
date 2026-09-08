@@ -54,6 +54,74 @@
     "integrations": {
       "title": "इंटीग्रेशन",
       "description": "Google जोड़ें ताकि Gmail और Calendar से CRM भरे, और आने वाले मेल को deals में बदलने के नियम तय करें।"
-    }
+    },
+    "google": {
+      "title": "Google इंटीग्रेशन",
+      "blurb": "CRM के लिए Gmail और Calendar सिंक",
+      "connected": "कनेक्टेड",
+      "notConnected": "कनेक्टेड नहीं",
+      "connectedAccounts": "कनेक्टेड Google अकाउंट",
+      "showingFor": "सेटिंग्स इसके लिए दिख रही हैं",
+      "accountPickerLabel": "ये सिंक सेटिंग्स किस Google अकाउंट पर लागू हों",
+      "connect": "Google कनेक्ट करें",
+      "connectWith": "Google से कनेक्ट करें",
+      "secureTitle": "आपका डेटा सुरक्षित है",
+      "secure1": "हम केवल ईमेल मेटाडेटा और हस्ताक्षर पढ़ते हैं",
+      "secure2": "आपका डेटा आपके वर्कस्पेस में ही रहता है",
+      "secure3": "आप कभी भी डिस्कनेक्ट कर सकते हैं",
+      "lastSyncError": "पिछली सिंक त्रुटि"
+    },
+    "gmail": {
+      "title": "Gmail सिंक",
+      "blurb": "संपर्क भरने और संवाद ट्रैक करने के लिए ईमेल सिंक करें",
+      "scheduleTitle": "ऑटो-सिंक शेड्यूल",
+      "scheduleHint": "नियमित अंतराल पर ईमेल अपने आप सिंक करें (न्यूनतम 5 मिनट)"
+    },
+    "calendar": {
+      "title": "Calendar सिंक",
+      "blurb": "संपर्कों के साथ मीटिंग ट्रैक करने के लिए इवेंट सिंक करें",
+      "scheduleHint": "नियमित अंतराल पर कैलेंडर इवेंट अपने आप सिंक करें (न्यूनतम 5 मिनट)"
+    },
+    "enrichment": {
+      "title": "AI संपर्क समृद्धि",
+      "blurb": "AI का उपयोग करके ईमेल हस्ताक्षर से संपर्क विवरण निकालें",
+      "run": "समृद्धि चलाएँ"
+    },
+    "deals": {
+      "title": "ईमेल से डील अपने आप बनाएँ",
+      "blurb": "नए ईमेल सिंक होने पर डील अपने आप बनाएँ",
+      "mode": "डील बनाने का मोड",
+      "modeAuto": "ऑटो",
+      "modeAutoHint": "सभी ईमेल",
+      "modeAi": "स्मार्ट पहचान",
+      "modeCriteria": "मानदंड",
+      "modeCriteriaHint": "नियम-आधारित",
+      "skipPersonal": "व्यक्तिगत ईमेल डोमेन छोड़ें",
+      "skipPersonalHint": "Gmail, Yahoo, Outlook, आदि",
+      "defaultStage": "डिफ़ॉल्ट डील चरण",
+      "filterCriteria": "फ़िल्टर मानदंड",
+      "subjectKeywords": "विषय कीवर्ड (विषय में कोई हो तो डील बनेगी)",
+      "fromDomains": "प्रेषक डोमेन (प्रेषक इस डोमेन का हो तो डील बनेगी)",
+      "autoNote": "ऑटो मोड:",
+      "aiNote": "AI मोड:",
+      "criteriaNote": "मानदंड मोड:",
+      "addKeyword": "विषय कीवर्ड जोड़ें",
+      "addDomain": "डोमेन जोड़ें",
+      "allBusinessEmails": "सभी व्यावसायिक ईमेल",
+      "modePrefix": "मोड:",
+      "aiOpportunities": "AI से पहचाने गए अवसर",
+      "criteriaOnly": "केवल मानदंड से मेल खाते"
+    },
+    "shortcuts": {
+      "inbox": "इनबॉक्स देखें",
+      "inboxHint": "सिंक किए गए ईमेल ब्राउज़ करें",
+      "people": "लोग देखें",
+      "peopleHint": "अपने आप बने संपर्क देखें",
+      "dealsLink": "डील देखें",
+      "dealsHint": "अपने आप बनी डील देखें"
+    },
+    "syncNow": "अभी सिंक करें",
+    "orCustom": "या कस्टम डालें:",
+    "configure": "कॉन्फ़िगर करें"
   }
 }

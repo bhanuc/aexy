@@ -92,6 +92,7 @@ function GoogleIcon({ className }: { className?: string }) {
 }
 
 function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
+  const t = useTranslations("settingsCrm");
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -362,7 +363,7 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
 
   return (
     <div className="space-y-6">
-      {/* Google Integration Card */}
+      {/* {t("google.title")} Card */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -376,20 +377,20 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                 <GoogleIcon className="w-8 h-8" />
               </div>
               <div>
-                <h2 className="text-xl font-semibold text-foreground">Google Integration</h2>
-                <p className="text-muted-foreground">Gmail & Calendar sync for CRM</p>
+                <h2 className="text-xl font-semibold text-foreground">{t("google.title")}</h2>
+                <p className="text-muted-foreground">{t("google.blurb")}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               {status?.is_connected ? (
                 <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-sm">
                   <CheckCircle2 className="w-4 h-4" />
-                  Connected
+                  {t("google.connected")}
                 </span>
               ) : (
                 <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent/50 border border-border text-muted-foreground text-sm">
                   <XCircle className="w-4 h-4" />
-                  Not connected
+                  {t("google.notConnected")}
                 </span>
               )}
             </div>
@@ -407,7 +408,7 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
               <div className="flex items-center gap-3 mb-3">
                 <Mail className="w-5 h-5 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">
-                  Connected Google accounts
+                  {t("google.connectedAccounts")}
                 </p>
               </div>
               <GoogleAccounts
@@ -431,7 +432,7 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                   className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
                   data-testid="sync-account-scope"
                 >
-                  Showing settings for
+                  {t("google.showingFor")}
                   <select
                     // Before a choice is made the server picked the account, so
                     // reflect *that* one — matched by address, since the
@@ -442,7 +443,7 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                       ""
                     }
                     onChange={(e) => setSelectedAccountId(e.target.value)}
-                    aria-label="Which Google account these sync settings apply to"
+                    aria-label={t("google.accountPickerLabel")}
                     className="rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
                   >
                     {accounts.map((account) => (
@@ -453,16 +454,16 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                   </select>
                 </label>
               )}
-              {/* Gmail Sync */}
+              {/* {t("gmail.title")} */}
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-4">
                   <div className="p-3 rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
                     <Mail className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="font-medium text-foreground">Gmail Sync</h3>
+                    <h3 className="font-medium text-foreground">{t("gmail.title")}</h3>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Sync emails to populate contacts and track communication
+                      {t("gmail.blurb")}
                     </p>
                     {status.gmail_last_sync_at && (
                       <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
@@ -483,7 +484,7 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                     className="flex items-center gap-2 px-3 py-1.5 text-sm bg-accent hover:bg-accent disabled:opacity-50 text-foreground rounded-lg transition-colors"
                   >
                     <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin" : ""}`} />
-                    Sync Now
+                    {t("syncNow")}
                   </button>
                   <button
                     onClick={() => handleUpdateSettings({ gmail_sync_enabled: !status.gmail_sync_enabled })}
@@ -500,7 +501,7 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                 </div>
               </div>
 
-              {/* What this mailbox keeps out. Directly under the Gmail Sync
+              {/* What this mailbox keeps out. Directly under the {t("gmail.title")}
                   toggle because the moment somebody turns sync on is the
                   moment they need to know they can keep parts of it out. */}
               {/* Above exclusions on purpose: this decides whether exclusions
@@ -535,9 +536,9 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
               {status.gmail_sync_enabled && (
                 <div className="ml-14 pl-4 border-l-2 border-border space-y-3">
                   <div>
-                    <h4 className="font-medium text-foreground text-sm">Auto-Sync Schedule</h4>
+                    <h4 className="font-medium text-foreground text-sm">{t("gmail.scheduleTitle")}</h4>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Automatically sync emails at a regular interval (minimum 5 minutes)
+                      {t("gmail.scheduleHint")}
                     </p>
                   </div>
 
@@ -571,7 +572,7 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
 
                   {/* Custom input */}
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Or enter custom:</span>
+                    <span className="text-xs text-muted-foreground">{t("orCustom")}</span>
                     <input
                       type="number"
                       min="0"
@@ -594,16 +595,16 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                 </div>
               )}
 
-              {/* Calendar Sync */}
+              {/* {t("calendar.title")} */}
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-4">
                   <div className="p-3 rounded-lg bg-green-50 text-green-600 dark:bg-green-500/10 dark:text-green-400">
                     <Calendar className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="font-medium text-foreground">Calendar Sync</h3>
+                    <h3 className="font-medium text-foreground">{t("calendar.title")}</h3>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Sync events to track meetings with contacts
+                      {t("calendar.blurb")}
                     </p>
                     {status.calendar_last_sync_at && (
                       <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
@@ -624,7 +625,7 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                     className="flex items-center gap-2 px-3 py-1.5 text-sm bg-accent hover:bg-accent disabled:opacity-50 text-foreground rounded-lg transition-colors"
                   >
                     <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin" : ""}`} />
-                    Sync Now
+                    {t("syncNow")}
                   </button>
                   <button
                     onClick={() => handleUpdateSettings({ calendar_sync_enabled: !status.calendar_sync_enabled })}
@@ -645,9 +646,9 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
               {status.calendar_sync_enabled && (
                 <div className="ml-14 pl-4 border-l-2 border-border space-y-3">
                   <div>
-                    <h4 className="font-medium text-foreground text-sm">Auto-Sync Schedule</h4>
+                    <h4 className="font-medium text-foreground text-sm">{t("gmail.scheduleTitle")}</h4>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Automatically sync calendar events at a regular interval (minimum 5 minutes)
+                      {t("calendar.scheduleHint")}
                     </p>
                   </div>
 
@@ -681,7 +682,7 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
 
                   {/* Custom input */}
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Or enter custom:</span>
+                    <span className="text-xs text-muted-foreground">{t("orCustom")}</span>
                     <input
                       type="number"
                       min="0"
@@ -711,9 +712,9 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                     <Sparkles className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="font-medium text-foreground">AI Contact Enrichment</h3>
+                    <h3 className="font-medium text-foreground">{t("enrichment.title")}</h3>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Extract contact details from email signatures using AI
+                      {t("enrichment.blurb")}
                     </p>
                   </div>
                 </div>
@@ -723,7 +724,7 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                   className="flex items-center gap-2 px-4 py-2 text-sm bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 disabled:opacity-50 text-white rounded-lg transition-colors"
                 >
                   <Sparkles className="w-4 h-4" />
-                  Run Enrichment
+                  {t("enrichment.run")}
                 </button>
               </div>
 
@@ -735,16 +736,19 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                       <DollarSign className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="font-medium text-foreground">Auto-Create Deals from Emails</h3>
+                      <h3 className="font-medium text-foreground">{t("deals.title")}</h3>
                       <p className="text-sm text-muted-foreground mt-1">
-                        Automatically create deals when new emails are synced
+                        {t("deals.blurb")}
                       </p>
                       {dealSettings.auto_create_deals && (
                         <p className="text-xs text-amber-400 mt-2 flex items-center gap-1">
                           <Zap className="w-3 h-3" />
-                          Mode: {dealSettings.deal_creation_mode === "auto" ? "All business emails" :
-                                 dealSettings.deal_creation_mode === "ai" ? "AI-detected opportunities" :
-                                 "Matching criteria only"}
+                          {t("deals.modePrefix")}{" "}
+                          {dealSettings.deal_creation_mode === "auto"
+                            ? t("deals.allBusinessEmails")
+                            : dealSettings.deal_creation_mode === "ai"
+                              ? t("deals.aiOpportunities")
+                              : t("deals.criteriaOnly")}
                         </p>
                       )}
                     </div>
@@ -755,7 +759,7 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                       className="flex items-center gap-2 px-3 py-1.5 text-sm bg-accent hover:bg-accent text-foreground rounded-lg transition-colors"
                     >
                       <Settings className="w-4 h-4" />
-                      Configure
+                      {t("configure")}
                     </button>
                     <button
                       onClick={() => handleUpdateDealSettings({ auto_create_deals: !dealSettings.auto_create_deals })}
@@ -783,7 +787,7 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                     {/* Creation Mode */}
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-2">
-                        Deal Creation Mode
+                        {t("deals.mode")}
                       </label>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                         <button
@@ -795,8 +799,8 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                           }`}
                         >
                           <Zap className="w-5 h-5" />
-                          <span className="text-xs font-medium">Auto</span>
-                          <span className="text-xs text-muted-foreground">All emails</span>
+                          <span className="text-xs font-medium">{t("deals.modeAuto")}</span>
+                          <span className="text-xs text-muted-foreground">{t("deals.modeAutoHint")}</span>
                         </button>
                         <button
                           onClick={() => handleUpdateDealSettings({ deal_creation_mode: "ai" })}
@@ -808,7 +812,7 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                         >
                           <Bot className="w-5 h-5" />
                           <span className="text-xs font-medium">AI</span>
-                          <span className="text-xs text-muted-foreground">Smart detection</span>
+                          <span className="text-xs text-muted-foreground">{t("deals.modeAi")}</span>
                         </button>
                         <button
                           onClick={() => handleUpdateDealSettings({ deal_creation_mode: "criteria" })}
@@ -819,8 +823,8 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                           }`}
                         >
                           <Filter className="w-5 h-5" />
-                          <span className="text-xs font-medium">Criteria</span>
-                          <span className="text-xs text-muted-foreground">Rules-based</span>
+                          <span className="text-xs font-medium">{t("deals.modeCriteria")}</span>
+                          <span className="text-xs text-muted-foreground">{t("deals.modeCriteriaHint")}</span>
                         </button>
                       </div>
                     </div>
@@ -828,8 +832,8 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                     {/* Skip Personal Domains */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                       <div>
-                        <p className="text-sm font-medium text-foreground">Skip personal email domains</p>
-                        <p className="text-xs text-muted-foreground">Gmail, Yahoo, Outlook, etc.</p>
+                        <p className="text-sm font-medium text-foreground">{t("deals.skipPersonal")}</p>
+                        <p className="text-xs text-muted-foreground">{t("deals.skipPersonalHint")}</p>
                       </div>
                       <button
                         onClick={() => handleUpdateDealSettings({ skip_personal_domains: !dealSettings.skip_personal_domains })}
@@ -848,7 +852,7 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                     {/* Default Stage */}
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-2">
-                        Default Deal Stage
+                        {t("deals.defaultStage")}
                       </label>
                       <input
                         type="text"
@@ -862,12 +866,12 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                     {/* Criteria Settings */}
                     {dealSettings.deal_creation_mode === "criteria" && (
                       <div className="space-y-4 pt-4 border-t border-border">
-                        <p className="text-sm font-medium text-foreground">Filter Criteria</p>
+                        <p className="text-sm font-medium text-foreground">{t("deals.filterCriteria")}</p>
 
                         {/* Subject Keywords */}
                         <div>
                           <label className="block text-xs text-muted-foreground mb-2">
-                            Subject Keywords (creates deal if subject contains any)
+                            {t("deals.subjectKeywords")}
                           </label>
                           <div className="flex gap-2 mb-2">
                             <input
@@ -880,7 +884,7 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                             />
                             <button
                               onClick={addSubjectKeyword}
-                              aria-label="Add subject keyword"
+                              aria-label={t("deals.addKeyword")}
                               className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm"
                             >
                               <Plus className="w-4 h-4" />
@@ -905,7 +909,7 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                         {/* From Domains */}
                         <div>
                           <label className="block text-xs text-muted-foreground mb-2">
-                            From Domains (creates deal if sender is from domain)
+                            {t("deals.fromDomains")}
                           </label>
                           <div className="flex gap-2 mb-2">
                             <input
@@ -918,7 +922,7 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                             />
                             <button
                               onClick={addDomain}
-                              aria-label="Add domain"
+                              aria-label={t("deals.addDomain")}
                               className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm"
                             >
                               <Plus className="w-4 h-4" />
@@ -947,19 +951,19 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                       <p className="text-xs text-muted-foreground">
                         {dealSettings.deal_creation_mode === "auto" && (
                           <>
-                            <strong>Auto mode:</strong> Creates a deal for every new email from business domains.
+                            <strong>{t("deals.autoNote")}</strong> Creates a deal for every new email from business domains.
                             Existing deals linked to the same company will be updated instead.
                           </>
                         )}
                         {dealSettings.deal_creation_mode === "ai" && (
                           <>
-                            <strong>AI mode:</strong> Uses AI to analyze email content and only creates deals
+                            <strong>{t("deals.aiNote")}</strong> Uses AI to analyze email content and only creates deals
                             for emails that indicate sales opportunities (pricing requests, proposals, demos, etc.)
                           </>
                         )}
                         {dealSettings.deal_creation_mode === "criteria" && (
                           <>
-                            <strong>Criteria mode:</strong> Only creates deals when the email matches
+                            <strong>{t("deals.criteriaNote")}</strong> Only creates deals when the email matches
                             your specified keywords or domains. Good for high-volume inboxes.
                           </>
                         )}
@@ -993,7 +997,7 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
                   <div className="flex items-start gap-2">
                     <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-sm font-medium text-red-400">Last Sync Error</p>
+                      <p className="text-sm font-medium text-red-400">{t("google.lastSyncError")}</p>
                       <p className="text-sm text-red-300/70 mt-1">{status.last_error}</p>
                     </div>
                   </div>
@@ -1002,12 +1006,12 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
             )}
           </>
         ) : (
-          /* Not connected state */
+          /* {t("google.notConnected")} state */
           <div className="p-8 text-center">
             <div className="w-20 h-20 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-6">
               <GoogleIcon className="w-10 h-10" />
             </div>
-            <h3 className="text-lg font-semibold text-foreground mb-2">Connect Google</h3>
+            <h3 className="text-lg font-semibold text-foreground mb-2">{t("google.connect")}</h3>
             <p className="text-muted-foreground mb-6 max-w-md mx-auto">
               Sync your Gmail and Calendar to automatically populate your CRM with contacts,
               emails, and meetings.
@@ -1018,26 +1022,26 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
               className="inline-flex items-center gap-3 px-6 py-3 rounded-xl bg-white text-slate-900 font-medium hover:bg-slate-100 transition-all shadow-lg"
             >
               <GoogleIcon className="w-5 h-5" />
-              Connect with Google
+              {t("google.connectWith")}
             </button>
 
             <div className="mt-8 text-left max-w-md mx-auto">
               <p className="text-sm text-muted-foreground flex items-center gap-2 mb-2">
                 <Shield className="w-4 h-4" />
-                Your data is secure
+                {t("google.secureTitle")}
               </p>
               <ul className="space-y-2 text-xs text-muted-foreground">
                 <li className="flex items-center gap-2">
                   <CheckCircle2 className="w-3 h-3 text-green-400" />
-                  We only read email metadata and signatures
+                  {t("google.secure1")}
                 </li>
                 <li className="flex items-center gap-2">
                   <CheckCircle2 className="w-3 h-3 text-green-400" />
-                  Your data stays in your workspace
+                  {t("google.secure2")}
                 </li>
                 <li className="flex items-center gap-2">
                   <CheckCircle2 className="w-3 h-3 text-green-400" />
-                  You can disconnect anytime
+                  {t("google.secure3")}
                 </li>
               </ul>
             </div>
@@ -1056,8 +1060,8 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
               <Mail className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-medium text-foreground">View Inbox</h3>
-              <p className="text-sm text-muted-foreground">Browse synced emails</p>
+              <h3 className="font-medium text-foreground">{t("shortcuts.inbox")}</h3>
+              <p className="text-sm text-muted-foreground">{t("shortcuts.inboxHint")}</p>
             </div>
           </button>
           <button
@@ -1068,8 +1072,8 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
               <Users className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-medium text-foreground">View People</h3>
-              <p className="text-sm text-muted-foreground">See auto-created contacts</p>
+              <h3 className="font-medium text-foreground">{t("shortcuts.people")}</h3>
+              <p className="text-sm text-muted-foreground">{t("shortcuts.peopleHint")}</p>
             </div>
           </button>
           <button
@@ -1080,8 +1084,8 @@ function IntegrationsTab({ workspaceId }: { workspaceId: string }) {
               <DollarSign className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-medium text-foreground">View Deals</h3>
-              <p className="text-sm text-muted-foreground">See auto-created deals</p>
+              <h3 className="font-medium text-foreground">{t("shortcuts.dealsLink")}</h3>
+              <p className="text-sm text-muted-foreground">{t("shortcuts.dealsHint")}</p>
             </div>
           </button>
         </div>
