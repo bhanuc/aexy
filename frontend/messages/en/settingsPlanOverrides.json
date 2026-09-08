@@ -5,6 +5,32 @@
     "denied": {
       "title": "Platform admin access required",
       "body": "Only Aexy platform staff can manage this. Workspace owners and admins do not have access."
-    }
+    },
+    "createTitle": "Create or Update Override",
+    "workspaceId": "Workspace ID",
+    "billingModel": "Billing Model",
+    "modelDefault": "Default (no override)",
+    "modelFree": "Free",
+    "modelPerSeat": "Per Seat",
+    "modelFlatUsage": "Flat + Usage",
+    "modelPostpaid": "Postpaid",
+    "perSeatPrice": "Per Seat Price (cents)",
+    "baseFee": "Base Fee (cents)",
+    "maxRepos": "Max Repos",
+    "maxStorage": "Max Storage (GB)",
+    "llmPerDay": "LLM Req/Day",
+    "discount": "Discount %",
+    "notes": "Notes",
+    "previewButton": "Preview Effective Plan",
+    "previewHeading": "Effective Plan Preview",
+    "activeOverrides": "Active Overrides",
+    "loading": "Loading overrides…",
+    "none": "No custom plan overrides configured yet.",
+    "workspacePlaceholder": "Enter workspace UUID",
+    "notesPlaceholder": "Internal notes about this override",
+    "previewTitle": "Preview effective plan",
+    "removeTitle": "Remove override",
+    "saved": "Plan override saved",
+    "removed": "Override removed"
   }
 }

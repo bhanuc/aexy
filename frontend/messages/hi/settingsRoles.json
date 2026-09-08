@@ -1,6 +1,29 @@
 {
   "settingsRoles": {
     "title": "संगठन भूमिकाएँ",
-    "description": "कस्टम भूमिकाएँ और उनकी अनुमतियाँ।"
+    "description": "विवरण",
+    "system": "सिस्टम",
+    "createTitle": "कस्टम भूमिका बनाएँ",
+    "createSubtitle": "विशिष्ट अनुमतियों वाली नई भूमिका बनाएँ",
+    "fromTemplate": "टेम्पलेट से शुरू करें (वैकल्पिक)",
+    "fromScratch": "शून्य से शुरू करें",
+    "roleName": "भूमिका का नाम",
+    "color": "रंग",
+    "descriptionPlaceholder": "यह भूमिका किस लिए है?",
+    "creating": "बनाई जा रही है…",
+    "createRole": "भूमिका बनाएँ",
+    "loading": "भूमिकाएँ लोड हो रही हैं…",
+    "heading": "भूमिकाएँ",
+    "systemRoles": "सिस्टम भूमिकाएँ",
+    "customRoles": "कस्टम भूमिकाएँ",
+    "noCustomRoles": "कोई कस्टम भूमिका नहीं",
+    "noCustomRolesHint": "अपनी टीम के लिए विशिष्ट अनुमति सेट तय करने हेतु कस्टम भूमिकाएँ बनाएँ।",
+    "createFirst": "पहली भूमिका बनाएँ",
+    "aboutHeading": "भूमिकाओं और अनुमतियों के बारे में",
+    "aboutSystem": "सिस्टम भूमिकाएँ",
+    "aboutCustom": "कस्टम भूमिकाएँ",
+    "aboutProject": "प्रोजेक्ट ओवरराइड",
+    "editRole": "भूमिका संपादित करें",
+    "deleteRole": "भूमिका हटाएँ"
   }
 }
