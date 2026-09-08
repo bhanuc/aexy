@@ -1,7 +1,30 @@
 {
   "settingsProjects": {
     "general": {
-      "subtitle": "Project settings"
+      "subtitle": "Project settings",
+      "loading": "Loading project…",
+      "heading": "General Settings",
+      "name": "Project Name",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "What is this project about?",
+      "color": "Color",
+      "status": "Status",
+      "updated": "Project updated successfully!",
+      "saving": "Saving…",
+      "saveChanges": "Save Changes",
+      "publicHeading": "Public Page Configuration",
+      "publicSubtitle": "Choose which tabs to show on your public project page",
+      "viewPublicPage": "View Public Page",
+      "publicUpdated": "Public tabs updated successfully!",
+      "saveTabs": "Save Tab Settings",
+      "infoHeading": "Project Info",
+      "projectId": "Project ID",
+      "slug": "Slug",
+      "publicSlug": "Public Slug",
+      "visibility": "Visibility",
+      "members": "Members",
+      "teams": "Teams",
+      "created": "Created"
     },
     "permissions": {
       "subtitle": "Permissions and members",
@@ -35,7 +58,9 @@
       "subtitle": "Task statuses"
     },
     "repositories": {
-      "subtitle": "Linked repositories"
+      "subtitle": "Linked repositories",
+      "openWorkspaceRepos": "Open workspace repositories →",
+      "loadFailed": "Failed to load repositories"
     },
     "tabs": {
       "general": "General",

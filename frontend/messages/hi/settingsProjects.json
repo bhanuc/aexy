@@ -1,7 +1,30 @@
 {
   "settingsProjects": {
     "general": {
-      "subtitle": "प्रोजेक्ट सेटिंग्स"
+      "subtitle": "प्रोजेक्ट सेटिंग्स",
+      "loading": "प्रोजेक्ट लोड हो रहा है…",
+      "heading": "सामान्य सेटिंग्स",
+      "name": "प्रोजेक्ट का नाम",
+      "descriptionLabel": "विवरण",
+      "descriptionPlaceholder": "यह प्रोजेक्ट किस बारे में है?",
+      "color": "रंग",
+      "status": "स्थिति",
+      "updated": "प्रोजेक्ट सफलतापूर्वक अपडेट हुआ!",
+      "saving": "सहेजा जा रहा है…",
+      "saveChanges": "बदलाव सहेजें",
+      "publicHeading": "सार्वजनिक पेज कॉन्फ़िगरेशन",
+      "publicSubtitle": "चुनें कि आपके सार्वजनिक प्रोजेक्ट पेज पर कौन-से टैब दिखें",
+      "viewPublicPage": "सार्वजनिक पेज देखें",
+      "publicUpdated": "सार्वजनिक टैब सफलतापूर्वक अपडेट हुए!",
+      "saveTabs": "टैब सेटिंग्स सहेजें",
+      "infoHeading": "प्रोजेक्ट जानकारी",
+      "projectId": "प्रोजेक्ट ID",
+      "slug": "Slug",
+      "publicSlug": "सार्वजनिक Slug",
+      "visibility": "दृश्यता",
+      "members": "सदस्य",
+      "teams": "टीमें",
+      "created": "बनाया गया"
     },
     "permissions": {
       "subtitle": "अनुमतियाँ और सदस्य",
@@ -35,7 +58,9 @@
       "subtitle": "टास्क स्थितियाँ"
     },
     "repositories": {
-      "subtitle": "जुड़ी रिपॉज़िटरी"
+      "subtitle": "जुड़ी रिपॉज़िटरी",
+      "openWorkspaceRepos": "वर्कस्पेस रिपॉज़िटरी खोलें →",
+      "loadFailed": "रिपॉज़िटरी लोड नहीं हो सकीं"
     },
     "tabs": {
       "general": "सामान्य",

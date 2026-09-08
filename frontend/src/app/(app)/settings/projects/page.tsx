@@ -98,6 +98,7 @@ function BoardRouting({
   workspaceId: string;
   canEdit: boolean;
 }) {
+  const tList = useTranslations("settingsProjectsList");
   const { updateProject, isUpdating } = useProjects(workspaceId);
   const { data: departments } = useDepartments();
   const { stakeholders } = useServiceDeskTaxonomy();
@@ -131,11 +132,11 @@ function BoardRouting({
     <div className="border-t border-border bg-muted/30 p-4">
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[180px]">
-          <label className="mb-1 block text-xs text-muted-foreground">Owning department</label>
+          <label className="mb-1 block text-xs text-muted-foreground">{tList("owningDepartment")}</label>
           <select
             value={project.department_id ?? ""}
             disabled={!canEdit || isUpdating}
-            aria-label="Owning department"
+            aria-label={tList("owningDepartment")}
             onChange={(e) =>
               updateProject({
                 projectId: project.id,
@@ -144,7 +145,7 @@ function BoardRouting({
             }
             className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm disabled:opacity-50"
           >
-            <option value="">No department</option>
+            <option value="">{tList("noDepartment")}</option>
             {(departments ?? []).map((d) => (
               <option key={d.id} value={d.id}>
                 {d.name}
@@ -155,12 +156,12 @@ function BoardRouting({
 
         <div className="min-w-[180px]">
           <label className="mb-1 block text-xs text-muted-foreground">
-            Pending-with override
+            {tList("pendingWithOverride")}
           </label>
           <select
             value={project.desk_routing_reason === "override" ? project.desk_stakeholder_slug ?? "" : ""}
             disabled={!canEdit || isUpdating}
-            aria-label="Pending-with override"
+            aria-label={tList("pendingWithOverride")}
             onChange={(e) =>
               updateProject({
                 projectId: project.id,
@@ -169,7 +170,7 @@ function BoardRouting({
             }
             className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm disabled:opacity-50"
           >
-            <option value="">Follow the department</option>
+            <option value="">{tList("followDepartment")}</option>
             {internal.map((s) => (
               <option key={s.slug} value={s.slug}>
                 {s.label}
@@ -179,7 +180,9 @@ function BoardRouting({
         </div>
 
         <div className="min-w-[200px] pb-1 text-xs">
-          <div className="mb-1 text-muted-foreground">Tickets move to</div>
+          <div className="mb-1 text-muted-foreground">
+            {tList("ticketsMoveTo")}
+          </div>
           {resolved ? (
             <span>
               <span className="font-medium">{resolved.label}</span>{" "}
@@ -208,6 +211,7 @@ function ProjectCard({
   // come from that namespace rather than this page's.
   const tTabs = useTranslations("settingsProjects");
   const tList = useTranslations("settingsProjectsList");
+  const tCommon = useTranslations("common");
   const [expanded, setExpanded] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -246,7 +250,7 @@ function ProjectCard({
   };
 
   const handleRemoveMember = async (developerId: string) => {
-    if (confirm("Remove this member from the project?")) {
+    if (confirm(tList("confirmRemoveMember"))) {
       try {
         await removeMember(developerId);
       } catch (error) {
@@ -385,7 +389,7 @@ function ProjectCard({
         <div className="border-t border-border">
           <BoardRouting project={project} workspaceId={workspaceId} canEdit={isAdmin} />
           {membersLoading ? (
-            <div className="p-4 text-center text-muted-foreground">Loading members...</div>
+            <div className="p-4 text-center text-muted-foreground">{tList("loadingMembers")}</div>
           ) : (
             <>
               {/* Project Members */}
@@ -427,7 +431,7 @@ function ProjectCard({
                               onChange={(e) => setEditingRoleId(e.target.value || null)}
                               className="px-2 py-1 text-xs rounded bg-muted text-foreground border border-border focus:outline-none focus:border-primary-500"
                             >
-                              <option value="">Use org role</option>
+                              <option value="">{tList("useOrgRole")}</option>
                               {roles.map((role) => (
                                 <option key={role.id} value={role.id}>
                                   {role.name}
@@ -440,7 +444,7 @@ function ProjectCard({
                               }
                               disabled={isUpdating}
                               className="p-1 text-green-400 hover:bg-accent rounded transition"
-                              title="Save"
+                              title={tCommon("save")}
                             >
                               <Check className="h-4 w-4" />
                             </button>
@@ -450,7 +454,7 @@ function ProjectCard({
                                 setEditingRoleId(null);
                               }}
                               className="p-1 text-muted-foreground hover:bg-accent rounded transition"
-                              title="Cancel"
+                              title={tCommon("cancel")}
                             >
                               <X className="h-4 w-4" />
                             </button>
@@ -490,7 +494,7 @@ function ProjectCard({
                         <button
                           onClick={() => handleRemoveMember(member.developer_id)}
                           className="p-1.5 text-muted-foreground hover:text-red-400 hover:bg-accent rounded transition"
-                          title="Remove from project"
+                          title={tList("removeFromProject")}
                         >
                           <UserMinus className="h-4 w-4" />
                         </button>
@@ -500,7 +504,7 @@ function ProjectCard({
                 ))}
                 {members.length === 0 && (
                   <div className="p-4 text-center text-muted-foreground text-sm">
-                    No members in this project yet
+                    {tList("noMembers")}
                   </div>
                 )}
               </div>
@@ -516,7 +520,7 @@ function ProjectCard({
                           onChange={(e) => setSelectedDeveloperId(e.target.value)}
                           className="flex-1 px-3 py-2 bg-muted border border-border rounded-lg text-foreground text-sm focus:outline-none focus:border-primary-500"
                         >
-                          <option value="">Select a member...</option>
+                          <option value="">{tList("selectMember")}</option>
                           {availableMembers.map((wm) => (
                             <option key={wm.developer_id} value={wm.developer_id}>
                               {wm.developer_name || wm.developer_email || "Unknown"}
@@ -530,7 +534,7 @@ function ProjectCard({
                           onChange={(e) => setSelectedRoleId(e.target.value)}
                           className="flex-1 px-3 py-2 bg-muted border border-border rounded-lg text-foreground text-sm focus:outline-none focus:border-primary-500"
                         >
-                          <option value="">Use organization role</option>
+                          <option value="">{tList("useOrganizationRole")}</option>
                           {roles.map((role) => (
                             <option key={role.id} value={role.id}>
                               {role.name}
@@ -538,7 +542,7 @@ function ProjectCard({
                           ))}
                         </select>
                         {!canUseProjectFeatures && selectedRoleId && (
-                          <span title="Pro feature">
+                          <span title={tList("proFeature")}>
                             <Crown className="h-4 w-4 text-amber-500" />
                           </span>
                         )}
@@ -552,12 +556,12 @@ function ProjectCard({
                           {isAdding ? (
                             <>
                               <RefreshCw className="h-4 w-4 animate-spin" />
-                              Adding...
+                              {tList("adding")}
                             </>
                           ) : (
                             <>
                               <Plus className="h-4 w-4" />
-                              Add Member
+                              {tList("addMember")}
                             </>
                           )}
                         </button>
@@ -569,7 +573,7 @@ function ProjectCard({
                           }}
                           className="px-3 py-2 bg-muted hover:bg-accent text-foreground rounded-lg text-sm transition"
                         >
-                          Cancel
+                          {tCommon("cancel")}
                         </button>
                       </div>
                     </div>
@@ -633,7 +637,7 @@ export default function ProjectsSettingsPage() {
   const isAdmin = currentMember?.role === "owner" || currentMember?.role === "admin";
 
   const handleDelete = async (projectId: string) => {
-    if (confirm("Are you sure you want to delete this project? This action cannot be undone.")) {
+    if (confirm(t("confirmDeleteProject"))) {
       try {
         await deleteProject(projectId);
       } catch (error) {
@@ -649,7 +653,7 @@ export default function ProjectsSettingsPage() {
       <div className="py-20 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500 mx-auto mb-4"></div>
-          <p className="text-foreground">Loading projects...</p>
+          <p className="text-foreground">{t("loading")}</p>
         </div>
       </div>
     );
@@ -666,15 +670,15 @@ export default function ProjectsSettingsPage() {
         {!hasWorkspaces ? (
           <div className="bg-card rounded-xl p-12 text-center">
             <FolderKanban className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-xl font-medium text-foreground mb-2">No Workspace</h3>
+            <h3 className="text-xl font-medium text-foreground mb-2">{t("noWorkspaceTitle")}</h3>
             <p className="text-muted-foreground mb-6">
-              Create a workspace first to start managing projects.
+              {t("noWorkspaceDescription")}
             </p>
             <Link
               href="/settings/organization"
               className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition font-medium"
             >
-              Go to Organization Settings
+              {t("noWorkspaceCta")}
             </Link>
           </div>
         ) : (
@@ -694,7 +698,7 @@ export default function ProjectsSettingsPage() {
                   className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition text-sm"
                 >
                   <Plus className="h-4 w-4" />
-                  Create Project
+                  {t("create")}
                 </button>
               )}
             </div>
@@ -717,9 +721,9 @@ export default function ProjectsSettingsPage() {
             ) : (
               <div className="bg-card rounded-xl p-12 text-center">
                 <FolderKanban className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-xl font-medium text-foreground mb-2">No Projects Yet</h3>
+                <h3 className="text-xl font-medium text-foreground mb-2">{t("emptyTitle")}</h3>
                 <p className="text-muted-foreground mb-6">
-                  Create your first project to organize your work and manage team access.
+                  {t("emptyDescription")}
                 </p>
                 {isAdmin && (
                   <button
@@ -727,7 +731,7 @@ export default function ProjectsSettingsPage() {
                     className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition font-medium"
                   >
                     <Plus className="h-4 w-4" />
-                    Create Project
+                    {t("create")}
                   </button>
                 )}
               </div>

@@ -18,6 +18,7 @@ import { ProjectSettingsPage } from "@/components/settings/ProjectSettingsPage";
 
 export default function ProjectRepositoriesPage() {
   const t = useTranslations("settingsProjectRepositories");
+  const tp = useTranslations("settingsProjects");
   const params = useParams();
   const projectId = params.projectId as string;
   const { currentWorkspaceId } = useWorkspace();
@@ -40,7 +41,7 @@ export default function ProjectRepositoriesPage() {
         setTeamRepos(t);
       } catch (error) {
         console.error("Failed to load project repos:", error);
-        toast.error("Failed to load repositories");
+        toast.error(tp("repositories.loadFailed"));
       } finally {
         setLoading(false);
       }
@@ -91,7 +92,7 @@ export default function ProjectRepositoriesPage() {
             href="/settings/repositories"
             className="inline-block mt-4 text-sm text-primary-500 hover:underline"
           >
-            Open workspace repositories →
+            {tp("repositories.openWorkspaceRepos")}
           </Link>
         </div>
       ) : (
