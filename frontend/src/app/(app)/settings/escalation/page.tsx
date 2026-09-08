@@ -58,6 +58,7 @@ interface RuleEditorProps {
 }
 
 function RuleEditor({ rule, onChange, onRemove, members, teams }: RuleEditorProps) {
+  const t = useTranslations("settingsEscalation");
   return (
     <div className="bg-muted rounded-lg p-4 space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -85,7 +86,7 @@ function RuleEditor({ rule, onChange, onRemove, members, teams }: RuleEditorProp
         </div>
         <button
           onClick={onRemove}
-          aria-label="Remove escalation step"
+          aria-label={t("removeStep")}
           className="p-2 text-muted-foreground hover:text-red-400 transition"
         >
           <Trash2 className="h-4 w-4" />
@@ -93,7 +94,7 @@ function RuleEditor({ rule, onChange, onRemove, members, teams }: RuleEditorProp
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-muted-foreground mb-2">Notification Channels</label>
+        <label className="block text-sm font-medium text-muted-foreground mb-2">{t("channels")}</label>
         <div className="flex flex-wrap gap-2">
           {CHANNEL_OPTIONS.map((opt) => (
             <button
@@ -120,7 +121,7 @@ function RuleEditor({ rule, onChange, onRemove, members, teams }: RuleEditorProp
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-muted-foreground mb-2">Notify Users</label>
+          <label className="block text-sm font-medium text-muted-foreground mb-2">{t("notifyUsers")}</label>
           <select
             multiple
             value={rule.notify_users || []}
@@ -139,7 +140,7 @@ function RuleEditor({ rule, onChange, onRemove, members, teams }: RuleEditorProp
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-muted-foreground mb-2">Notify Teams</label>
+          <label className="block text-sm font-medium text-muted-foreground mb-2">{t("notifyTeams")}</label>
           <select
             multiple
             value={rule.notify_teams || []}
@@ -168,7 +169,7 @@ function RuleEditor({ rule, onChange, onRemove, members, teams }: RuleEditorProp
         />
         <label htmlFor={`oncall-${rule.level}`} className="text-sm text-foreground flex items-center gap-2">
           <UserCircle className="h-4 w-4" />
-          Also notify on-call person
+          {t("notifyOncall")}
         </label>
       </div>
     </div>
@@ -177,6 +178,7 @@ function RuleEditor({ rule, onChange, onRemove, members, teams }: RuleEditorProp
 
 export default function EscalationSettingsPage() {
   const t = useTranslations("settingsEscalation");
+  const tc = useTranslations("common");
   const queryClient = useQueryClient();
   const { currentWorkspace } = useWorkspace();
   const workspaceId = currentWorkspace?.id || null;
@@ -328,13 +330,13 @@ export default function EscalationSettingsPage() {
         {isCreating && (
           <div className="bg-card rounded-xl border border-border p-6 mb-8">
             <h2 className="text-lg font-semibold text-foreground mb-6">
-              {editingMatrix ? "Edit Escalation Matrix" : "Create Escalation Matrix"}
+              {editingMatrix ? t("editTitle") : t("createTitle")}
             </h2>
 
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-muted-foreground mb-2">Name</label>
+                  <label className="block text-sm font-medium text-muted-foreground mb-2">{t("name")}</label>
                   <input
                     type="text"
                     value={formData.name}
@@ -344,12 +346,12 @@ export default function EscalationSettingsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-muted-foreground mb-2">Description</label>
+                  <label className="block text-sm font-medium text-muted-foreground mb-2">{t("description")}</label>
                   <input
                     type="text"
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Optional description"
+                    placeholder={t("descriptionPlaceholder")}
                     className="w-full px-4 py-2 bg-background border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-purple-500"
                   />
                 </div>
@@ -358,7 +360,7 @@ export default function EscalationSettingsPage() {
               <div>
                 <label className="block text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2">
                   <Zap className="h-4 w-4" />
-                  Apply to Severity Levels
+                  {t("severityLevels")}
                 </label>
                 <div className="flex flex-wrap gap-2">
                   {SEVERITY_OPTIONS.map((opt) => (
@@ -385,11 +387,11 @@ export default function EscalationSettingsPage() {
 
               <div>
                 <label className="block text-sm font-medium text-muted-foreground mb-2">
-                  Scope (Optional - leave empty to apply to all)
+                  {t("scope")}
                 </label>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs text-muted-foreground mb-1">Forms</label>
+                    <label className="block text-xs text-muted-foreground mb-1">{t("forms")}</label>
                     <select
                       multiple
                       value={formData.form_ids}
@@ -407,7 +409,7 @@ export default function EscalationSettingsPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs text-muted-foreground mb-1">Teams</label>
+                    <label className="block text-xs text-muted-foreground mb-1">{t("teams")}</label>
                     <select
                       multiple
                       value={formData.team_ids}
@@ -431,7 +433,7 @@ export default function EscalationSettingsPage() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-3">
                   <label className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                     <Clock className="h-4 w-4" />
-                    Escalation Rules
+                    {t("rules")}
                   </label>
                   {formData.rules.length < 4 && (
                     <button
@@ -439,7 +441,7 @@ export default function EscalationSettingsPage() {
                       className="flex items-center gap-1 text-sm text-purple-400 hover:text-purple-300"
                     >
                       <Plus className="h-4 w-4" />
-                      Add Rule
+                      {t("addRule")}
                     </button>
                   )}
                 </div>
@@ -462,7 +464,7 @@ export default function EscalationSettingsPage() {
                   onClick={resetForm}
                   className="px-4 py-2 text-muted-foreground hover:text-foreground transition"
                 >
-                  Cancel
+                  {tc("cancel")}
                 </button>
                 <button
                   onClick={handleSubmit}
@@ -476,10 +478,10 @@ export default function EscalationSettingsPage() {
                   className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {createMutation.isPending || updateMutation.isPending
-                    ? "Saving..."
+                    ? t("saving")
                     : editingMatrix
-                    ? "Update"
-                    : "Create"}
+                    ? t("update")
+                    : tc("create")}
                 </button>
               </div>
             </div>
@@ -488,11 +490,11 @@ export default function EscalationSettingsPage() {
 
         {/* Existing Matrices */}
         {isLoading ? (
-          <div className="text-center text-muted-foreground py-12">Loading...</div>
+          <div className="text-center text-muted-foreground py-12">{t("loading")}</div>
         ) : matrices.length === 0 && !isCreating ? (
           <div className="bg-card rounded-xl border border-border p-12 text-center">
             <AlertTriangle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-foreground mb-2">No escalation matrices</h3>
+            <h3 className="text-lg font-medium text-foreground mb-2">{t("noMatrices")}</h3>
             <p className="text-muted-foreground mb-6">
               Create an escalation matrix to automatically notify people based on ticket severity
             </p>
@@ -501,7 +503,7 @@ export default function EscalationSettingsPage() {
               className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-500 transition"
             >
               <Plus className="h-4 w-4" />
-              Create Your First Matrix
+              {t("createFirst")}
             </button>
           </div>
         ) : (
@@ -519,7 +521,7 @@ export default function EscalationSettingsPage() {
                       {matrix.name}
                       {!matrix.is_active && (
                         <span className="text-xs px-2 py-0.5 bg-muted text-muted-foreground rounded">
-                          Inactive
+                          {tc("inactive")}
                         </span>
                       )}
                     </h3>
@@ -538,7 +540,7 @@ export default function EscalationSettingsPage() {
                     <button
                       aria-label={`Delete ${matrix.name}`}
                       onClick={() => {
-                        if (confirm("Are you sure you want to delete this escalation matrix?")) {
+                        if (confirm(t("confirmDelete"))) {
                           deleteMutation.mutate(matrix.id);
                         }
                       }}
@@ -585,7 +587,7 @@ export default function EscalationSettingsPage() {
                       </div>
                       {rule.notify_oncall && (
                         <span className="text-green-400 flex items-center gap-1">
-                          <UserCircle className="h-4 w-4" /> On-call
+                          <UserCircle className="h-4 w-4" /> {t("onCall")}
                         </span>
                       )}
                     </div>
