@@ -83,6 +83,7 @@ interface RepoItemProps {
 }
 
 function RepoItem({ repo, onRepoToggle, onStartSync, showOwner, isSyncing }: RepoItemProps) {
+  const t = useTranslations("settingsRepositories");
   return (
     <div className="p-3 px-4 flex items-start justify-between hover:bg-accent/30 gap-4">
       <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -128,7 +129,7 @@ function RepoItem({ repo, onRepoToggle, onStartSync, showOwner, isSyncing }: Rep
             className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-xs font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground"
           >
             <FileText className="h-3.5 w-3.5" />
-            Document this
+            {t("documentThis")}
           </Link>
         )}
         {repo.is_enabled && (
@@ -146,10 +147,10 @@ function RepoItem({ repo, onRepoToggle, onStartSync, showOwner, isSyncing }: Rep
                 className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
                 title={
                   repo.sync_status === "syncing"
-                    ? "Sync already in progress"
-                    : "Sync now"
+                    ? t("syncInProgress")
+                    : t("syncNow")
                 }
-                aria-label="Sync now"
+                aria-label={t("syncNow")}
               >
                 <RefreshCw
                   className={`h-4 w-4 ${
@@ -238,6 +239,7 @@ function ReclaimBanner({
   catalog: WorkspaceRepositoryItem[];
   onReclaimed: (updated: WorkspaceRepositoryItem) => void;
 }) {
+  const t = useTranslations("settingsRepositories");
   const needsReclaim = catalog.filter((c) => !c.adopter_active);
   const [pending, setPending] = useState<Record<string, boolean>>({});
 
@@ -253,7 +255,7 @@ function ReclaimBanner({
         workspaceRepoId,
       );
       onReclaimed(updated);
-      toast.success("Repository reclaimed — sync will resume on the next cycle");
+      toast.success(t("reclaimed"));
     } catch (error: unknown) {
       const detail =
         (error as { response?: { data?: { detail?: string } } })?.response?.data
@@ -299,7 +301,7 @@ function ReclaimBanner({
                   disabled={pending[wr.id]}
                   className="text-xs px-3 py-1.5 rounded-md bg-primary-600 hover:bg-primary-700 text-white font-medium disabled:opacity-50"
                 >
-                  {pending[wr.id] ? "Reclaiming…" : "Reclaim"}
+                  {pending[wr.id] ? t("reclaiming") : t("reclaim")}
                 </button>
               </li>
             ))}
@@ -312,6 +314,7 @@ function ReclaimBanner({
 
 export default function RepositorySettingsPage() {
   const t = useTranslations("settingsRepositories");
+  const tc = useTranslations("common");
   const { user } = useAuth();
   const { currentWorkspaceId } = useWorkspace();
   const { isWorkspaceAdmin } = useIsWorkspaceAdmin(currentWorkspaceId);
@@ -436,13 +439,13 @@ export default function RepositorySettingsPage() {
       );
     } catch (error) {
       console.error("Failed to toggle org:", error);
-      toast.error("Failed to update organization");
+      toast.error(t("orgUpdateFailed"));
     }
   };
 
   const handleRepoToggle = async (repoId: string, enabled: boolean) => {
     if (!currentWorkspaceId) {
-      toast.error("Select a workspace before adopting repositories");
+      toast.error(t("selectWorkspaceFirst"));
       return;
     }
     try {
@@ -527,7 +530,7 @@ export default function RepositorySettingsPage() {
     } catch (error) {
       console.error("Failed to update auto-sync:", error);
       setAutoSyncEnabled(!enabled);
-      toast.error("Failed to update auto-sync");
+      toast.error(t("autoSyncFailed"));
     }
   };
 
@@ -539,7 +542,7 @@ export default function RepositorySettingsPage() {
     } catch (error) {
       console.error("Failed to update sync frequency:", error);
       setAutoSyncFrequency(prev);
-      toast.error("Failed to update sync frequency");
+      toast.error(t("frequencyFailed"));
     }
   };
 
@@ -616,7 +619,7 @@ export default function RepositorySettingsPage() {
               <AlertCircle className="h-5 w-5 text-red-400 shrink-0" />
               <div>
                 <p className="text-red-400 font-medium text-sm">
-                  GitHub connection needs re-authentication
+                  {t("needsReauth")}
                 </p>
                 <p className="text-muted-foreground text-xs mt-0.5">
                   {user.github_connection.auth_error || "Your GitHub token has expired or been revoked. Syncing is paused until you reconnect."}
@@ -628,7 +631,7 @@ export default function RepositorySettingsPage() {
               className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition text-sm font-medium shrink-0"
             >
               <RefreshCw className="h-4 w-4" />
-              Reconnect GitHub
+              {t("reconnect")}
             </a>
           </div>
         </div>
@@ -654,7 +657,7 @@ export default function RepositorySettingsPage() {
                   className="flex items-center gap-2 px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg transition"
                 >
                   <ExternalLink className="h-4 w-4" />
-                  Manage access
+                  {t("manageAccess")}
                 </a>
               )}
               <button
@@ -663,7 +666,7 @@ export default function RepositorySettingsPage() {
                 className="flex items-center gap-2 px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg transition disabled:opacity-50"
               >
                 <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-                Refresh from GitHub
+                {t("refresh")}
               </button>
             </div>
           </div>
@@ -673,7 +676,7 @@ export default function RepositorySettingsPage() {
         {enabledRepos.length > 0 && (
           <div className="mb-6">
             <CollapsibleSection
-              title="Connected Repositories"
+              title={t("connectedRepos")}
               icon={<Zap className="h-5 w-5 text-green-400" />}
               count={`${enabledRepos.length} repositories being analyzed`}
               defaultExpanded={true}
@@ -696,7 +699,7 @@ export default function RepositorySettingsPage() {
         {disabledPersonalRepos.length > 0 && (
           <div className="mb-6">
             <CollapsibleSection
-              title="Personal Repositories"
+              title={t("personalRepos")}
               icon={<User className="h-5 w-5 text-muted-foreground" />}
               count={`${disabledPersonalRepos.length} repositories available`}
               defaultExpanded={enabledRepos.length === 0}
@@ -719,7 +722,7 @@ export default function RepositorySettingsPage() {
           <div className="space-y-4">
             <h2 className="text-lg font-medium text-foreground flex items-center gap-2">
               <Building2 className="h-5 w-5 text-muted-foreground" />
-              Organizations
+              {t("organizations")}
             </h2>
             {organizations.map((org) => {
               const orgRepos = repositories.filter(r => r.organization_id === org.id && !r.is_enabled);
@@ -767,7 +770,7 @@ export default function RepositorySettingsPage() {
         {!installationStatus?.has_installation && (
           <div className="bg-card rounded-xl p-12 text-center">
             <FolderGit2 className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-xl font-medium text-foreground mb-2">GitHub App Not Installed</h3>
+            <h3 className="text-xl font-medium text-foreground mb-2">{t("appNotInstalled")}</h3>
             <p className="text-muted-foreground mb-6">
               Install the Aexy GitHub App to grant access to your repositories.
               This allows us to analyze your code contributions.
@@ -777,11 +780,11 @@ export default function RepositorySettingsPage() {
                 href={installationStatus.install_url}
                 className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition font-medium"
               >
-                Install GitHub App
+                {t("installApp")}
               </a>
             ) : (
               <p className="text-muted-foreground text-sm">
-                GitHub App install URL not configured. Please contact support.
+                {t("installUrlMissing")}
               </p>
             )}
           </div>
@@ -791,7 +794,7 @@ export default function RepositorySettingsPage() {
         {installationStatus?.has_installation && repositories.length === 0 && (
           <div className="bg-card rounded-xl p-12 text-center">
             <FolderGit2 className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-xl font-medium text-foreground mb-2">No repositories found</h3>
+            <h3 className="text-xl font-medium text-foreground mb-2">{t("noRepos")}</h3>
             <p className="text-muted-foreground mb-6">
               We couldn&apos;t find any repositories. Try refreshing from GitHub or check your app installation permissions.
             </p>
@@ -802,7 +805,7 @@ export default function RepositorySettingsPage() {
                 className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition disabled:opacity-50"
               >
                 <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-                Refresh from GitHub
+                {t("refresh")}
               </button>
               {installationStatus.installations.length > 0 && (
                 <a
@@ -812,27 +815,27 @@ export default function RepositorySettingsPage() {
                   className="inline-flex items-center gap-2 px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg transition"
                 >
                   <ExternalLink className="h-4 w-4" />
-                  Manage access on GitHub
+                  {t("manageOnGithub")}
                 </a>
               )}
             </div>
           </div>
         )}
 
-        {/* Sync Settings */}
+        {/* {t("syncHeading")} */}
         {installationStatus?.has_installation && enabledRepos.length > 0 && (
           <div className="mt-8">
             <h2 className="text-lg font-medium text-foreground flex items-center gap-2 mb-4">
               <Settings className="h-5 w-5 text-muted-foreground" />
-              Sync Settings
+              {t("syncHeading")}
             </h2>
             <div className="bg-card rounded-xl divide-y divide-border">
               {/* Auto-sync toggle */}
               <div className="p-4 flex items-center justify-between">
                 <div>
-                  <h3 className="text-foreground font-medium">Auto-sync</h3>
+                  <h3 className="text-foreground font-medium">{t("autoSync")}</h3>
                   <p className="text-muted-foreground text-sm mt-0.5">
-                    Automatically sync enabled repositories on a schedule
+                    {t("autoSyncHint")}
                   </p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
@@ -849,9 +852,9 @@ export default function RepositorySettingsPage() {
               {/* Frequency selector */}
               <div className={`p-4 flex items-center justify-between transition-opacity ${autoSyncEnabled ? "opacity-100" : "opacity-50 pointer-events-none"}`}>
                 <div>
-                  <h3 className="text-foreground font-medium">Sync frequency</h3>
+                  <h3 className="text-foreground font-medium">{t("frequency")}</h3>
                   <p className="text-muted-foreground text-sm mt-0.5">
-                    How often to sync commits, PRs, and reviews
+                    {t("frequencyHint")}
                   </p>
                 </div>
                 <select
@@ -860,18 +863,18 @@ export default function RepositorySettingsPage() {
                   disabled={!autoSyncEnabled}
                   className="bg-muted text-foreground border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50"
                 >
-                  <option value="30m">Every 30 minutes</option>
-                  <option value="1h">Every hour</option>
-                  <option value="6h">Every 6 hours</option>
-                  <option value="12h">Every 12 hours</option>
-                  <option value="24h">Once a day</option>
+                  <option value="30m">{t("every30m")}</option>
+                  <option value="1h">{t("everyHour")}</option>
+                  <option value="6h">{t("every6h")}</option>
+                  <option value="12h">{t("every12h")}</option>
+                  <option value="24h">{t("daily")}</option>
                 </select>
               </div>
 
               {/* Sync all button */}
               <div className="p-4 flex items-center justify-between">
                 <div>
-                  <h3 className="text-foreground font-medium">Sync all repositories</h3>
+                  <h3 className="text-foreground font-medium">{t("syncAll")}</h3>
                   <p className="text-muted-foreground text-sm mt-0.5">
                     Trigger a manual sync for all {enabledRepos.length} enabled {enabledRepos.length === 1 ? "repository" : "repositories"}
                   </p>
@@ -896,21 +899,21 @@ export default function RepositorySettingsPage() {
                         : ""
                     }`}
                   />
-                  Sync all
+                  {t("syncAllShort")}
                 </button>
               </div>
 
               {/* Webhook info */}
               <div className="p-4 flex items-center justify-between">
                 <div>
-                  <h3 className="text-foreground font-medium">Real-time webhooks</h3>
+                  <h3 className="text-foreground font-medium">{t("webhooks")}</h3>
                   <p className="text-muted-foreground text-sm mt-0.5">
                     Push events, pull requests, and reviews are synced in real-time via GitHub webhooks
                   </p>
                 </div>
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400">
                   <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                  Active
+                  {tc("status.active")}
                 </span>
               </div>
             </div>

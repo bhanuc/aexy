@@ -1,10 +1,45 @@
 {
   "settingsInvoices": {
     "title": "इनवॉइस",
-    "description": "B2B ग्राहकों के लिए इनवॉइस बनाएँ, प्रबंधित करें और मिलान करें।",
+    "description": "विवरण",
     "denied": {
       "title": "प्लेटफ़ॉर्म एडमिन एक्सेस आवश्यक",
       "body": "इसे केवल Aexy प्लेटफ़ॉर्म स्टाफ़ प्रबंधित कर सकता है। वर्कस्पेस owner और admin को पहुँच नहीं है।"
-    }
+    },
+    "statusPaid": "भुगतान हुआ",
+    "statusOpen": "खुला",
+    "statusVoid": "रद्द",
+    "statusDraft": "ड्राफ़्ट",
+    "methodStripe": "Stripe",
+    "methodBank": "बैंक ट्रांसफ़र",
+    "methodManual": "मैन्युअल",
+    "createTitle": "इनवॉइस बनाएँ",
+    "workspaceId": "वर्कस्पेस ID",
+    "amountUsd": "राशि (USD)",
+    "dueDate": "देय तिथि",
+    "paymentMethod": "भुगतान विधि",
+    "generateTitle": "उपयोग से इनवॉइस बनाएँ",
+    "allInvoices": "सभी इनवॉइस",
+    "loading": "इनवॉइस लोड हो रहे हैं…",
+    "none": "कोई इनवॉइस नहीं मिला।",
+    "colWorkspace": "वर्कस्पेस",
+    "colAmount": "राशि",
+    "colStatus": "स्थिति",
+    "colPayment": "भुगतान",
+    "colDueDate": "देय तिथि",
+    "colActions": "क्रियाएँ",
+    "markPaid": "भुगतान चिह्नित करें",
+    "void": "रद्द करें",
+    "bankReference": "बैंक ट्रांसफ़र संदर्भ",
+    "note": "टिप्पणी",
+    "workspacePlaceholder": "वर्कस्पेस UUID डालें",
+    "descriptionPlaceholder": "इनवॉइस विवरण (वैकल्पिक)",
+    "notePlaceholder": "वैकल्पिक टिप्पणी",
+    "created": "इनवॉइस सफलतापूर्वक बनाया गया",
+    "markedPaid": "इनवॉइस भुगतान चिह्नित",
+    "voided": "इनवॉइस रद्द किया गया",
+    "generated": "उपयोग से इनवॉइस बना",
+    "invalidAmount": "कृपया एक मान्य राशि डालें",
+    "generateFailed": "उपयोग से इनवॉइस नहीं बन सका"
   }
 }
