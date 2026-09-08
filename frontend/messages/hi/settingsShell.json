@@ -1,0 +1,13 @@
+{
+  "settingsShell": {
+    "filter": "सेटिंग्स फ़िल्टर करें",
+    "clearFilter": "फ़िल्टर साफ़ करें",
+    "backToSettings": "सेटिंग्स पर वापस",
+    "autosave": "बदलाव अपने आप सहेजे जाते हैं।",
+    "noResults": "कोई सेटिंग नहीं मिली",
+    "search": "सेटिंग्स खोजें…",
+    "allSettings": "सभी सेटिंग्स",
+    "settings": "सेटिंग्स",
+    "scoringCurve": "स्कोरिंग कर्व"
+  }
+}

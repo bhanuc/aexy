@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useTranslations } from "next-intl";
 
 /**
  * The scoring curve, drawn.
@@ -32,6 +33,7 @@ export function ScoreCurve({
   target?: number | null;
   unit?: string;
 }) {
+  const t = useTranslations("settingsShell");
   const curve = useMemo(() => {
     const lower = direction === "lower_is_better";
     // The domain is chosen so the interesting part — where the score actually
@@ -78,7 +80,7 @@ export function ScoreCurve({
         width={W}
         height={H}
         role="img"
-        aria-label="Scoring curve"
+        aria-label={t("scoringCurve")}
         className="rounded border border-input bg-muted/20"
       >
         {/* The 100 and 0 rails, so the curve has something to be read against. */}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Menu } from "lucide-react";
 import {
   Sheet,
@@ -22,6 +23,7 @@ interface SettingsShellProps {
 }
 
 export function SettingsShell({ children }: SettingsShellProps) {
+  const t = useTranslations("settingsShell");
   const [sheetOpen, setSheetOpen] = useState(false);
   const { currentWorkspaceId } = useWorkspace();
   const { isEnterprise } = useSubscription(currentWorkspaceId);
@@ -56,7 +58,7 @@ export function SettingsShell({ children }: SettingsShellProps) {
           <SheetTrigger asChild>
             <button className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition hover:bg-accent hover:text-foreground">
               <Menu className="h-4 w-4" />
-              All settings
+              {t("allSettings")}
             </button>
           </SheetTrigger>
           {/* Capped against the viewport as well as in pixels: a flat 280px on a
@@ -64,7 +66,7 @@ export function SettingsShell({ children }: SettingsShellProps) {
               underlay left to read as "tap here to dismiss". */}
           <SheetContent side="left" className="w-[min(280px,85vw)] p-0">
             <SheetHeader className="px-4 pb-2 pt-4">
-              <SheetTitle className="text-base">Settings</SheetTitle>
+              <SheetTitle className="text-base">{t("settings")}</SheetTitle>
             </SheetHeader>
             <div className="overflow-y-auto px-2 pb-4">
               <SettingsSidebar

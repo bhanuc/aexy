@@ -1,6 +1,18 @@
 {
   "settingsPlans": {
     "title": "सब्सक्रिप्शन प्लान",
-    "description": "प्लान की तुलना करें, अपग्रेड या डाउनग्रेड करें।"
+    "description": "प्लान की तुलना करें, अपग्रेड या डाउनग्रेड करें।",
+    "free": "मुफ़्त",
+    "payAfterUse": "उपयोग के बाद भुगतान",
+    "currentPlan": "वर्तमान प्लान",
+    "ownerOnly": "केवल वर्कस्पेस स्वामी प्लान बदल सकते हैं",
+    "contactSales": "सेल्स से संपर्क करें",
+    "contactBilling": "billing@aexy.io पर संपर्क करें",
+    "ctaGetStartedFree": "मुफ़्त शुरू करें",
+    "ctaUpgrade": "अपग्रेड करें",
+    "ctaGetStarted": "शुरू करें",
+    "ctaSetUpPostpaid": "पोस्टपेड सेटअप करें",
+    "ctaContactSales": "सेल्स से संपर्क करें",
+    "ctaSwitchTo": "{plan} पर जाएँ"
   }
 }

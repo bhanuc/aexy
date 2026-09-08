@@ -14,6 +14,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Check, Inbox, Loader2, Tag } from "lucide-react";
 import { toast } from "sonner";
 
@@ -36,6 +37,7 @@ export function GmailSyncMode({
   isMine: boolean;
   onModeChanged: () => void;
 }) {
+  const t = useTranslations("gmailSyncMode");
   const [threads, setThreads] = useState<GoogleThreadSummary[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSwitching, setIsSwitching] = useState(false);
@@ -112,7 +114,7 @@ export function GmailSyncMode({
       <div>
         <h4 className="font-medium text-foreground text-sm flex items-center gap-2">
           <Inbox className="w-3.5 h-3.5" />
-          What this account syncs
+          {t("whatSyncs")}
         </h4>
         <p className="text-xs text-muted-foreground mt-1">
           Sync the whole inbox and exclude what you don&apos;t want, or sync
@@ -120,7 +122,7 @@ export function GmailSyncMode({
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-2" role="group" aria-label="What this account syncs">
+      <div className="flex flex-wrap gap-2" role="group" aria-label={t("whatSyncs")}>
         {(
           [
             { value: "all", label: "Everything", hint: "minus Never sync" },
@@ -151,7 +153,7 @@ export function GmailSyncMode({
           <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
             <Tag className="mt-0.5 h-3 w-3 shrink-0" />
             <span>
-              Apply the <span className="text-foreground">{optInLabel}</span>{" "}
+              {t("applyThe")} <span className="text-foreground">{optInLabel}</span>{" "}
               label to a thread in Gmail and it syncs too — useful on a phone,
               at the moment the mail arrives.
             </span>
@@ -197,7 +199,7 @@ export function GmailSyncMode({
                     ) : thread.is_marked ? (
                       <Check className="h-3 w-3" />
                     ) : null}
-                    {thread.is_marked ? "Syncing" : "Sync this"}
+                    {thread.is_marked ? t("syncing") : t("syncThis")}
                   </button>
                 </li>
               ))}

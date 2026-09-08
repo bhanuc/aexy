@@ -31,7 +31,8 @@ const planConfig: Record<string, {
   borderColor: string;
   textColor: string;
   tagline: string;
-  cta: string;
+  /** Key under `settingsPlans`; resolved where the button renders. */
+  ctaKey: string;
   features: string[];
 }> = {
   free: {
@@ -40,7 +41,7 @@ const planConfig: Record<string, {
     borderColor: "border-emerald-500/30",
     textColor: "text-emerald-400",
     tagline: "Free",
-    cta: "Get Started Free",
+    ctaKey: "ctaGetStartedFree",
     features: [
       "All modules included",
       "10 repos, 10 team members",
@@ -56,7 +57,7 @@ const planConfig: Record<string, {
     borderColor: "border-primary-500/50",
     textColor: "text-primary-400",
     tagline: "Per Seat",
-    cta: "Upgrade",
+    ctaKey: "ctaUpgrade",
     features: [
       "Everything in Free, plus:",
       "Unlimited repos & history",
@@ -72,7 +73,7 @@ const planConfig: Record<string, {
     borderColor: "border-amber-500/30",
     textColor: "text-amber-400",
     tagline: "Flat + Usage",
-    cta: "Get Started",
+    ctaKey: "ctaGetStarted",
     features: [
       "Flat monthly base fee",
       "Unlimited seats included",
@@ -88,7 +89,7 @@ const planConfig: Record<string, {
     borderColor: "border-rose-500/30",
     textColor: "text-rose-400",
     tagline: "Postpaid",
-    cta: "Set Up Postpaid",
+    ctaKey: "ctaSetUpPostpaid",
     features: [
       "No upfront cost",
       "Pay at end of billing period",
@@ -104,7 +105,7 @@ const planConfig: Record<string, {
     borderColor: "border-purple-500/30",
     textColor: "text-purple-400",
     tagline: "Enterprise",
-    cta: "Contact Sales",
+    ctaKey: "contactSales",
     features: [
       "Everything in Pro, plus:",
       "SSO & SCIM",
@@ -124,11 +125,16 @@ function getPlanConfigKey(plan: PlanFeatures): string {
   return "free";
 }
 
-function formatPlanPrice(plan: PlanFeatures, billingPeriod: "monthly" | "annual"): React.ReactNode {
+// Module-level, so the translator comes in as a parameter.
+function formatPlanPrice(
+  plan: PlanFeatures,
+  billingPeriod: "monthly" | "annual",
+  t: (key: string) => string,
+): React.ReactNode {
   const bm = plan.billing_model;
 
   if (bm === "free" || (!plan.price_monthly_cents && !plan.per_seat_price_monthly_cents && !plan.base_fee_monthly_cents)) {
-    return <span className="text-3xl font-bold text-foreground">Free</span>;
+    return <span className="text-3xl font-bold text-foreground">{t("free")}</span>;
   }
 
   if (bm === "per_seat") {
@@ -166,7 +172,7 @@ function formatPlanPrice(plan: PlanFeatures, billingPeriod: "monthly" | "annual"
         </div>
       );
     }
-    return <span className="text-3xl font-bold text-foreground">Pay after use</span>;
+    return <span className="text-3xl font-bold text-foreground">{t("payAfterUse")}</span>;
   }
 
   // Fallback
@@ -365,11 +371,11 @@ export default function PlansPage() {
                 transition={{ duration: 0.3, delay: index * 0.1 }}
                 className="relative"
               >
-                {/* Current Plan Badge */}
+                {/* {t("currentPlan")} Badge */}
                 {isCurrent && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
                     <div className="px-3 py-1 bg-gradient-to-r from-emerald-500 to-cyan-500 text-white text-xs font-medium rounded-full shadow-lg">
-                      Current Plan
+                      {t("currentPlan")}
                     </div>
                   </div>
                 )}
@@ -398,13 +404,13 @@ export default function PlansPage() {
 
                   {/* Price */}
                   <div className="mb-6">
-                    {formatPlanPrice(plan, billingPeriod)}
+                    {formatPlanPrice(plan, billingPeriod, t)}
                   </div>
 
                   {/* CTA Button */}
                   {!isCurrent && currentWorkspaceId && !isOwner ? (
                     <div className="w-full py-2.5 px-4 rounded-lg text-sm text-center text-slate-500 bg-slate-800 border border-slate-700">
-                      Only the workspace owner can change plans
+                      {t("ownerOnly")}
                     </div>
                   ) : (
                     <button
@@ -421,15 +427,17 @@ export default function PlansPage() {
                       ) : isCurrent ? (
                         <>
                           <CheckCircle2 className="h-4 w-4" />
-                          Current Plan
+                          {t("currentPlan")}
                         </>
                       ) : plan.tier === "enterprise" && plan.billing_model === "per_seat" ? (
                         <>
                           <Mail className="h-4 w-4" />
-                          Contact Sales
+                          {t("contactSales")}
                         </>
                       ) : (
-                        config?.cta || `Switch to ${plan.name}`
+                        config?.ctaKey
+                          ? t(config.ctaKey)
+                          : t("ctaSwitchTo", { plan: plan.name })
                       )}
                     </button>
                   )}
@@ -472,7 +480,7 @@ export default function PlansPage() {
               href="mailto:billing@aexy.io"
               className="text-primary-400 hover:text-primary-300 transition"
             >
-              Contact billing@aexy.io
+              {t("contactBilling")}
             </a>
           </p>
         </div>

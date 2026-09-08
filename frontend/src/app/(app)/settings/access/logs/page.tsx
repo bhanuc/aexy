@@ -178,13 +178,13 @@ export default function AccessLogsPage() {
         {summary && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <div className="rounded-lg border border-border bg-surface p-4">
-              <p className="text-sm text-muted-foreground">Total Events (30 days)</p>
+              <p className="text-sm text-muted-foreground">{t("totalEvents")}</p>
               <p className="text-2xl font-bold text-foreground">
                 {summary.total_events.toLocaleString()}
               </p>
             </div>
             <div className="rounded-lg border border-border bg-surface p-4">
-              <p className="text-sm text-muted-foreground">Access Updates</p>
+              <p className="text-sm text-muted-foreground">{t("accessUpdates")}</p>
               <p className="text-2xl font-bold text-violet-400">
                 {(
                   (summary.action_counts["access_updated"] || 0) +
@@ -193,7 +193,7 @@ export default function AccessLogsPage() {
               </p>
             </div>
             <div className="rounded-lg border border-border bg-surface p-4">
-              <p className="text-sm text-muted-foreground">Template Changes</p>
+              <p className="text-sm text-muted-foreground">{t("templateChanges")}</p>
               <p className="text-2xl font-bold text-blue-400">
                 {(
                   (summary.action_counts["template_created"] || 0) +
@@ -203,7 +203,7 @@ export default function AccessLogsPage() {
               </p>
             </div>
             <div className="rounded-lg border border-border bg-surface p-4">
-              <p className="text-sm text-muted-foreground">Access Denials</p>
+              <p className="text-sm text-muted-foreground">{t("accessDenials")}</p>
               <p className="text-2xl font-bold text-red-400">
                 {(summary.action_counts["access_denied"] || 0).toLocaleString()}
               </p>
@@ -223,7 +223,7 @@ export default function AccessLogsPage() {
               }}
               className="rounded-md border border-border bg-muted px-3 py-1.5 text-sm text-foreground"
             >
-              <option value="">All Actions</option>
+              <option value="">{t("allActions")}</option>
               {Object.entries(ACTION_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
@@ -243,7 +243,7 @@ export default function AccessLogsPage() {
         {error ? (
           <div className="text-center py-20">
             <AlertCircle className="h-8 w-8 text-red-400 mx-auto mb-2" />
-            <p className="text-red-400">Failed to load access logs</p>
+            <p className="text-red-400">{t("loadFailed")}</p>
           </div>
         ) : (
           <DataTable<AppAccessLog>

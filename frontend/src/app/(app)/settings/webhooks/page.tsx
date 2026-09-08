@@ -71,6 +71,7 @@ function WebhookRow({
   workspaceId: string;
 }) {
   const t = useTranslations("settingsWebhooks");
+  const tc = useTranslations("common");
   const [showMenu, setShowMenu] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
   const [secret, setSecret] = useState<string | null>(null);
@@ -147,7 +148,7 @@ function WebhookRow({
               ) : (
                 <Eye className="h-3 w-3" />
               )}
-              {showSecret ? t("hide") : "Show"} secret
+              {showSecret ? t("hide") : t("show")} secret
             </button>
             {showSecret && secret && (
               <>
@@ -188,9 +189,9 @@ function WebhookRow({
                   className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-muted flex items-center gap-2"
                 >
                   {webhook.is_active ? (
-                    <><ToggleLeft className="h-3.5 w-3.5" /> Disable</>
+                    <><ToggleLeft className="h-3.5 w-3.5" /> {tc("disable")}</>
                   ) : (
-                    <><ToggleRight className="h-3.5 w-3.5" /> Enable</>
+                    <><ToggleRight className="h-3.5 w-3.5" /> {tc("enable")}</>
                   )}
                 </button>
                 <button
@@ -203,7 +204,7 @@ function WebhookRow({
                   onClick={() => { onDelete(webhook.id); setShowMenu(false); }}
                   className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-muted flex items-center gap-2 rounded-b-lg"
                 >
-                  <Trash2 className="h-3.5 w-3.5" /> Delete
+                  <Trash2 className="h-3.5 w-3.5" /> {tc("delete")}
                 </button>
               </div>
             </>
@@ -250,7 +251,7 @@ function CreateWebhookForm({
   return (
     <form onSubmit={handleSubmit} className="p-4 bg-accent/30 rounded-lg space-y-4">
       <div>
-        <label className="block text-sm font-medium text-foreground mb-1">Name</label>
+        <label className="block text-sm font-medium text-foreground mb-1">{t("name")}</label>
         <input
           type="text"
           value={name}
@@ -275,7 +276,7 @@ function CreateWebhookForm({
       <div>
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-1.5">
-            <label className="block text-sm font-medium text-foreground">Events</label>
+            <label className="block text-sm font-medium text-foreground">{t("events")}</label>
             <HelpTooltip content="Select which events trigger this webhook. Each event sends a JSON payload with relevant data" />
           </div>
           <button
@@ -283,7 +284,7 @@ function CreateWebhookForm({
             onClick={selectAll}
             className="text-xs text-blue-400 hover:text-blue-300"
           >
-            {selectedEvents.length === availableEvents.length ? t("deselectAll") : "Select all"}
+            {selectedEvents.length === availableEvents.length ? t("deselectAll") : t("selectAll")}
           </button>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">

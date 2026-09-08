@@ -11,6 +11,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { AlertTriangle, Loader2, Plus, RefreshCw, Trash2, User } from "lucide-react";
 import { toast } from "sonner";
 
@@ -53,6 +54,7 @@ export function GoogleAccounts({
    */
   onLoaded?: (accounts: GoogleAccountSummary[]) => void;
 }) {
+  const t = useTranslations("googleAccounts");
   const [accounts, setAccounts] = useState<GoogleAccountSummary[]>([]);
   const [connectableEmail, setConnectableEmail] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -141,7 +143,7 @@ export function GoogleAccounts({
             )}
             {!account.gmail_sync_enabled && (
               <span className="rounded-full bg-accent px-2 py-0.5 text-[11px] text-muted-foreground">
-                Gmail sync off
+                {t("syncOff")}
               </span>
             )}
             {!account.is_active && (
@@ -160,7 +162,7 @@ export function GoogleAccounts({
                 className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >
                 <RefreshCw className="h-3 w-3" aria-hidden />
-                Reconnect
+                {t("reconnect")}
               </button>
             )}
 
@@ -195,7 +197,7 @@ export function GoogleAccounts({
           className="flex items-center gap-2 rounded-lg border border-border bg-muted px-3 py-1.5 text-sm text-foreground transition hover:bg-accent"
         >
           <Plus className="h-4 w-4" aria-hidden />
-          Connect another account
+          {t("connectAnother")}
         </button>
         {/* Named before the click. The flow attaches whichever Google account
             is authorised to a shared workspace, and finding out afterwards
