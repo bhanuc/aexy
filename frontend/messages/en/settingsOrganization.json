@@ -11,7 +11,11 @@
       "changeRole": "Change Role",
       "customRole": "Custom Role",
       "remove": "Remove from workspace",
-      "confirmRemove": "Are you sure you want to remove this member from the workspace?"
+      "confirmRemove": "Are you sure you want to remove this member from the workspace?",
+      "markAsLeft": "Mark as left",
+      "restoreAsActive": "Restore as active",
+      "resending": "Resending…",
+      "resendInvite": "Resend Invite"
     },
     "invite": {
       "title": "Invite Team Member",
@@ -28,7 +32,8 @@
       "previewLoading": "Working it out…",
       "previewEmpty": "Nothing yet — pick a department with an access profile.",
       "submitting": "Inviting…",
-      "submit": "Send Invite"
+      "submit": "Send Invite",
+      "noTeamWarning": "Without a team they won't get standup prompts, their blockers have nobody to escalate to, and leave approvals fall back to a workspace manager."
     },
     "workspace": {
       "createTitle": "Create Workspace",
@@ -59,7 +64,9 @@
     "apps": {
       "heading": "App Settings",
       "subtitle": "Enable or disable apps for your workspace",
-      "ownerOnly": "Only the workspace owner can change app settings."
+      "ownerOnly": "Only the workspace owner can change app settings.",
+      "ownerOnlyTitle": "Only owner can change",
+      "toggleTitle": "{action} {label}"
     },
     "page": {
       "workspaces": "Workspaces",

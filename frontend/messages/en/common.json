@@ -42,7 +42,11 @@
     "verified": "Verified",
     "inactive": "Inactive",
     "pending": "Pending",
-    "testConnection": "Test connection"
+    "testConnection": "Test connection",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "manage": "Manage",
+    "optional": "(optional)"
   },
   "saved": "Saved",
   "deleted": "Deleted"

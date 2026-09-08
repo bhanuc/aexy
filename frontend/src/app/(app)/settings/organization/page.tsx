@@ -86,6 +86,7 @@ function CommunitySettingsCard({
   canManage: boolean;
 }) {
   const t = useTranslations("settingsOrganization");
+  const tc = useTranslations("common");
   const { data: settings, isLoading } = useQuery({
     queryKey: ["communitySettings", workspaceId],
     queryFn: () => communityApi.getSettings(workspaceId!),
@@ -114,7 +115,7 @@ function CommunitySettingsCard({
                     : "bg-muted text-muted-foreground"
                 }`}
               >
-                {enabled ? "Enabled" : "Disabled"}
+                {enabled ? tc("enabled") : tc("disabled")}
               </span>
             )}
           </div>
@@ -126,7 +127,7 @@ function CommunitySettingsCard({
           href="/settings/community"
           className="shrink-0 text-sm rounded-lg bg-primary px-3 py-1.5 text-primary-foreground hover:opacity-90 transition"
         >
-          {enabled ? "Manage" : "Enable"}
+          {enabled ? tc("manage") : tc("enable")}
         </Link>
       </div>
     </div>
@@ -164,7 +165,6 @@ function MemberRow({
   onSetStatus,
 }: MemberRowProps) {
   const t = useTranslations("settingsOrganization");
-  const tc = useTranslations("common");
   const [showMenu, setShowMenu] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
@@ -336,7 +336,7 @@ function MemberRow({
                         className="w-full px-3 py-2 text-left text-sm text-blue-400 hover:bg-accent flex items-center gap-2 disabled:opacity-50"
                       >
                         <RefreshCw className={`h-4 w-4 ${isResending ? 'animate-spin' : ''}`} />
-                        {isResending ? 'Resending...' : 'Resend Invite'}
+                        {isResending ? t("member.resending") : t("member.resendInvite")}
                       </button>
                     )}
                     {/* Soft-remove flow that preserves the member's
@@ -350,7 +350,7 @@ function MemberRow({
                       className="w-full px-3 py-2 text-left text-sm text-amber-400 hover:bg-accent flex items-center gap-2 disabled:opacity-50"
                     >
                       <RefreshCw className={`h-4 w-4 ${isTogglingStatus ? 'animate-spin' : ''}`} />
-                      {isRemoved ? "Restore as active" : "Mark as left"}
+                      {isRemoved ? t("member.restoreAsActive") : t("member.markAsLeft")}
                     </button>
                     <button
                       onClick={() => {
@@ -447,7 +447,7 @@ function InviteMemberModal({ onClose, onInvite, isInviting, workspaceId }: Invit
               />
             </div>
             <div>
-              <label className="block text-sm text-muted-foreground mb-1">Role</label>
+              <label className="block text-sm text-muted-foreground mb-1">{t("invite.role")}</label>
               <select
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
@@ -463,7 +463,8 @@ function InviteMemberModal({ onClose, onInvite, isInviting, workspaceId }: Invit
             {departments && departments.length > 0 && (
               <div>
                 <label className="block text-sm text-muted-foreground mb-1">
-                  Department <span className="text-xs">(optional)</span>
+                  {t("invite.department")}{" "}
+                  <span className="text-xs">{tc("optional")}</span>
                 </label>
                 <select
                   value={departmentId}
@@ -492,7 +493,8 @@ function InviteMemberModal({ onClose, onInvite, isInviting, workspaceId }: Invit
             {teams && teams.length > 0 && (
               <div>
                 <label className="block text-sm text-muted-foreground mb-1">
-                  Team <span className="text-xs">(optional)</span>
+                  {t("invite.team")}{" "}
+                  <span className="text-xs">{tc("optional")}</span>
                 </label>
                 <div className="flex gap-2">
                   <select
@@ -515,7 +517,7 @@ function InviteMemberModal({ onClose, onInvite, isInviting, workspaceId }: Invit
                       }
                       className="px-3 py-2 bg-muted border border-border rounded-lg text-foreground focus:outline-none focus:border-primary-500"
                     >
-                      <option value="member">Member</option>
+                      <option value="member">{t("invite.roleMember")}</option>
                       <option value="manager">{t("invite.roleManager")}</option>
                       <option value="lead">{t("invite.roleLead")}</option>
                     </select>
@@ -524,7 +526,7 @@ function InviteMemberModal({ onClose, onInvite, isInviting, workspaceId }: Invit
                 <p className="text-muted-foreground text-xs mt-1">
                   {teamId
                     ? "Decides who chases them: standups, blocker escalation, review digests, sprint boards and leave approvals."
-                    : "Without a team they won't get standup prompts, their blockers have nobody to escalate to, and leave approvals fall back to a workspace manager."}
+                    : t("invite.noTeamWarning")}
                 </p>
               </div>
             )}
@@ -571,7 +573,7 @@ function InviteMemberModal({ onClose, onInvite, isInviting, workspaceId }: Invit
               onClick={onClose}
               className="flex-1 px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg transition"
             >
-              Cancel
+              {tc("cancel")}
             </button>
             <button
               type="submit"
@@ -665,7 +667,7 @@ function CreateWorkspaceModal({ onClose, onCreate, isCreating, organizations }: 
               />
             </div>
             <div>
-              <label className="block text-sm text-muted-foreground mb-1">Type</label>
+              <label className="block text-sm text-muted-foreground mb-1">{t("workspace.type")}</label>
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
@@ -722,7 +724,7 @@ function CreateWorkspaceModal({ onClose, onCreate, isCreating, organizations }: 
               onClick={onClose}
               className="flex-1 px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg transition"
             >
-              Cancel
+              {tc("cancel")}
             </button>
             <button
               type="submit"
@@ -810,7 +812,7 @@ function PendingInviteRow({ invite, onRevoke, onResend, isRevoking }: PendingInv
           <div className="flex items-center gap-2">
             <span className="text-foreground font-medium">{invite.email}</span>
             <span className="px-2 py-0.5 rounded text-xs font-medium bg-yellow-50 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400">
-              Pending
+              {t("inviteRow.pending")}
             </span>
           </div>
           <div className="flex items-center gap-2 text-muted-foreground text-sm">
@@ -881,6 +883,7 @@ interface AppSettingsSectionProps {
 
 function AppSettingsSection({ appSettings, onUpdate, isUpdating, isOwner }: AppSettingsSectionProps) {
   const t = useTranslations("settingsOrganization");
+  const tc = useTranslations("common");
   const handleToggle = async (appKey: string) => {
     if (!isOwner) return;
     const newSettings = { ...appSettings, [appKey]: !appSettings[appKey] };
@@ -912,7 +915,14 @@ function AppSettingsSection({ appSettings, onUpdate, isUpdating, isOwner }: AppS
               className={`p-1 rounded-full transition ${
                 !isOwner ? "opacity-50 cursor-not-allowed" : "hover:bg-accent"
               }`}
-              title={isOwner ? `${appSettings[key] ? "Disable" : "Enable"} ${label}` : "Only owner can change"}
+              title={
+                  isOwner
+                    ? t("apps.toggleTitle", {
+                        action: appSettings[key] ? tc("disable") : tc("enable"),
+                        label,
+                      })
+                    : t("apps.ownerOnlyTitle")
+                }
             >
               {appSettings[key] ? (
                 <ToggleRight className="h-8 w-8 text-green-400" />
@@ -934,7 +944,6 @@ function AppSettingsSection({ appSettings, onUpdate, isUpdating, isOwner }: AppS
 
 export default function OrganizationSettingsPage() {
   const t = useTranslations("settingsOrganization");
-  const tc = useTranslations("common");
   const { user } = useAuth();
   const {
     workspaces,
@@ -1140,7 +1149,7 @@ export default function OrganizationSettingsPage() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
             <h2 className="text-lg font-medium text-foreground flex items-center gap-2">
               <Building2 className="h-5 w-5 text-muted-foreground" />
-              Workspaces
+              {t("page.workspaces")}
             </h2>
             <button
               onClick={() => setShowCreateModal(true)}
@@ -1185,7 +1194,7 @@ export default function OrganizationSettingsPage() {
                         {ws.type === "github_linked" && (
                           <span className="flex items-center gap-1">
                             <LinkIcon className="h-3 w-3" />
-                            GitHub
+                            {t("page.github")}
                           </span>
                         )}
                       </div>
@@ -1387,7 +1396,7 @@ export default function OrganizationSettingsPage() {
                     <FolderKanban className="h-5 w-5 text-foreground" />
                   </div>
                   <div>
-                    <h4 className="text-foreground font-medium">Projects</h4>
+                    <h4 className="text-foreground font-medium">{t("page.projects")}</h4>
                     <p className="text-muted-foreground text-sm">{t("page.manageProjects")}</p>
                   </div>
                   <ChevronDown className="h-5 w-5 text-muted-foreground ml-auto -rotate-90" />
@@ -1402,7 +1411,7 @@ export default function OrganizationSettingsPage() {
                     <Settings className="h-5 w-5 text-foreground" />
                   </div>
                   <div>
-                    <h4 className="text-foreground font-medium">Repositories</h4>
+                    <h4 className="text-foreground font-medium">{t("page.repositories")}</h4>
                     <p className="text-muted-foreground text-sm">{t("page.manageRepos")}</p>
                   </div>
                   <ChevronDown className="h-5 w-5 text-muted-foreground ml-auto -rotate-90" />
@@ -1414,7 +1423,7 @@ export default function OrganizationSettingsPage() {
                     <CreditCard className="h-5 w-5 text-foreground" />
                   </div>
                   <div>
-                    <h4 className="text-foreground font-medium">Billing</h4>
+                    <h4 className="text-foreground font-medium">{t("page.billing")}</h4>
                     <p className="text-muted-foreground text-sm">{t("page.comingSoon")}</p>
                   </div>
                   <ChevronDown className="h-5 w-5 text-muted-foreground ml-auto -rotate-90" />
