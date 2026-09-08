@@ -2,6 +2,24 @@
   "settingsTicketForms": {
     "title": "Ticket forms",
     "description": "Public forms that collect structured information when a ticket is submitted.",
-    "create": "Create form"
+    "create": "Create form",
+    "copyPublicUrl": "Copy Public URL",
+    "openForm": "Open Form",
+    "duplicate": "Duplicate",
+    "duplicateForm": "Duplicate Form",
+    "newFormName": "New Form Name",
+    "createTitle": "Create Ticket Form",
+    "fromTemplate": "From Template",
+    "blankForm": "Blank Form",
+    "selectTemplate": "Select Template",
+    "formName": "Form Name",
+    "creating": "Creating…",
+    "createForm": "Create Form",
+    "previewForm": "Preview form",
+    "editForm": "Edit form",
+    "noFormsYet": "No ticket forms yet",
+    "namePlaceholder": "Enter form name…",
+    "templateNameHint": "Leave blank to use template name",
+    "emptyDescription": "Create custom forms to collect structured information when tickets are submitted."
   }
 }
