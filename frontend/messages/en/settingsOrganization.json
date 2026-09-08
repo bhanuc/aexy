@@ -1,6 +1,83 @@
 {
   "settingsOrganization": {
     "title": "Organization",
-    "description": "Your workspace, its members and their roles."
+    "description": "Your workspace, its members and their roles.",
+    "community": {
+      "title": "Public community",
+      "description": "Publish selected chat channels as a public, SEO-friendly forum."
+    },
+    "member": {
+      "noDepartment": "No department — assign",
+      "changeRole": "Change Role",
+      "customRole": "Custom Role",
+      "remove": "Remove from workspace",
+      "confirmRemove": "Are you sure you want to remove this member from the workspace?"
+    },
+    "invite": {
+      "title": "Invite Team Member",
+      "email": "Email Address",
+      "role": "Role",
+      "department": "Department",
+      "noDepartmentLater": "No department — assign later",
+      "team": "Team",
+      "noTeamLater": "No team — add later",
+      "roleMember": "Member",
+      "roleManager": "Manager",
+      "roleLead": "Lead",
+      "previewHeading": "They will see",
+      "previewLoading": "Working it out…",
+      "previewEmpty": "Nothing yet — pick a department with an access profile.",
+      "submitting": "Inviting…",
+      "submit": "Send Invite"
+    },
+    "workspace": {
+      "createTitle": "Create Workspace",
+      "name": "Workspace Name",
+      "namePlaceholder": "My Team",
+      "descriptionOptional": "Description (optional)",
+      "descriptionPlaceholder": "What is this workspace for?",
+      "type": "Type",
+      "internal": "Internal",
+      "internalHint": "Manual member management",
+      "githubLinked": "GitHub Linked",
+      "githubHint": "Sync from GitHub org",
+      "githubOrg": "GitHub Organization",
+      "selectOrg": "Select an organization…",
+      "creating": "Creating…"
+    },
+    "seats": {
+      "used": "Seats Used"
+    },
+    "inviteRow": {
+      "pending": "Pending",
+      "expired": "Expired",
+      "noExpiry": "No expiry",
+      "resend": "Resend invite",
+      "revoke": "Revoke invite",
+      "confirmRevoke": "Are you sure you want to revoke this invitation?"
+    },
+    "apps": {
+      "heading": "App Settings",
+      "subtitle": "Enable or disable apps for your workspace",
+      "ownerOnly": "Only the workspace owner can change app settings."
+    },
+    "page": {
+      "workspaces": "Workspaces",
+      "newWorkspace": "New Workspace",
+      "github": "GitHub",
+      "noWorkspaces": "No workspaces yet",
+      "noWorkspacesHint": "Create your first workspace to start managing your team.",
+      "teamMembers": "Team Members",
+      "showPast": "Show past members",
+      "inviteMember": "Invite Member",
+      "noMembers": "No members found",
+      "pendingInvitations": "Pending Invitations",
+      "projects": "Projects",
+      "manageProjects": "Manage projects",
+      "repositories": "Repositories",
+      "manageRepos": "Manage repos",
+      "billing": "Billing",
+      "comingSoon": "Coming soon"
+    }
   }
 }

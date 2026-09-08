@@ -65,6 +65,7 @@ const PUBLIC_TABS = [
 
 export default function ProjectGeneralSettingsPage() {
   const t = useTranslations("settingsProjects");
+  const tc = useTranslations("common");
   const params = useParams();
   const router = useRouter();
   const projectId = params.projectId as string;
@@ -252,7 +253,7 @@ export default function ProjectGeneralSettingsPage() {
                 ) : (
                   <Lock className="h-4 w-4" />
                 )}
-                {project.is_public ? "Public" : "Private"}
+                {project.is_public ? tc("public") : tc("private")}
               </button>
             )}
           </div>
@@ -494,7 +495,7 @@ export default function ProjectGeneralSettingsPage() {
               <dt className="text-muted-foreground flex items-center gap-1.5">{t("general.visibility")} <HelpTooltip content="Controls who can see this project. Public = all workspace members, Private = invited members only" /></dt>
               <dd className={`flex items-center gap-1.5 ${project.is_public ? "text-green-400" : "text-foreground"}`}>
                 {project.is_public ? <Globe className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-                {project.is_public ? "Public" : "Private"}
+                {project.is_public ? tc("public") : tc("private")}
               </dd>
             </div>
             <div className="flex justify-between">

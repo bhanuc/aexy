@@ -20,6 +20,9 @@
     "schedule": "Schedule",
     "syncNow": "Sync now",
     "disconnect": "Disconnect",
-    "confirmDisable": "Are you sure you want to disable on-call for this team? All schedules will be preserved."
+    "confirmDisable": "Are you sure you want to disable on-call for this team? All schedules will be preserved.",
+    "enableOnCall": "Enable On-Call",
+    "disableOnCall": "Disable On-Call",
+    "connectGoogleCalendar": "Connect Google Calendar"
   }
 }

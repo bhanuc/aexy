@@ -190,7 +190,7 @@ function BoardRouting({
             </span>
           ) : (
             <span className="text-amber-700 dark:text-amber-400">
-              {reason ?? "Nothing — tickets stay where they are."}
+              {reason ?? tList("routingNothing")}
             </span>
           )}
         </div>
@@ -315,7 +315,7 @@ function ProjectCard({
                 <span
                   className={`px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap bg-yellow-50 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400`}
                 >
-                  {project.is_public? 'Public':'Private'}
+                  {project.is_public ? tCommon("public") : tCommon("private")}
                 </span>
               </div>
               <div className="text-sm text-muted-foreground mt-1">
@@ -590,8 +590,8 @@ function ProjectCard({
                     >
                       <Plus className="h-4 w-4" />
                       {availableMembers.length === 0
-                        ? "All workspace members added"
-                        : "Add Member"}
+                        ? tList("allMembersAdded")
+                        : tList("addMember")}
                     </button>
                   )}
                 </div>

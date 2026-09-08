@@ -135,8 +135,8 @@ export default function ProjectRepositoriesPage() {
                     {pendingId === wr.id
                       ? "…"
                       : linked
-                        ? "In project"
-                        : "Add to project"}
+                        ? tp("repositories.inProject")
+                        : t("addToProject")}
                   </button>
                 </li>
               );

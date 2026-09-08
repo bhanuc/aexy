@@ -85,6 +85,7 @@ function CommunitySettingsCard({
   workspaceId: string | null | undefined;
   canManage: boolean;
 }) {
+  const t = useTranslations("settingsOrganization");
   const { data: settings, isLoading } = useQuery({
     queryKey: ["communitySettings", workspaceId],
     queryFn: () => communityApi.getSettings(workspaceId!),
@@ -104,7 +105,7 @@ function CommunitySettingsCard({
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <h3 className="text-foreground font-medium">Public community</h3>
+            <h3 className="text-foreground font-medium">{t("community.title")}</h3>
             {!isLoading && (
               <span
                 className={`text-xs font-medium px-2 py-0.5 rounded-full ${
@@ -118,7 +119,7 @@ function CommunitySettingsCard({
             )}
           </div>
           <p className="text-muted-foreground text-sm">
-            Publish selected chat channels as a public, SEO-friendly forum.
+            {t("community.description")}
           </p>
         </div>
         <Link
@@ -162,6 +163,8 @@ function MemberRow({
   onResendInvite,
   onSetStatus,
 }: MemberRowProps) {
+  const t = useTranslations("settingsOrganization");
+  const tc = useTranslations("common");
   const [showMenu, setShowMenu] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
@@ -248,7 +251,7 @@ function MemberRow({
                   href="/organization/departments"
                   className="text-amber-500 hover:underline"
                 >
-                  No department — assign
+                  {t("member.noDepartment")}
                 </Link>
               )}
             </p>
@@ -283,7 +286,7 @@ function MemberRow({
                   style={{ top: menuPosition.top, right: menuPosition.right }}
                 >
                   <div className="px-3 py-2 text-xs text-muted-foreground uppercase tracking-wider">
-                    Change Role
+                    {t("member.changeRole")}
                   </div>
                   {ROLE_OPTIONS.filter(r => r.value !== "owner").map((role) => (
                     <button
@@ -303,7 +306,7 @@ function MemberRow({
                   {customRoles.length > 0 && (
                     <div className="border-t border-border mt-1 pt-1">
                       <div className="px-3 py-2 text-xs text-muted-foreground uppercase tracking-wider">
-                        Custom Role
+                        {t("member.customRole")}
                       </div>
                       {[{ id: null, name: "None" }, ...customRoles].map((role) => {
                         const active = (member.role_id ?? null) === role.id;
@@ -337,9 +340,9 @@ function MemberRow({
                       </button>
                     )}
                     {/* Soft-remove flow that preserves the member's
-                        history. Distinct from "Remove from workspace"
-                        below which is a hard delete used during invite
-                        cleanup; this one is the regular
+                        history. Distinct from the hard "remove from workspace"
+                        below, used during invite cleanup; this one is
+                        the regular
                         "this teammate has left" flow. */}
                     <button
                       onClick={handleToggleStatus}
@@ -357,7 +360,7 @@ function MemberRow({
                       className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-accent flex items-center gap-2"
                     >
                       <UserMinus className="h-4 w-4" />
-                      Remove from workspace
+                      {t("member.remove")}
                     </button>
                   </div>
                 </div>
@@ -384,6 +387,8 @@ interface InviteMemberModalProps {
 }
 
 function InviteMemberModal({ onClose, onInvite, isInviting, workspaceId }: InviteMemberModalProps) {
+  const t = useTranslations("settingsOrganization");
+  const tc = useTranslations("common");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("member");
   const [departmentId, setDepartmentId] = useState("");
@@ -427,12 +432,12 @@ function InviteMemberModal({ onClose, onInvite, isInviting, workspaceId }: Invit
     <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogContent className="max-w-md" aria-describedby={undefined}>
         <DialogHeader>
-          <DialogTitle className="text-xl">Invite Team Member</DialogTitle>
+          <DialogTitle className="text-xl">{t("invite.title")}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm text-muted-foreground mb-1">Email Address</label>
+              <label className="block text-sm text-muted-foreground mb-1">{t("invite.email")}</label>
               <input
                 type="email"
                 value={email}
@@ -465,7 +470,7 @@ function InviteMemberModal({ onClose, onInvite, isInviting, workspaceId }: Invit
                   onChange={(e) => setDepartmentId(e.target.value)}
                   className="w-full px-4 py-2 bg-muted border border-border rounded-lg text-foreground focus:outline-none focus:border-primary-500"
                 >
-                  <option value="">No department — assign later</option>
+                  <option value="">{t("invite.noDepartmentLater")}</option>
                   {departments.map((d) => (
                     <option key={d.id} value={d.id}>
                       {d.name}
@@ -495,7 +500,7 @@ function InviteMemberModal({ onClose, onInvite, isInviting, workspaceId }: Invit
                     onChange={(e) => setTeamId(e.target.value)}
                     className="flex-1 px-4 py-2 bg-muted border border-border rounded-lg text-foreground focus:outline-none focus:border-primary-500"
                   >
-                    <option value="">No team — add later</option>
+                    <option value="">{t("invite.noTeamLater")}</option>
                     {teams.map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.name}
@@ -511,8 +516,8 @@ function InviteMemberModal({ onClose, onInvite, isInviting, workspaceId }: Invit
                       className="px-3 py-2 bg-muted border border-border rounded-lg text-foreground focus:outline-none focus:border-primary-500"
                     >
                       <option value="member">Member</option>
-                      <option value="manager">Manager</option>
-                      <option value="lead">Lead</option>
+                      <option value="manager">{t("invite.roleManager")}</option>
+                      <option value="lead">{t("invite.roleLead")}</option>
                     </select>
                   )}
                 </div>
@@ -529,10 +534,10 @@ function InviteMemberModal({ onClose, onInvite, isInviting, workspaceId }: Invit
                 consequence. */}
             <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
               <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1">
-                They will see
+                {t("invite.previewHeading")}
               </p>
               {previewLoading ? (
-                <p className="text-sm text-muted-foreground/70">Working it out…</p>
+                <p className="text-sm text-muted-foreground/70">{t("invite.previewLoading")}</p>
               ) : appNames.length > 0 ? (
                 <>
                   <p className="text-sm text-foreground">{appNames.join(", ")}</p>
@@ -551,7 +556,7 @@ function InviteMemberModal({ onClose, onInvite, isInviting, workspaceId }: Invit
                 </>
               ) : (
                 <p className="text-sm text-muted-foreground/70">
-                  Nothing yet — pick a department with an access profile.
+                  {t("invite.previewEmpty")}
                 </p>
               )}
             </div>
@@ -576,12 +581,12 @@ function InviteMemberModal({ onClose, onInvite, isInviting, workspaceId }: Invit
               {isInviting ? (
                 <>
                   <RefreshCw className="h-4 w-4 animate-spin" />
-                  Inviting...
+                  {t("invite.submitting")}
                 </>
               ) : (
                 <>
                   <Mail className="h-4 w-4" />
-                  Send Invite
+                  {t("invite.submit")}
                 </>
               )}
             </button>
@@ -600,6 +605,8 @@ interface CreateWorkspaceModalProps {
 }
 
 function CreateWorkspaceModal({ onClose, onCreate, isCreating, organizations }: CreateWorkspaceModalProps) {
+  const t = useTranslations("settingsOrganization");
+  const tc = useTranslations("common");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [type, setType] = useState<"internal" | "github_linked">("internal");
@@ -633,26 +640,26 @@ function CreateWorkspaceModal({ onClose, onCreate, isCreating, organizations }: 
     <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogContent className="max-w-md" aria-describedby={undefined}>
         <DialogHeader>
-          <DialogTitle className="text-xl">Create Workspace</DialogTitle>
+          <DialogTitle className="text-xl">{t("workspace.createTitle")}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm text-muted-foreground mb-1">Workspace Name</label>
+              <label className="block text-sm text-muted-foreground mb-1">{t("workspace.name")}</label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="My Team"
+                placeholder={t("workspace.namePlaceholder")}
                 className="w-full px-4 py-2 bg-muted border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary-500"
               />
             </div>
             <div>
-              <label className="block text-sm text-muted-foreground mb-1">Description (optional)</label>
+              <label className="block text-sm text-muted-foreground mb-1">{t("workspace.descriptionOptional")}</label>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="What is this workspace for?"
+                placeholder={t("workspace.descriptionPlaceholder")}
                 rows={2}
                 className="w-full px-4 py-2 bg-muted border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary-500"
               />
@@ -670,8 +677,8 @@ function CreateWorkspaceModal({ onClose, onCreate, isCreating, organizations }: 
                   }`}
                 >
                   <Building2 className="h-5 w-5 text-muted-foreground mb-1" />
-                  <div className="text-foreground font-medium text-sm">Internal</div>
-                  <div className="text-muted-foreground text-xs">Manual member management</div>
+                  <div className="text-foreground font-medium text-sm">{t("workspace.internal")}</div>
+                  <div className="text-muted-foreground text-xs">{t("workspace.internalHint")}</div>
                 </button>
                 <button
                   type="button"
@@ -683,20 +690,20 @@ function CreateWorkspaceModal({ onClose, onCreate, isCreating, organizations }: 
                   }`}
                 >
                   <LinkIcon className="h-5 w-5 text-muted-foreground mb-1" />
-                  <div className="text-foreground font-medium text-sm">GitHub Linked</div>
-                  <div className="text-muted-foreground text-xs">Sync from GitHub org</div>
+                  <div className="text-foreground font-medium text-sm">{t("workspace.githubLinked")}</div>
+                  <div className="text-muted-foreground text-xs">{t("workspace.githubHint")}</div>
                 </button>
               </div>
             </div>
             {type === "github_linked" && organizations.length > 0 && (
               <div>
-                <label className="block text-sm text-muted-foreground mb-1">GitHub Organization</label>
+                <label className="block text-sm text-muted-foreground mb-1">{t("workspace.githubOrg")}</label>
                 <select
                   value={selectedOrgId}
                   onChange={(e) => setSelectedOrgId(e.target.value)}
                   className="w-full px-4 py-2 bg-muted border border-border rounded-lg text-foreground focus:outline-none focus:border-primary-500"
                 >
-                  <option value="">Select an organization...</option>
+                  <option value="">{t("workspace.selectOrg")}</option>
                   {organizations.map((org) => (
                     <option key={org.id} value={org.id}>
                       {org.name || org.login}
@@ -725,12 +732,12 @@ function CreateWorkspaceModal({ onClose, onCreate, isCreating, organizations }: 
               {isCreating ? (
                 <>
                   <RefreshCw className="h-4 w-4 animate-spin" />
-                  Creating...
+                  {t("workspace.creating")}
                 </>
               ) : (
                 <>
                   <Plus className="h-4 w-4" />
-                  Create Workspace
+                  {t("workspace.createTitle")}
                 </>
               )}
             </button>
@@ -742,6 +749,7 @@ function CreateWorkspaceModal({ onClose, onCreate, isCreating, organizations }: 
 }
 
 function SeatUsageBar({ used, total }: { used: number; total: number }) {
+  const t = useTranslations("settingsOrganization");
   // A total of -1 means the plan has no seat cap (Plan.included_seats = -1).
   const unlimited = total < 0;
   const percentage = unlimited ? 0 : Math.min((used / total) * 100, 100);
@@ -751,7 +759,7 @@ function SeatUsageBar({ used, total }: { used: number; total: number }) {
   return (
     <div className="mt-2">
       <div className="flex justify-between text-sm mb-1">
-        <span className="text-muted-foreground">Seats Used</span>
+        <span className="text-muted-foreground">{t("seats.used")}</span>
         <span className={isAtLimit ? "text-red-400" : isNearLimit ? "text-yellow-400" : "text-muted-foreground"}>
           {unlimited ? `${used} / Unlimited` : `${used} / ${total}`}
         </span>
@@ -778,6 +786,7 @@ interface PendingInviteRowProps {
 }
 
 function PendingInviteRow({ invite, onRevoke, onResend, isRevoking }: PendingInviteRowProps) {
+  const t = useTranslations("settingsOrganization");
   const [isResending, setIsResending] = useState(false);
   const expiresAt = invite.expires_at ? new Date(invite.expires_at) : null;
   const isExpired = expiresAt && expiresAt < new Date();
@@ -807,11 +816,11 @@ function PendingInviteRow({ invite, onRevoke, onResend, isRevoking }: PendingInv
           <div className="flex items-center gap-2 text-muted-foreground text-sm">
             <Clock className="h-3 w-3" />
             {isExpired ? (
-              <span className="text-red-400">Expired</span>
+              <span className="text-red-400">{t("inviteRow.expired")}</span>
             ) : expiresAt ? (
               <span>Expires {expiresAt.toLocaleDateString()}</span>
             ) : (
-              <span>No expiry</span>
+              <span>{t("inviteRow.noExpiry")}</span>
             )}
             {invite.invited_by_name && (
               <>
@@ -830,7 +839,7 @@ function PendingInviteRow({ invite, onRevoke, onResend, isRevoking }: PendingInv
           onClick={handleResend}
           disabled={isResending}
           className="p-2 text-blue-400 hover:text-blue-300 hover:bg-accent rounded-lg transition disabled:opacity-50"
-          title="Resend invite"
+          title={t("inviteRow.resend")}
         >
           <RefreshCw className={`h-4 w-4 ${isResending ? 'animate-spin' : ''}`} />
         </button>
@@ -838,7 +847,7 @@ function PendingInviteRow({ invite, onRevoke, onResend, isRevoking }: PendingInv
           onClick={() => onRevoke(invite.id)}
           disabled={isRevoking}
           className="p-2 text-red-400 hover:text-red-300 hover:bg-accent rounded-lg transition disabled:opacity-50"
-          title="Revoke invite"
+          title={t("inviteRow.revoke")}
         >
           <X className="h-4 w-4" />
         </button>
@@ -871,6 +880,7 @@ interface AppSettingsSectionProps {
 }
 
 function AppSettingsSection({ appSettings, onUpdate, isUpdating, isOwner }: AppSettingsSectionProps) {
+  const t = useTranslations("settingsOrganization");
   const handleToggle = async (appKey: string) => {
     if (!isOwner) return;
     const newSettings = { ...appSettings, [appKey]: !appSettings[appKey] };
@@ -882,8 +892,8 @@ function AppSettingsSection({ appSettings, onUpdate, isUpdating, isOwner }: AppS
       <div className="p-4 border-b border-border flex items-center gap-3">
         <Layers className="h-5 w-5 text-muted-foreground" />
         <div>
-          <h3 className="text-foreground font-medium">App Settings</h3>
-          <p className="text-muted-foreground text-sm">Enable or disable apps for your workspace</p>
+          <h3 className="text-foreground font-medium">{t("apps.heading")}</h3>
+          <p className="text-muted-foreground text-sm">{t("apps.subtitle")}</p>
         </div>
       </div>
       <div className="p-4 space-y-3">
@@ -915,7 +925,7 @@ function AppSettingsSection({ appSettings, onUpdate, isUpdating, isOwner }: AppS
       </div>
       {!isOwner && (
         <div className="px-4 pb-4">
-          <p className="text-xs text-muted-foreground">Only the workspace owner can change app settings.</p>
+          <p className="text-xs text-muted-foreground">{t("apps.ownerOnly")}</p>
         </div>
       )}
     </div>
@@ -924,6 +934,7 @@ function AppSettingsSection({ appSettings, onUpdate, isUpdating, isOwner }: AppS
 
 export default function OrganizationSettingsPage() {
   const t = useTranslations("settingsOrganization");
+  const tc = useTranslations("common");
   const { user } = useAuth();
   const {
     workspaces,
@@ -1015,7 +1026,7 @@ export default function OrganizationSettingsPage() {
   };
 
   const handleRemove = async (developerId: string) => {
-    if (confirm("Are you sure you want to remove this member from the workspace?")) {
+    if (confirm(t("member.confirmRemove"))) {
       await removeMember(developerId);
     }
   };
@@ -1035,7 +1046,7 @@ export default function OrganizationSettingsPage() {
   };
 
   const handleRevokeInvite = async (inviteId: string) => {
-    if (confirm("Are you sure you want to revoke this invitation?")) {
+    if (confirm(t("inviteRow.confirmRevoke"))) {
       await revokeInvite(inviteId);
     }
   };
@@ -1136,7 +1147,7 @@ export default function OrganizationSettingsPage() {
               className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition text-sm"
             >
               <Plus className="h-4 w-4" />
-              New Workspace
+              {t("page.newWorkspace")}
             </button>
           </div>
 
@@ -1189,16 +1200,16 @@ export default function OrganizationSettingsPage() {
           ) : (
             <div className="bg-card rounded-xl p-8 text-center">
               <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-foreground mb-2">No workspaces yet</h3>
+              <h3 className="text-lg font-medium text-foreground mb-2">{t("page.noWorkspaces")}</h3>
               <p className="text-muted-foreground mb-4">
-                Create your first workspace to start managing your team.
+                {t("page.noWorkspacesHint")}
               </p>
               <button
                 onClick={() => setShowCreateModal(true)}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition"
               >
                 <Plus className="h-4 w-4" />
-                Create Workspace
+                {t("workspace.createTitle")}
               </button>
             </div>
           )}
@@ -1233,7 +1244,9 @@ export default function OrganizationSettingsPage() {
                           ? "bg-purple-50 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400"
                           : "bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
                       }`}>
-                        {currentWorkspace.type === "github_linked" ? "GitHub Linked" : "Internal"}
+                        {currentWorkspace.type === "github_linked"
+                          ? t("workspace.githubLinked")
+                          : t("workspace.internal")}
                       </span>
                       <span className="text-muted-foreground text-sm">
                         {currentWorkspace.member_count} members
@@ -1264,7 +1277,7 @@ export default function OrganizationSettingsPage() {
                 <div className="flex items-center gap-3">
                   <Users className="h-5 w-5 text-muted-foreground" />
                   <div>
-                    <h3 className="text-foreground font-medium">Team Members</h3>
+                    <h3 className="text-foreground font-medium">{t("page.teamMembers")}</h3>
                     <p className="text-muted-foreground text-sm">
                       {members.filter((m) => m.status !== "removed").length} active
                       {showPastMembers && (() => {
@@ -1282,7 +1295,7 @@ export default function OrganizationSettingsPage() {
                       onChange={(e) => setShowPastMembers(e.target.checked)}
                       className="h-3.5 w-3.5"
                     />
-                    Show past members
+                    {t("page.showPast")}
                   </label>
                   {isAdmin && (
                     <button
@@ -1290,7 +1303,7 @@ export default function OrganizationSettingsPage() {
                       className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition text-sm"
                     >
                       <Plus className="h-4 w-4" />
-                      Invite Member
+                      {t("page.inviteMember")}
                     </button>
                   )}
                 </div>
@@ -1322,7 +1335,7 @@ export default function OrganizationSettingsPage() {
                     ))
                 ) : (
                   <div className="p-8 text-center text-muted-foreground">
-                    No members found
+                    {t("page.noMembers")}
                   </div>
                 )}
               </div>
@@ -1334,7 +1347,7 @@ export default function OrganizationSettingsPage() {
                 <div className="p-4 border-b border-border flex items-center gap-3">
                   <Mail className="h-5 w-5 text-yellow-400" />
                   <div>
-                    <h3 className="text-foreground font-medium">Pending Invitations</h3>
+                    <h3 className="text-foreground font-medium">{t("page.pendingInvitations")}</h3>
                     <p className="text-muted-foreground text-sm">{pendingInvites.length} pending</p>
                   </div>
                 </div>
@@ -1352,7 +1365,7 @@ export default function OrganizationSettingsPage() {
               </div>
             )}
 
-            {/* App Settings Section */}
+            {/* {t("apps.heading")} Section */}
             <AppSettingsSection
               appSettings={appSettings}
               onUpdate={updateAppSettings}
@@ -1375,7 +1388,7 @@ export default function OrganizationSettingsPage() {
                   </div>
                   <div>
                     <h4 className="text-foreground font-medium">Projects</h4>
-                    <p className="text-muted-foreground text-sm">Manage projects</p>
+                    <p className="text-muted-foreground text-sm">{t("page.manageProjects")}</p>
                   </div>
                   <ChevronDown className="h-5 w-5 text-muted-foreground ml-auto -rotate-90" />
                 </div>
@@ -1390,7 +1403,7 @@ export default function OrganizationSettingsPage() {
                   </div>
                   <div>
                     <h4 className="text-foreground font-medium">Repositories</h4>
-                    <p className="text-muted-foreground text-sm">Manage repos</p>
+                    <p className="text-muted-foreground text-sm">{t("page.manageRepos")}</p>
                   </div>
                   <ChevronDown className="h-5 w-5 text-muted-foreground ml-auto -rotate-90" />
                 </div>
@@ -1402,7 +1415,7 @@ export default function OrganizationSettingsPage() {
                   </div>
                   <div>
                     <h4 className="text-foreground font-medium">Billing</h4>
-                    <p className="text-muted-foreground text-sm">Coming soon</p>
+                    <p className="text-muted-foreground text-sm">{t("page.comingSoon")}</p>
                   </div>
                   <ChevronDown className="h-5 w-5 text-muted-foreground ml-auto -rotate-90" />
                 </div>

@@ -26,6 +26,8 @@
     "removeFromProject": "Remove from project",
     "proFeature": "Pro feature",
     "confirmRemoveMember": "Remove this member from the project?",
-    "confirmDeleteProject": "Are you sure you want to delete this project? This action cannot be undone."
+    "confirmDeleteProject": "Are you sure you want to delete this project? This action cannot be undone.",
+    "routingNothing": "Nothing — tickets stay where they are.",
+    "allMembersAdded": "All workspace members added"
   }
 }
