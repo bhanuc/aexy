@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { motion } from "framer-motion";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { AlertTriangle, X } from "lucide-react";
@@ -33,6 +34,8 @@ export function DeleteStatusModal({
   onConfirm,
   isDeleting,
 }: DeleteStatusModalProps) {
+  const t = useTranslations("deleteStatusModal");
+  const tc = useTranslations("common");
   const { data: usage, isLoading: usageLoading } = useQuery({
     queryKey: ["taskStatusUsage", workspaceId, status.id],
     queryFn: () => taskConfigApi.getStatusUsage(workspaceId, status.id),
@@ -103,7 +106,7 @@ export function DeleteStatusModal({
             </div>
             <div>
               <DialogPrimitive.Title className="text-sm font-semibold tracking-tight text-foreground">
-                Delete status
+                {t("title")}
               </DialogPrimitive.Title>
               <p className="text-xs text-muted-foreground mt-0.5">
                 <span
@@ -119,7 +122,7 @@ export function DeleteStatusModal({
             onClick={onClose}
             disabled={isDeleting}
             className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors"
-            aria-label="Close"
+            aria-label={t("close")}
           >
             <X className="h-4 w-4" />
           </button>
@@ -145,7 +148,7 @@ export function DeleteStatusModal({
                   htmlFor="migrate-target"
                   className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground/80 font-medium"
                 >
-                  Target status
+                  {t("targetStatus")}
                 </label>
                 <select
                   id="migrate-target"
@@ -159,7 +162,7 @@ export function DeleteStatusModal({
                   disabled={eligible.length === 0}
                 >
                   {eligible.length === 0 ? (
-                    <option value="">No other statuses available</option>
+                    <option value="">{t("noOthers")}</option>
                   ) : (
                     eligible.map((c) => (
                       <option key={c.id} value={c.id}>
@@ -186,7 +189,7 @@ export function DeleteStatusModal({
             disabled={isDeleting}
             className="px-3 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors"
           >
-            Cancel
+            {tc("cancel")}
           </button>
           <button
             type="button"
@@ -199,7 +202,7 @@ export function DeleteStatusModal({
               "ring-1 ring-red-500/40",
             )}
           >
-            {isDeleting ? "Deleting…" : "Delete status"}
+            {isDeleting ? t("deleting") : t("title")}
           </button>
         </div>
             </motion.div>

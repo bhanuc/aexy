@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -18,6 +19,7 @@ interface SettingsSearchProps {
 }
 
 export function SettingsSearch({ permissions, isOwner, isPlatformAdmin }: SettingsSearchProps) {
+  const t = useTranslations("settingsShell");
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -69,7 +71,7 @@ export function SettingsSearch({ permissions, isOwner, isPlatformAdmin }: Settin
         <input
           ref={inputRef}
           type="text"
-          placeholder="Search settings..."
+          placeholder={t("search")}
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -118,7 +120,7 @@ export function SettingsSearch({ permissions, isOwner, isPlatformAdmin }: Settin
           className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-md shadow-lg z-50 p-3"
         >
           <p className="text-sm text-muted-foreground text-center">
-            No settings found
+            {t("noResults")}
           </p>
         </div>
       )}

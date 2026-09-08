@@ -379,23 +379,23 @@ export default function EmailDeliverySettingsPage() {
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <div className="bg-card rounded-lg p-4 border border-border">
                 <p className="text-emerald-400 text-2xl font-bold">{stats.total_delivered}</p>
-                <p className="text-muted-foreground text-sm">Delivered</p>
+                <p className="text-muted-foreground text-sm">{t("delivered")}</p>
               </div>
               <div className="bg-card rounded-lg p-4 border border-border">
                 <p className="text-blue-400 text-2xl font-bold">{stats.total_sent}</p>
-                <p className="text-muted-foreground text-sm">Sent</p>
+                <p className="text-muted-foreground text-sm">{t("sent")}</p>
               </div>
               <div className="bg-card rounded-lg p-4 border border-border">
                 <p className="text-yellow-400 text-2xl font-bold">{stats.total_pending}</p>
-                <p className="text-muted-foreground text-sm">Pending</p>
+                <p className="text-muted-foreground text-sm">{t("pending")}</p>
               </div>
               <div className="bg-card rounded-lg p-4 border border-border">
                 <p className="text-orange-400 text-2xl font-bold">{stats.total_bounced}</p>
-                <p className="text-muted-foreground text-sm">Bounced</p>
+                <p className="text-muted-foreground text-sm">{t("bounced")}</p>
               </div>
               <div className="bg-card rounded-lg p-4 border border-border">
                 <p className="text-red-400 text-2xl font-bold">{stats.total_failed}</p>
-                <p className="text-muted-foreground text-sm">Failed</p>
+                <p className="text-muted-foreground text-sm">{t("failed")}</p>
               </div>
             </div>
           </>

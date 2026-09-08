@@ -204,7 +204,7 @@ function ChannelToggle({
           ? "border-primary/30 bg-primary/10 text-primary"
           : "border-border bg-transparent text-muted-foreground hover:text-foreground hover:border-foreground/20"
       } ${isUpdating ? "opacity-50 cursor-not-allowed" : ""}`}
-      title={`${enabled ? tc("disable") : "Enable"} ${label} notifications`}
+      title={`${enabled ? tc("disable") : tc("enable")} ${label}`}
     >
       {isUpdating ? (
         <Loader2 className="h-3.5 w-3.5 animate-spin" />

@@ -246,6 +246,25 @@ the role, the name, focus containment, Escape and scroll lock with it. The
 delete-status dialog keeps its own design — a sheet on small screens — and
 gains the same behaviour.
 
+### Changed: settings is translated
+
+Every settings page said the same thing in English whichever language you had
+chosen. Their titles were translated and almost nothing else was — so switching
+to Hindi changed the page heading and left the form under it, the buttons, the
+dropdowns, the confirmations and every success and error message in English.
+
+All of it is translated now, in English and Hindi: 32 pages and the shared
+components they lean on. Shared wording — Save, Cancel, Delete, Active,
+Enable/Disable, Public/Private — comes from one place rather than being spelled
+again on each page, so the same button reads the same way everywhere.
+
+Four things stay in English on purpose. Product names (Amazon SES, SendGrid,
+Mailgun, Postmark). Identifiers people type or copy, like a category's slug and
+the `Asia/Kolkata` timezone example. Placeholder examples whose shape matters
+more than their words. And the OpenObserve setup walkthrough, whose sentences
+run through configuration literals that have to stay exact — its labels are
+translated, its prose is not.
+
 ### Fixed: settings areas that had no shared navigation
 
 Four pages had no way out. `/settings/access/templates`, `/settings/access/logs`,

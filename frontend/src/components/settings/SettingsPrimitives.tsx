@@ -18,6 +18,7 @@
  */
 
 import * as React from "react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { Lock } from "lucide-react";
 import {
@@ -104,6 +105,7 @@ export function SettingsAccessDenied({
   title?: string;
   detail?: string;
 }) {
+  const t = useTranslations("settingsShell");
   return (
     <div className="mx-auto w-full max-w-3xl">
       <section className="rounded-xl border border-border bg-surface px-6 py-12 text-center">
@@ -119,7 +121,7 @@ export function SettingsAccessDenied({
           href="/settings"
           className="mt-5 inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-foreground transition-colors hover:bg-accent"
         >
-          Back to settings
+          {t("backToSettings")}
         </Link>
       </section>
     </div>
@@ -128,5 +130,6 @@ export function SettingsAccessDenied({
 
 /** The counterpart for autosaving pages: one consistent phrasing. */
 export function SettingsAutosaveHint({ children }: { children?: React.ReactNode }) {
-  return <>{children ?? "Changes are saved automatically."}</>;
+  const t = useTranslations("settingsShell");
+  return <>{children ?? t("autosave")}</>;
 }
