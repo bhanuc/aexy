@@ -19,6 +19,19 @@
     "empty": {
       "title": "अभी कोई सूचना प्रकार नहीं",
       "description": "जैसे-जैसे आप अधिक सुविधाएँ उपयोग करेंगे, सूचना प्रकार यहाँ दिखेंगे।"
-    }
+    },
+    "allInCategory": "श्रेणी में सभी",
+    "slackChannel": "Slack चैनल:",
+    "dmDefault": "DM (डिफ़ॉल्ट)",
+    "prefUpdated": "प्राथमिकता अपडेट हुई",
+    "prefFailed": "प्राथमिकता अपडेट नहीं हो सकी",
+    "categoryUpdated": "श्रेणी प्राथमिकता अपडेट हुई",
+    "categoryFailed": "श्रेणी प्राथमिकता अपडेट नहीं हो सकी",
+    "slackFailed": "Slack चैनल अपडेट नहीं हो सका",
+    "pushDisabled": "वेब पुश अक्षम",
+    "pushDisableFailed": "वेब पुश अक्षम नहीं हो सका",
+    "pushEnabled": "वेब पुश सक्षम",
+    "pushBlocked": "आपकी ब्राउज़र सेटिंग्स में सूचनाएँ अवरुद्ध हैं",
+    "pushEnableFailed": "वेब पुश सक्षम नहीं हो सका"
   }
 }

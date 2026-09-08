@@ -3,6 +3,18 @@
     "title": "Webhooks",
     "description": "Real-time notifications when events occur in your workspace.",
     "add": "Add webhook",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "testWebhook": "Test Webhook",
+    "rotateSecret": "Rotate Secret",
+    "name": "Name",
+    "events": "Events",
+    "noWebhooks": "No webhooks configured",
+    "noWebhooksHint": "Add a webhook to receive event notifications",
+    "signatureHeading": "Webhook Signature Verification",
+    "copySecret": "Copy secret",
+    "namePlaceholder": "My Webhook",
+    "dismissTest": "Dismiss test result",
+    "hide": "Hide",
+    "deselectAll": "Deselect all"
   }
 }

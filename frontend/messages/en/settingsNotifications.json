@@ -19,6 +19,19 @@
     "empty": {
       "title": "No notification types yet",
       "description": "Notification types appear here as you start using more features."
-    }
+    },
+    "allInCategory": "All in category",
+    "slackChannel": "Slack channel:",
+    "dmDefault": "DM (default)",
+    "prefUpdated": "Preference updated",
+    "prefFailed": "Failed to update preference",
+    "categoryUpdated": "Category preference updated",
+    "categoryFailed": "Failed to update category preference",
+    "slackFailed": "Failed to update Slack channel",
+    "pushDisabled": "Web push disabled",
+    "pushDisableFailed": "Failed to disable web push",
+    "pushEnabled": "Web push enabled",
+    "pushBlocked": "Notifications are blocked in your browser settings",
+    "pushEnableFailed": "Failed to enable web push"
   }
 }
