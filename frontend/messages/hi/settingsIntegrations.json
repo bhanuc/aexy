@@ -1,6 +1,83 @@
 {
   "settingsIntegrations": {
     "title": "इंटीग्रेशन",
-    "description": "Jira, Linear, Slack और अन्य बाहरी टूल जोड़ें।"
+    "description": "Jira, Linear, Slack और अन्य बाहरी टूल जोड़ें।",
+    "status": {
+      "connected": "कनेक्टेड",
+      "notConnected": "कनेक्टेड नहीं"
+    },
+    "jira": {
+      "siteUrl": "Jira साइट URL",
+      "email": "ईमेल",
+      "apiToken": "API टोकन",
+      "getToken": "टोकन प्राप्त करें",
+      "tokenPlaceholder": "आपका Jira API टोकन",
+      "name": "Jira",
+      "blurb": "Jira से इशू आयात और सिंक करें",
+      "adminOnly": "Jira इंटीग्रेशन कॉन्फ़िगर करने के लिए एडमिन से संपर्क करें।"
+    },
+    "linear": {
+      "apiKey": "Linear API कुंजी",
+      "getKey": "कुंजी प्राप्त करें",
+      "keyHint": "Linear Settings > API में एक व्यक्तिगत API कुंजी बनाएँ",
+      "name": "Linear",
+      "blurb": "Linear से इशू आयात और सिंक करें",
+      "adminOnly": "Linear इंटीग्रेशन कॉन्फ़िगर करने के लिए एडमिन से संपर्क करें।"
+    },
+    "connect": {
+      "testOk": "कनेक्शन सफल! अब आप कनेक्ट कर सकते हैं।",
+      "testing": "जाँचा जा रहा है…",
+      "test": "कनेक्शन जाँचें",
+      "connecting": "कनेक्ट हो रहा है…",
+      "connect": "कनेक्ट करें"
+    },
+    "mapping": {
+      "heading": "स्थिति मैपिंग",
+      "selectStatus": "स्थिति चुनें…"
+    },
+    "sync": {
+      "autoEnabled": "ऑटो-सिंक सक्षम",
+      "syncing": "सिंक हो रहा है…",
+      "now": "अभी सिंक करें"
+    },
+    "noWorkspace": {
+      "title": "कोई वर्कस्पेस नहीं",
+      "description": "इंटीग्रेशन कॉन्फ़िगर करने के लिए पहले एक वर्कस्पेस बनाएँ।",
+      "cta": "संगठन सेटिंग्स पर जाएँ"
+    },
+    "github": {
+      "name": "GitHub",
+      "connectedVia": "GitHub आपके अकाउंट लॉगिन से कनेक्टेड है",
+      "needsReauth": "GitHub कनेक्शन को फिर से प्रमाणीकरण चाहिए",
+      "reconnect": "GitHub फिर कनेक्ट करें",
+      "manageRepos": "रिपॉज़िटरी प्रबंधित करें"
+    },
+    "slack": {
+      "name": "Slack",
+      "blurb": "स्टैंडअप, ब्लॉकर और टीम अपडेट के लिए Slack कनेक्ट करें",
+      "adminOnly": "Slack इंटीग्रेशन कॉन्फ़िगर करने के लिए एडमिन से संपर्क करें।",
+      "defaultChannel": "डिफ़ॉल्ट सूचना चैनल",
+      "directMessage": "डायरेक्ट मैसेज (डिफ़ॉल्ट)",
+      "configuredChannels": "कॉन्फ़िगर किए गए चैनल",
+      "channelsHint": "स्टैंडअप और टास्क अपडेट के लिए मॉनिटर करने वाले चैनल चुनें",
+      "addChannel": "चैनल जोड़ें",
+      "standups": "स्टैंडअप",
+      "blockers": "ब्लॉकर",
+      "noChannels": "अभी कोई चैनल कॉन्फ़िगर नहीं",
+      "noChannelsHint": "मॉनिटरिंग शुरू करने के लिए चैनल जोड़ें",
+      "importHistory": "इतिहास आयात करें",
+      "importHint": "स्टैंडअप और गतिविधि भरने के लिए Slack चैनल से मौजूदा संदेश आयात करें",
+      "daysBack": "कितने दिन पीछे:",
+      "importing": "आयात हो रहा है…",
+      "import": "संदेश आयात करें",
+      "selectChannel": "चैनल चुनें",
+      "chooseChannel": "एक चैनल चुनें…",
+      "removeChannel": "Slack चैनल हटाएँ",
+      "opening": "Slack खोला जा रहा है…",
+      "defaultChannelFailed": "डिफ़ॉल्ट चैनल अपडेट नहीं हो सका",
+      "addToSlack": "Slack में जोड़ें"
+    },
+    "confirmDisconnect": "क्या आप वाकई {name} डिस्कनेक्ट करना चाहते हैं?",
+    "manageIntegration": "{name} इंटीग्रेशन प्रबंधित करें"
   }
 }

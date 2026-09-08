@@ -1,6 +1,83 @@
 {
   "settingsIntegrations": {
     "title": "Integrations",
-    "description": "Connect Jira, Linear, Slack and other external tools."
+    "description": "Connect Jira, Linear, Slack and other external tools.",
+    "status": {
+      "connected": "Connected",
+      "notConnected": "Not Connected"
+    },
+    "jira": {
+      "siteUrl": "Jira Site URL",
+      "email": "Email",
+      "apiToken": "API Token",
+      "getToken": "Get token",
+      "tokenPlaceholder": "Your Jira API token",
+      "name": "Jira",
+      "blurb": "Import and sync issues from Jira",
+      "adminOnly": "Contact an admin to configure Jira integration."
+    },
+    "linear": {
+      "apiKey": "Linear API Key",
+      "getKey": "Get key",
+      "keyHint": "Create a personal API key in Linear Settings > API",
+      "name": "Linear",
+      "blurb": "Import and sync issues from Linear",
+      "adminOnly": "Contact an admin to configure Linear integration."
+    },
+    "connect": {
+      "testOk": "Connection successful! You can now connect.",
+      "testing": "Testing…",
+      "test": "Test Connection",
+      "connecting": "Connecting…",
+      "connect": "Connect"
+    },
+    "mapping": {
+      "heading": "Status Mapping",
+      "selectStatus": "Select status…"
+    },
+    "sync": {
+      "autoEnabled": "Auto-sync enabled",
+      "syncing": "Syncing…",
+      "now": "Sync Now"
+    },
+    "noWorkspace": {
+      "title": "No Workspace",
+      "description": "Create a workspace first to configure integrations.",
+      "cta": "Go to Organization Settings"
+    },
+    "github": {
+      "name": "GitHub",
+      "connectedVia": "GitHub is connected via your account login",
+      "needsReauth": "GitHub connection needs re-authentication",
+      "reconnect": "Reconnect GitHub",
+      "manageRepos": "Manage Repositories"
+    },
+    "slack": {
+      "name": "Slack",
+      "blurb": "Connect Slack for standups, blockers, and team updates",
+      "adminOnly": "Contact an admin to configure Slack integration.",
+      "defaultChannel": "Default Notification Channel",
+      "directMessage": "Direct message (default)",
+      "configuredChannels": "Configured Channels",
+      "channelsHint": "Select channels to monitor for standups and task updates",
+      "addChannel": "Add Channel",
+      "standups": "Standups",
+      "blockers": "Blockers",
+      "noChannels": "No channels configured yet",
+      "noChannelsHint": "Add channels to start monitoring",
+      "importHistory": "Import History",
+      "importHint": "Import existing messages from Slack channels to populate standups and activity",
+      "daysBack": "Days back:",
+      "importing": "Importing…",
+      "import": "Import Messages",
+      "selectChannel": "Select Channel",
+      "chooseChannel": "Choose a channel…",
+      "removeChannel": "Remove Slack channel",
+      "opening": "Opening Slack…",
+      "defaultChannelFailed": "Failed to update default channel",
+      "addToSlack": "Add to Slack"
+    },
+    "confirmDisconnect": "Are you sure you want to disconnect {name}?",
+    "manageIntegration": "Manage {name} integration"
   }
 }
