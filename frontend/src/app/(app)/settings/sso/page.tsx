@@ -48,6 +48,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function CopyButton({ text }: { text: string }) {
+  const t = useTranslations("settingsSso");
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -60,7 +61,7 @@ function CopyButton({ text }: { text: string }) {
     <button
       onClick={handleCopy}
       className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors"
-      title="Copy"
+      title={t("copy")}
     >
       {copied ? (
         <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
@@ -78,6 +79,7 @@ function ConfigureForm({
   onSave: (data: SSOConfigurationCreate) => Promise<void>;
   initialData?: SSOConfiguration | null;
 }) {
+  const t = useTranslations("settingsSso");
   const [provider, setProvider] = useState<SSOProvider>(initialData?.provider || "saml");
   const [displayName, setDisplayName] = useState(initialData?.display_name || "");
   const [entityId, setEntityId] = useState(initialData?.entity_id || "");
@@ -131,7 +133,7 @@ function ConfigureForm({
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Provider Selection */}
       <div>
-        <label className="block text-sm font-medium text-foreground mb-2">Protocol</label>
+        <label className="block text-sm font-medium text-foreground mb-2">{t("protocol")}</label>
         <div className="flex gap-3">
           {(["saml", "oidc"] as const).map((p) => (
             <button
@@ -144,16 +146,16 @@ function ConfigureForm({
                   : "bg-accent text-muted-foreground border-border hover:text-foreground hover:border-foreground/20"
               }`}
             >
-              {p === "saml" ? "SAML 2.0" : "OpenID Connect"}
+              {p === "saml" ? t("saml") : t("oidc")}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Display Name */}
+      {/* {t("displayName")} */}
       <div>
         <label className="block text-sm font-medium text-foreground mb-1.5">
-          Display Name
+          {t("displayName")}
         </label>
         <input
           type="text"
@@ -170,7 +172,7 @@ function ConfigureForm({
         <>
           <div>
             <label className="block text-sm font-medium text-foreground mb-1.5">
-              IdP Entity ID
+              {t("idpEntityId")}
             </label>
             <input
               type="text"
@@ -181,12 +183,12 @@ function ConfigureForm({
               required
             />
             <p className="mt-1 text-xs text-muted-foreground">
-              The entity ID from your identity provider&apos;s SAML metadata.
+              {t("idpEntityIdHint")}
             </p>
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground mb-1.5">
-              SSO Login URL
+              {t("ssoLoginUrl")}
             </label>
             <input
               type="url"
@@ -209,7 +211,7 @@ function ConfigureForm({
               required
             />
             <p className="mt-1 text-xs text-muted-foreground">
-              Paste the public certificate from your IdP for signature verification.
+              {t("certHint")}
             </p>
           </div>
         </>
@@ -217,7 +219,7 @@ function ConfigureForm({
         <>
           <div>
             <label className="block text-sm font-medium text-foreground mb-1.5">
-              Issuer URL
+              {t("issuerUrl")}
             </label>
             <input
               type="url"
@@ -230,7 +232,7 @@ function ConfigureForm({
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground mb-1.5">
-              Client ID
+              {t("clientId")}
             </label>
             <input
               type="text"
@@ -243,7 +245,7 @@ function ConfigureForm({
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground mb-1.5">
-              Client Secret
+              {t("clientSecret")}
             </label>
             <input
               type="password"
@@ -254,7 +256,7 @@ function ConfigureForm({
             />
             {initialData && (
               <p className="mt-1 text-xs text-muted-foreground">
-                Leave blank to keep the existing secret.
+                {t("secretHint")}
               </p>
             )}
           </div>
@@ -263,11 +265,11 @@ function ConfigureForm({
 
       {/* Common Settings */}
       <div className="border-t border-border pt-6 space-y-4">
-        <h3 className="text-sm font-semibold text-foreground">Provisioning & Enforcement</h3>
+        <h3 className="text-sm font-semibold text-foreground">{t("provisioningHeading")}</h3>
 
         <div>
           <label className="block text-sm font-medium text-foreground mb-1.5">
-            Allowed Email Domains
+            {t("allowedDomains")}
           </label>
           <input
             type="text"
@@ -277,7 +279,7 @@ function ConfigureForm({
             placeholder="example.com, company.org"
           />
           <p className="mt-1 text-xs text-muted-foreground">
-            Comma-separated list of email domains allowed to sign in via SSO.
+            {t("allowedDomainsHint")}
           </p>
         </div>
 
@@ -290,10 +292,10 @@ function ConfigureForm({
           />
           <div>
             <span className="text-sm font-medium text-foreground">
-              Auto-provision new users
+              {t("autoProvision")}
             </span>
             <p className="text-xs text-muted-foreground">
-              Automatically create accounts for users who sign in via SSO for the first time.
+              {t("autoProvisionHint")}
             </p>
           </div>
         </label>
@@ -307,7 +309,7 @@ function ConfigureForm({
           />
           <div>
             <span className="text-sm font-medium text-foreground">
-              Enforce SSO for all members
+              {t("enforce")}
             </span>
             <p className="text-xs text-muted-foreground">
               When enabled, members must use SSO to sign in. Password and OAuth sign-in will be disabled.
@@ -332,7 +334,7 @@ function ConfigureForm({
           className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center gap-2"
         >
           {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-          {initialData ? "Update Configuration" : "Save Configuration"}
+          {initialData ? t("updateConfig") : t("saveConfig")}
         </button>
       </div>
     </form>
@@ -341,6 +343,7 @@ function ConfigureForm({
 
 export default function SSOSettingsPage() {
   const t = useTranslations("settingsSso");
+  const tc = useTranslations("common");
   const { currentWorkspace } = useWorkspace();
   const { isEnterprise } = useSubscription();
   const workspaceId = currentWorkspace?.id;
@@ -360,7 +363,7 @@ export default function SSOSettingsPage() {
       const data = await ssoApi.getConfiguration(workspaceId);
       setConfig(data);
     } catch {
-      toast.error("Failed to load SSO configuration");
+      toast.error(t("loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -407,7 +410,7 @@ export default function SSOSettingsPage() {
           : await ssoApi.activateConfiguration(workspaceId);
       setConfig(updated);
     } catch {
-      toast.error("Failed to toggle SSO configuration");
+      toast.error(t("toggleFailed"));
     } finally {
       setToggling(false);
     }
@@ -420,9 +423,9 @@ export default function SSOSettingsPage() {
       await ssoApi.deleteConfiguration(workspaceId);
       setConfig(null);
       setShowForm(false);
-      toast.success("SSO configuration deleted");
+      toast.success(t("deleted"));
     } catch {
-      toast.error("Failed to delete SSO configuration");
+      toast.error(t("deleteFailed"));
     } finally {
       setDeleting(false);
     }
@@ -467,15 +470,15 @@ export default function SSOSettingsPage() {
           <Info className="h-5 w-5 text-blue-400 shrink-0 mt-0.5" />
           <div className="space-y-3 flex-1">
             <h3 className="text-sm font-semibold text-foreground">
-              Service Provider Details
+              {t("spHeading")}
             </h3>
             <p className="text-xs text-muted-foreground">
-              Use these values when configuring your identity provider.
+              {t("spHint")}
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <span className="text-xs text-muted-foreground block mb-1">
-                  ACS URL (Reply URL)
+                  {t("acsUrl")}
                 </span>
                 <div className="flex items-center gap-1 bg-accent rounded px-2 py-1.5">
                   <code className="text-xs text-foreground flex-1 truncate">
@@ -486,7 +489,7 @@ export default function SSOSettingsPage() {
               </div>
               <div>
                 <span className="text-xs text-muted-foreground block mb-1">
-                  Metadata URL
+                  {t("metadataUrl")}
                 </span>
                 <div className="flex items-center gap-1 bg-accent rounded px-2 py-1.5">
                   <code className="text-xs text-foreground flex-1 truncate">
@@ -540,41 +543,41 @@ export default function SSOSettingsPage() {
                   ) : (
                     <Power className="h-3.5 w-3.5" />
                   )}
-                  {config.status === "active" ? "Deactivate" : "Activate"}
+                  {config.status === "active" ? t("deactivate") : t("activate")}
                 </button>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <span className="text-muted-foreground">Protocol</span>
+                <span className="text-muted-foreground">{t("protocol")}</span>
                 <p className="text-foreground font-medium">
-                  {config.provider === "saml" ? "SAML 2.0" : "OpenID Connect"}
+                  {config.provider === "saml" ? t("saml") : t("oidc")}
                 </p>
               </div>
               <div>
-                <span className="text-muted-foreground">Enforce SSO</span>
+                <span className="text-muted-foreground">{t("enforceSso")}</span>
                 <p className="text-foreground font-medium">
                   {config.enforce_sso ? "Yes" : "No"}
                 </p>
               </div>
               <div>
-                <span className="text-muted-foreground">Allowed Domains</span>
+                <span className="text-muted-foreground">{t("allowedDomainsShort")}</span>
                 <p className="text-foreground font-medium">
                   {config.allowed_domains.length > 0
                     ? config.allowed_domains.join(", ")
-                    : "All domains"}
+                    : t("allDomains")}
                 </p>
               </div>
               <div>
-                <span className="text-muted-foreground">Auto-provision</span>
+                <span className="text-muted-foreground">{t("autoProvisionShort")}</span>
                 <p className="text-foreground font-medium">
-                  {config.auto_provision_users ? "Enabled" : "Disabled"}
+                  {config.auto_provision_users ? tc("enabled") : tc("disabled")}
                 </p>
               </div>
               {config.provider === "saml" && config.sso_url && (
                 <div className="col-span-2">
-                  <span className="text-muted-foreground">SSO Login URL</span>
+                  <span className="text-muted-foreground">{t("ssoLoginUrl")}</span>
                   <p className="text-foreground font-mono text-xs truncate">
                     {config.sso_url}
                   </p>
@@ -582,7 +585,7 @@ export default function SSOSettingsPage() {
               )}
               {config.provider === "oidc" && config.issuer_url && (
                 <div className="col-span-2">
-                  <span className="text-muted-foreground">Issuer URL</span>
+                  <span className="text-muted-foreground">{t("issuerUrl")}</span>
                   <p className="text-foreground font-mono text-xs truncate">
                     {config.issuer_url}
                   </p>
@@ -595,7 +598,7 @@ export default function SSOSettingsPage() {
                 onClick={() => setShowForm(true)}
                 className="px-3 py-1.5 text-sm font-medium text-foreground bg-accent hover:bg-accent/80 rounded-lg transition-colors"
               >
-                Edit Configuration
+                {t("editConfig")}
               </button>
               <button
                 onClick={handleDelete}
@@ -628,7 +631,7 @@ export default function SSOSettingsPage() {
                   <AlertCircle className="h-4 w-4 text-red-400" />
                 )}
                 <span className="text-sm font-medium text-foreground">
-                  {testResult.success ? "Connection Successful" : "Connection Failed"}
+                  {testResult.success ? t("connectionSuccessful") : t("connectionFailed")}
                 </span>
               </div>
               {testResult.error && (
@@ -637,7 +640,7 @@ export default function SSOSettingsPage() {
               {testResult.user_attributes && (
                 <div className="mt-2">
                   <span className="text-xs text-muted-foreground block mb-1">
-                    Returned attributes:
+                    {t("returnedAttributes")}
                   </span>
                   <pre className="text-xs text-foreground bg-accent rounded p-2 overflow-x-auto">
                     {JSON.stringify(testResult.user_attributes, null, 2)}
@@ -651,14 +654,14 @@ export default function SSOSettingsPage() {
         <div className="bg-background/50 border border-border rounded-xl p-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-semibold text-foreground">
-              {config ? "Edit SSO Configuration" : "Configure SSO"}
+              {config ? t("editTitle") : t("configureTitle")}
             </h2>
             {config && (
               <button
                 onClick={() => setShowForm(false)}
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
-                Cancel
+                {tc("cancel")}
               </button>
             )}
           </div>
@@ -669,7 +672,7 @@ export default function SSOSettingsPage() {
       {/* Help Section */}
       <div className="mt-8 border-t border-border pt-6">
         <h3 className="text-sm font-semibold text-foreground mb-3">
-          Supported Identity Providers
+          {t("supportedIdps")}
         </h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[

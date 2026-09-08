@@ -1,6 +1,57 @@
 {
   "settingsBilling": {
     "title": "बिलिंग और उपयोग",
-    "description": "आपकी सब्सक्रिप्शन, उपयोग और इनवॉइस।"
+    "description": "आपकी सब्सक्रिप्शन, उपयोग और इनवॉइस।",
+    "activated": "सदस्यता सफलतापूर्वक सक्रिय! अपग्रेड के लिए धन्यवाद।",
+    "payAfterUse": "उपयोग के बाद भुगतान",
+    "status": "स्थिति",
+    "currentPeriod": "वर्तमान अवधि",
+    "nextBilling": "अगली बिलिंग",
+    "workspaceOnPlan": "आपका वर्कस्पेस इस प्लान पर है:",
+    "seePlans": "प्लान देखें",
+    "upgradeBlurb": "अधिक AI और क्षमता के लिए अपग्रेड करें",
+    "billingModesBlurb": "प्रति-सीट, फ़्लैट+उपयोग, या पोस्टपेड बिलिंग चुनें",
+    "comparePlans": "प्लान की तुलना करें",
+    "seats": {
+      "heading": "सीट प्रबंधन",
+      "total": "कुल सीटें",
+      "base": "आधार सीटें",
+      "additional": "अतिरिक्त सीटें",
+      "perSeat": "प्रति सीट मूल्य"
+    },
+    "breakdown": {
+      "heading": "बिलिंग विवरण",
+      "baseFee": "आधार शुल्क",
+      "baseFeeHint": "निश्चित मासिक शुल्क",
+      "aiUsage": "AI उपयोग",
+      "metered": "मीटर्ड",
+      "postpaid": "पोस्टपेड बिलिंग",
+      "accrued": "इस अवधि में जमा",
+      "estimatedTotal": "अनुमानित कुल",
+      "lastSettled": "अंतिम निपटान",
+      "currentUsage": "वर्तमान उपयोग"
+    },
+    "features": {
+      "heading": "प्लान सुविधाएँ",
+      "realtimeSync": "रीयल-टाइम सिंक",
+      "advancedAnalytics": "उन्नत विश्लेषण",
+      "team": "टीम सुविधाएँ",
+      "exports": "डेटा निर्यात",
+      "webhooks": "Webhooks"
+    },
+    "payment": {
+      "heading": "भुगतान विधि",
+      "viaStripe": "Stripe द्वारा प्रबंधित",
+      "manageHint": "भुगतान विधि अपडेट करने के लिए \"Manage Billing\" पर क्लिक करें",
+      "none": "कोई भुगतान विधि दर्ज नहीं"
+    },
+    "changePlan": "प्लान बदलें",
+    "upgradePlan": "प्लान अपग्रेड करें",
+    "contactSupport": "हमारे बिलिंग सपोर्ट से संपर्क करें",
+    "portalFailed": "बिलिंग पोर्टल नहीं खुल सका। कृपया फिर प्रयास करें।",
+    "free": "मुफ़्त",
+    "personal": "व्यक्तिगत",
+    "notYet": "अभी नहीं",
+    "unlimited": "असीमित"
   }
 }
