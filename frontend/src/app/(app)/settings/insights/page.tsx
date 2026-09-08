@@ -89,7 +89,6 @@ const TIMEZONES = [
 
 export default function InsightsSettingsPage() {
   const t = useTranslations("settingsInsights");
-  const tc = useTranslations("common");
   const { isAuthenticated } = useAuth();
   const { currentWorkspaceId, currentWorkspace } = useWorkspace();
   const { teams } = useTeams(currentWorkspaceId);

@@ -2,6 +2,24 @@
   "settingsEmailDelivery": {
     "title": "Email delivery",
     "description": "Delivery status and logs for outbound email.",
-    "adminOnly": "Only workspace owners and admins can see email delivery monitoring."
+    "adminOnly": "Only workspace owners and admins can see email delivery monitoring.",
+    "deliveryRate": "Delivery Rate",
+    "enterpriseFeature": "Enterprise Feature",
+    "upgrade": "Upgrade to Enterprise",
+    "enterpriseIntro": "What you'll get with Enterprise:",
+    "benefit1": "Real-time email delivery monitoring and status tracking",
+    "benefit2": "Delivery rate analytics and bounce tracking",
+    "benefit3": "Email log history for all workspace notifications",
+    "benefit4": "Filter and search by status, recipient, and type",
+    "refresh": "Refresh",
+    "statsFailed": "Failed to load email statistics",
+    "delivered": "Delivered",
+    "sent": "Sent",
+    "pending": "Pending",
+    "bounced": "Bounced",
+    "failed": "Failed",
+    "logsHeading": "Email Logs",
+    "logsFailed": "Failed to load email logs",
+    "clearFilterHint": "Try clearing the status filter"
   }
 }

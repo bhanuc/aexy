@@ -3,6 +3,18 @@
     "title": "वेबहुक",
     "description": "वर्कस्पेस में इवेंट होने पर रीयल-टाइम सूचनाएँ।",
     "add": "वेबहुक जोड़ें",
-    "refresh": "रिफ़्रेश"
+    "refresh": "रिफ़्रेश",
+    "testWebhook": "Webhook जाँचें",
+    "rotateSecret": "Secret बदलें",
+    "name": "नाम",
+    "events": "इवेंट",
+    "noWebhooks": "कोई webhook कॉन्फ़िगर नहीं",
+    "noWebhooksHint": "इवेंट सूचनाएँ पाने के लिए एक webhook जोड़ें",
+    "signatureHeading": "Webhook हस्ताक्षर सत्यापन",
+    "copySecret": "Secret कॉपी करें",
+    "namePlaceholder": "My Webhook",
+    "dismissTest": "टेस्ट परिणाम हटाएँ",
+    "hide": "छिपाएँ",
+    "deselectAll": "सभी अचयनित करें"
   }
 }

@@ -1,0 +1,12 @@
+{
+  "gmailExclusions": {
+    "neverSync": "Never sync",
+    "domain": "Domain",
+    "address": "Address",
+    "nothingExcluded": "Nothing excluded yet.",
+    "alsoStopSyncing": "Hidden. Also stop syncing",
+    "noThanks": "No thanks",
+    "typeLabel": "Exclusion type",
+    "valueLabel": "Address or domain to exclude"
+  }
+}
