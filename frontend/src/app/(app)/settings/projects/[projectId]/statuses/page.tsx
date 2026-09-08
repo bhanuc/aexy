@@ -293,8 +293,8 @@ export default function ProjectStatusesPage() {
             </h2>
             <p className="text-muted-foreground text-sm">
               {readOnly
-                ? "This project uses the workspace defaults. Customize to give the project its own workflow."
-                : "Define this project's workflow columns. Drag to reorder."}
+                ? t("statusesSubtitleInherited")
+                : t("statusesSubtitleOwn")}
             </p>
           </div>
           {isAdmin && !readOnly && (

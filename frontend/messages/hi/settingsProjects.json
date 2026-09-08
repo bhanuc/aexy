@@ -81,6 +81,8 @@
     "usingWorkspaceDefaults": "वर्कस्पेस डिफ़ॉल्ट का उपयोग",
     "statusesEmptyTitle": "कोई स्थिति नहीं",
     "statusesEmptyDescription": "इस प्रोजेक्ट का वर्कफ़्लो तय करने के लिए पहली स्थिति जोड़ें।",
-    "categoriesHeading": "श्रेणियाँ"
+    "categoriesHeading": "श्रेणियाँ",
+    "statusesSubtitleOwn": "इस प्रोजेक्ट के वर्कफ़्लो कॉलम तय करें। क्रम बदलने के लिए खींचें।",
+    "statusesSubtitleInherited": "यह प्रोजेक्ट वर्कस्पेस डिफ़ॉल्ट का उपयोग करता है। अपना वर्कफ़्लो देने के लिए कस्टमाइज़ करें।"
   }
 }

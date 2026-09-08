@@ -30,7 +30,19 @@
       "medium": "Medium",
       "low": "Low"
     },
-    "settings": "Settings"
+    "settings": "Settings",
+    "saving": "Saving…",
+    "enabling": "Enabling…",
+    "disabling": "Disabling…",
+    "connecting": "Connecting…",
+    "enable": "Enable",
+    "disable": "Disable",
+    "public": "Public",
+    "private": "Private",
+    "verified": "Verified",
+    "inactive": "Inactive",
+    "pending": "Pending",
+    "testConnection": "Test connection"
   },
   "saved": "Saved",
   "deleted": "Deleted"

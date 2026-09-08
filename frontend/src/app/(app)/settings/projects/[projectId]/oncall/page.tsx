@@ -47,6 +47,7 @@ const TIMEZONES = [
 
 export default function OnCallSettingsPage() {
   const t = useTranslations("settingsOncall");
+  const tc = useTranslations("common");
   const params = useParams();
   const router = useRouter();
   const teamId = params.projectId as string;
@@ -238,7 +239,7 @@ export default function OnCallSettingsPage() {
                 disabled={isEnabling}
                 className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
               >
-                {isEnabling ? "Enabling..." : "Enable On-Call"}
+                {isEnabling ? tc("enabling") : t("enableOnCall")}
               </button>
             </div>
           </div>
@@ -292,7 +293,7 @@ export default function OnCallSettingsPage() {
                       className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 transition"
                     >
                       <LinkIcon className="h-4 w-4" />
-                      {isGettingUrl ? "Connecting..." : "Connect Google Calendar"}
+                      {isGettingUrl ? tc("connecting") : t("connectGoogleCalendar")}
                     </button>
                   )}
                 </div>
@@ -364,7 +365,7 @@ export default function OnCallSettingsPage() {
                           disabled={!selectedCalendarId || isSelecting}
                           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
                         >
-                          {isSelecting ? "Saving..." : "Save"}
+                          {isSelecting ? tc("saving") : tc("save")}
                         </button>
                       </div>
                     </div>
@@ -376,7 +377,7 @@ export default function OnCallSettingsPage() {
                     disabled={isDisabling}
                     className="text-sm text-red-400 hover:text-red-300 transition"
                   >
-                    {isDisabling ? "Disabling..." : "Disable On-Call"}
+                    {isDisabling ? tc("disabling") : t("disableOnCall")}
                   </button>
                 </div>
               </div>

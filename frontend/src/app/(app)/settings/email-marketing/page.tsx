@@ -129,6 +129,7 @@ function DNSRecordRow({
   description?: string;
 }) {
   const t = useTranslations("settingsEmailMarketing");
+  const tc = useTranslations("common");
   const [copied, setCopied] = useState<"name" | "value" | null>(null);
 
   const copyToClipboard = async (text: string, field: "name" | "value") => {
@@ -163,7 +164,7 @@ function DNSRecordRow({
           )}
         </div>
         <span className={`text-xs ${record.verified ? "text-emerald-400" : "text-amber-400"}`}>
-          {record.verified ? "Verified" : "Pending"}
+          {record.verified ? tc("verified") : tc("pending")}
         </span>
       </div>
       {description && <p className="text-xs text-muted-foreground">{description}</p>}
@@ -473,6 +474,7 @@ function ProviderCard({
   onDelete: () => void;
 }) {
   const t = useTranslations("settingsEmailMarketing");
+  const tc = useTranslations("common");
   const [isTesting, setIsTesting] = useState(false);
 
   const handleTest = async () => {
@@ -509,7 +511,7 @@ function ProviderCard({
               ? "bg-emerald-500/20 text-emerald-400"
               : "bg-muted text-muted-foreground"
           }`}>
-            {provider.is_active ? "Active" : "Inactive"}
+            {provider.is_active ? tc("status.active") : tc("inactive")}
           </span>
           {provider.is_default && (
             <span className="px-2 py-1 bg-sky-500/20 text-sky-400 rounded-full text-xs font-medium">
@@ -535,7 +537,7 @@ function ProviderCard({
           onClick={handleTest}
           disabled={isTesting || !hasCredentials}
           className="flex items-center gap-2 px-3 py-1.5 bg-muted text-foreground hover:text-foreground rounded-lg transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-          title={!hasCredentials ? "Configure credentials first" : "Test connection"}
+          title={!hasCredentials ? t("provider.configureFirst") : tc("testConnection")}
         >
           {isTesting ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -552,7 +554,7 @@ function ProviderCard({
               : "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
           }`}
         >
-          {provider.is_active ? "Disable" : "Enable"}
+          {provider.is_active ? tc("disable") : tc("enable")}
         </button>
         <button
           onClick={onDelete}
@@ -597,7 +599,7 @@ function CategoryCard({
               ? "bg-emerald-500/20 text-emerald-400"
               : "bg-muted text-muted-foreground"
           }`}>
-            {category.is_active ? "Active" : "Inactive"}
+            {category.is_active ? tc("status.active") : tc("inactive")}
           </span>
           {category.default_subscribed && (
             <span className="px-2 py-1 bg-sky-500/20 text-sky-400 rounded-full text-xs font-medium">
@@ -632,7 +634,7 @@ function CategoryCard({
               : "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
           }`}
         >
-          {category.is_active ? "Disable" : "Enable"}
+          {category.is_active ? tc("disable") : tc("enable")}
         </button>
         {!category.required && (
           <button

@@ -81,6 +81,8 @@
     "usingWorkspaceDefaults": "Using workspace defaults",
     "statusesEmptyTitle": "No Statuses",
     "statusesEmptyDescription": "Add the project's first status to define its workflow.",
-    "categoriesHeading": "Categories"
+    "categoriesHeading": "Categories",
+    "statusesSubtitleOwn": "Define this project's workflow columns. Drag to reorder.",
+    "statusesSubtitleInherited": "This project uses the workspace defaults. Customize to give the project its own workflow."
   }
 }

@@ -5,6 +5,8 @@
     "empty": {
       "title": "No repositories adopted yet",
       "description": "Adopt repos into the workspace catalogue first, then come back to pick which ones this project tracks."
-    }
+    },
+    "inProject": "In project",
+    "addToProject": "Add to project"
   }
 }

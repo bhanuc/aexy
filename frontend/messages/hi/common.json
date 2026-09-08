@@ -30,7 +30,19 @@
       "medium": "मध्यम",
       "low": "निम्न"
     },
-    "settings": "सेटिंग्स"
+    "settings": "सेटिंग्स",
+    "saving": "सहेजा जा रहा है…",
+    "enabling": "सक्षम किया जा रहा है…",
+    "disabling": "अक्षम किया जा रहा है…",
+    "connecting": "कनेक्ट हो रहा है…",
+    "enable": "सक्षम करें",
+    "disable": "अक्षम करें",
+    "public": "सार्वजनिक",
+    "private": "निजी",
+    "verified": "सत्यापित",
+    "inactive": "निष्क्रिय",
+    "pending": "लंबित",
+    "testConnection": "कनेक्शन जाँचें"
   },
   "saved": "सहेजा गया",
   "deleted": "हटाया गया"
