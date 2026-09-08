@@ -1,6 +1,57 @@
 {
   "settingsBilling": {
     "title": "Billing & usage",
-    "description": "Your subscription, usage and invoices."
+    "description": "Your subscription, usage and invoices.",
+    "activated": "Subscription activated successfully! Thank you for upgrading.",
+    "payAfterUse": "Pay after use",
+    "status": "Status",
+    "currentPeriod": "Current Period",
+    "nextBilling": "Next Billing",
+    "workspaceOnPlan": "Your workspace is on the",
+    "seePlans": "See Plans",
+    "upgradeBlurb": "Upgrade for more AI and capacity",
+    "billingModesBlurb": "Choose per-seat, flat+usage, or postpaid billing",
+    "comparePlans": "Compare plans",
+    "seats": {
+      "heading": "Seat Management",
+      "total": "Total Seats",
+      "base": "Base Seats",
+      "additional": "Additional Seats",
+      "perSeat": "Per Seat Price"
+    },
+    "breakdown": {
+      "heading": "Billing Breakdown",
+      "baseFee": "Base Fee",
+      "baseFeeHint": "Fixed monthly charge",
+      "aiUsage": "AI Usage",
+      "metered": "Metered",
+      "postpaid": "Postpaid Billing",
+      "accrued": "Accrued This Period",
+      "estimatedTotal": "Estimated Total",
+      "lastSettled": "Last Settled",
+      "currentUsage": "Current Usage"
+    },
+    "features": {
+      "heading": "Plan Features",
+      "realtimeSync": "Real-time sync",
+      "advancedAnalytics": "Advanced analytics",
+      "team": "Team features",
+      "exports": "Data exports",
+      "webhooks": "Webhooks"
+    },
+    "payment": {
+      "heading": "Payment Method",
+      "viaStripe": "Managed via Stripe",
+      "manageHint": "Click \"Manage Billing\" to update your payment method",
+      "none": "No payment method on file"
+    },
+    "changePlan": "Change Plan",
+    "upgradePlan": "Upgrade Plan",
+    "contactSupport": "Contact our billing support",
+    "portalFailed": "Failed to open billing portal. Please try again.",
+    "free": "Free",
+    "personal": "Personal",
+    "notYet": "Not yet",
+    "unlimited": "Unlimited"
   }
 }
