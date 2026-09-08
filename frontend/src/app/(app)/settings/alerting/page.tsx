@@ -34,6 +34,8 @@ import { useTranslations } from "next-intl";
 import { SettingsPage } from "@/components/settings/SettingsPrimitives";
 
 function CopyButton({ value }: { value: string }) {
+  const t = useTranslations("settingsAlerting");
+  const tc = useTranslations("common");
   const [copied, setCopied] = useState(false);
   return (
     <button
@@ -46,7 +48,7 @@ function CopyButton({ value }: { value: string }) {
       className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
     >
       {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-      {copied ? "Copied" : "Copy"}
+      {copied ? t("copied") : tc("copy")}
     </button>
   );
 }
@@ -80,15 +82,16 @@ const ACTION_COLORS: Record<string, string> = {
 };
 
 function SecretBanner({ integration }: { integration: AlertIntegrationWithSecret }) {
+  const t = useTranslations("settingsAlerting");
   return (
     <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 space-y-3">
       <p className="text-sm font-medium text-amber-300">
-        Store these now — the signing secret is shown only once.
+        {t("secretOnce")}
       </p>
       <div className="space-y-2">
         <div>
           <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">Webhook URL</span>
+            <span className="text-xs text-muted-foreground">{t("webhookUrl")}</span>
             <CopyButton value={integration.webhook_url} />
           </div>
           <code className="block text-xs break-all bg-background/60 rounded px-2 py-1 mt-1">
@@ -98,7 +101,7 @@ function SecretBanner({ integration }: { integration: AlertIntegrationWithSecret
         <div>
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">
-              Signing secret (send as header <code>X-Aexy-Signature</code>)
+              {t("signingSecretHeader")} <code>X-Aexy-Signature</code>)
             </span>
             <CopyButton value={integration.signing_secret} />
           </div>
@@ -111,7 +114,15 @@ function SecretBanner({ integration }: { integration: AlertIntegrationWithSecret
   );
 }
 
+// The step-by-step prose here is OpenObserve setup documentation, threaded
+// through <code> literals that have to stay verbatim ({service},
+// critical|high|medium|low, trace_id=…). Its discrete labels — the console
+// paths, the template name, the section names — are translated; the
+// sentences are not, because splitting them yields fragments like "Create a"
+// that no translator can place. It wants one rich-text message per step if
+// it is ever localized.
 function SetupGuide() {
+  const t = useTranslations("settingsAlerting");
   const [open, setOpen] = useState(false);
   return (
     <div className="rounded-lg border border-border bg-muted/30">
@@ -132,26 +143,26 @@ function SetupGuide() {
         <div className="space-y-3 border-t border-border px-4 py-3 text-sm text-muted-foreground">
           <ol className="list-decimal space-y-2 pl-5">
             <li>
-              <span className="text-foreground">Create an integration</span> below.
-              On save, Aexy shows a <strong>Webhook URL</strong> and a{" "}
+              <span className="text-foreground">{t("createIntegration")}</span> below.
+              On save, Aexy shows a <strong>{t("webhookUrl")}</strong> and a{" "}
               <strong>signing secret</strong> — copy both (the secret is shown only once).
             </li>
             <li>
               In OpenObserve, go to{" "}
-              <span className="text-foreground">Alerts → Destinations → Add</span> and set:
+              <span className="text-foreground">{t("destinationsPath")}</span> and set:
               <div className="mt-1.5 overflow-x-auto">
                 <table className="text-xs">
                   <tbody>
                     <tr>
                       <td className="pr-3 py-0.5 text-muted-foreground">URL</td>
-                      <td className="text-foreground">the Webhook URL from step 1</td>
+                      <td className="text-foreground">the {t("webhookUrl")} from step 1</td>
                     </tr>
                     <tr>
-                      <td className="pr-3 py-0.5 text-muted-foreground">Method</td>
+                      <td className="pr-3 py-0.5 text-muted-foreground">{t("method")}</td>
                       <td className="text-foreground"><code>POST</code></td>
                     </tr>
                     <tr>
-                      <td className="pr-3 py-0.5 text-muted-foreground">Header</td>
+                      <td className="pr-3 py-0.5 text-muted-foreground">{t("header")}</td>
                       <td className="text-foreground">
                         <code>X-Aexy-Signature: &lt;signing secret&gt;</code>
                       </td>
@@ -168,7 +179,7 @@ function SetupGuide() {
               can&apos;t parse) with this JSON body:
               <div className="mt-2 rounded-md border border-border bg-background/60">
                 <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
-                  <span className="text-xs text-muted-foreground">OpenObserve alert template</span>
+                  <span className="text-xs text-muted-foreground">{t("alertTemplate")}</span>
                   <CopyButton value={OPENOBSERVE_TEMPLATE} />
                 </div>
                 <pre className="overflow-x-auto px-3 py-2 text-xs text-foreground">
@@ -184,16 +195,16 @@ function SetupGuide() {
               <code>medium</code>). <code>rows</code> becomes the ticket&apos;s log context and
               is scanned for <code>trace_id=…</code> to build trace links. Send a paired alert
               with <code>&quot;status&quot;:&quot;resolved&quot;</code> on recovery to auto-resolve.
-              <span className="text-foreground">Attach the destination to every alert.</span>{" "}
+              <span className="text-foreground">{t("attachDestination")}</span>{" "}
               OpenObserve routes <em>per alert</em>, not globally — a destination that
               isn&apos;t selected on an alert receives nothing. For each alert you want
-              here, open <span className="text-foreground">Alerts → Alerts → (edit)</span>{" "}
+              here, open <span className="text-foreground">{t("alertsPath")}</span>{" "}
               and add this destination to the alert&apos;s{" "}
-              <span className="text-foreground">Destinations</span> list (it can coexist
+              <span className="text-foreground">{t("destinations")}</span> list (it can coexist
               with Slack and others). Newly created alerts need this step too.
             </li>
             <li>
-              Point the alert&apos;s <span className="text-foreground">Template</span> at a JSON
+              {t("pointAlerts")} <span className="text-foreground">{t("template")}</span> at a JSON
               body with <code>service</code>, <code>severity</code>{" "}
               (<code>critical|high|medium|low</code>), <code>environment</code>,{" "}
               <code>alert_url</code>, and <code>rows</code> (the matched log lines →
@@ -201,7 +212,7 @@ function SetupGuide() {
               on recovery to auto-resolve.
             </li>
             <li>
-              Use <span className="text-foreground">Send test</span> on the integration
+              Use <span className="text-foreground">{t("sendTest")}</span> on the integration
               to run the full pipeline, then check its event history to see{" "}
               <code>created / updated / throttled / reopened / resolved</code>.
             </li>
@@ -224,6 +235,7 @@ function RoutingRulesEditor({
   rules: AlertRoutingRule[];
   onChange: (rules: AlertRoutingRule[]) => void;
 }) {
+  const t = useTranslations("settingsAlerting");
   const update = (i: number, patch: Partial<AlertRoutingRule>) => {
     const next = rules.map((r, idx) => (idx === i ? { ...r, ...patch } : r));
     onChange(next);
@@ -234,21 +246,21 @@ function RoutingRulesEditor({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <label className="text-sm font-medium">Routing rules</label>
+        <label className="text-sm font-medium">{t("routingRules")}</label>
         <button
           type="button"
           onClick={() => onChange([...rules, { match: {} }])}
           className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
         >
-          <Plus className="h-3.5 w-3.5" /> Add rule
+          <Plus className="h-3.5 w-3.5" /> {t("addRule")}
         </button>
       </div>
       <p className="text-xs text-muted-foreground">
-        First matching rule wins. Leave a field blank to match anything.
+        {t("rulesHint")}
       </p>
       {rules.length === 0 && (
         <p className="text-xs text-muted-foreground italic">
-          No rules — all alerts use the default form and severity-based priority.
+          {t("noRules")}
         </p>
       )}
       {rules.map((rule, i) => (
@@ -291,7 +303,7 @@ function RoutingRulesEditor({
             <button
               type="button"
               onClick={() => onChange(rules.filter((_, idx) => idx !== i))}
-              aria-label="Remove rule"
+              aria-label={t("removeRule")}
               className="text-muted-foreground hover:text-red-400"
             >
               <X className="h-4 w-4" />
@@ -304,11 +316,12 @@ function RoutingRulesEditor({
 }
 
 function EventLog({ workspaceId, integrationId }: { workspaceId: string; integrationId: string }) {
+  const t = useTranslations("settingsAlerting");
   const { data, isLoading } = useAlertIntegrationEvents(workspaceId, integrationId);
   if (isLoading) return <Loader2 className="h-4 w-4 animate-spin" />;
   const events = data?.events ?? [];
   if (events.length === 0)
-    return <p className="text-xs text-muted-foreground italic">No alerts received yet.</p>;
+    return <p className="text-xs text-muted-foreground italic">{t("noAlerts")}</p>;
   return (
     <div className="space-y-1">
       {events.map((e) => (
@@ -336,6 +349,8 @@ function IntegrationCard({
   integration: AlertIntegration;
   workspaceId: string;
 }) {
+  const t = useTranslations("settingsAlerting");
+  const tc = useTranslations("common");
   const { update, rotateSecret, remove } = useAlertIntegrationMutations(workspaceId);
   const [expanded, setExpanded] = useState(false);
   const [rotated, setRotated] = useState<AlertIntegrationWithSecret | null>(null);
@@ -353,7 +368,7 @@ function IntegrationCard({
       });
       toast.success(`Test → ${result.action_taken ?? "processed"}${result.ticket_id ? " (ticket created)" : ""}`);
     } catch {
-      toast.error("Test alert failed");
+      toast.error(t("testFailed"));
     } finally {
       setTesting(false);
     }
@@ -380,7 +395,7 @@ function IntegrationCard({
         <div className="flex items-center gap-3">
           <button
             type="button"
-            title={integration.enabled ? "Disable" : "Enable"}
+            title={integration.enabled ? tc("disable") : tc("enable")}
             onClick={() => update.mutate({ id: integration.id, data: { enabled: !integration.enabled } })}
             className="text-muted-foreground hover:text-foreground"
           >
@@ -388,7 +403,7 @@ function IntegrationCard({
           </button>
           <button
             type="button"
-            title="Rotate signing secret"
+            title={t("rotateSecret")}
             onClick={() => rotateSecret.mutate(integration.id, { onSuccess: (d) => setRotated(d) })}
             className="text-muted-foreground hover:text-foreground"
           >
@@ -396,7 +411,7 @@ function IntegrationCard({
           </button>
           <button
             type="button"
-            title="Send test alert"
+            title={t("sendTestAlert")}
             onClick={sendTest}
             disabled={testing}
             className="text-muted-foreground hover:text-foreground"
@@ -405,7 +420,7 @@ function IntegrationCard({
           </button>
           <button
             type="button"
-            title="Delete"
+            title={tc("delete")}
             onClick={() => {
               if (confirm(`Delete integration "${integration.name}"?`)) remove.mutate(integration.id);
             }}
@@ -437,6 +452,8 @@ function IntegrationCard({
 }
 
 function CreateForm({ workspaceId, onDone }: { workspaceId: string; onDone: () => void }) {
+  const t = useTranslations("settingsAlerting");
+  const tc = useTranslations("common");
   const { create } = useAlertIntegrationMutations(workspaceId);
   const [name, setName] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
@@ -452,7 +469,7 @@ function CreateForm({ workspaceId, onDone }: { workspaceId: string; onDone: () =
           onClick={onDone}
           className="text-sm px-3 py-1.5 rounded bg-primary text-primary-foreground"
         >
-          Done
+          {t("done")}
         </button>
       </div>
     );
@@ -471,16 +488,16 @@ function CreateForm({ workspaceId, onDone }: { workspaceId: string; onDone: () =
       }}
     >
       <div>
-        <label className="text-sm font-medium">Name</label>
+        <label className="text-sm font-medium">{t("name")}</label>
         <input
           className="w-full text-sm bg-background border border-border rounded px-2 py-1.5 mt-1"
-          placeholder="OpenObserve prod"
+          placeholder={t("namePlaceholder")}
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
       </div>
       <div>
-        <label className="text-sm font-medium">Base URL (for trace/log deep links)</label>
+        <label className="text-sm font-medium">{t("baseUrl")}</label>
         <input
           className="w-full text-sm bg-background border border-border rounded px-2 py-1.5 mt-1"
           placeholder="https://openobserve.your-company.com"
@@ -499,7 +516,7 @@ function CreateForm({ workspaceId, onDone }: { workspaceId: string; onDone: () =
           Create integration
         </button>
         <button type="button" onClick={onDone} className="text-sm px-3 py-1.5 rounded border border-border">
-          Cancel
+          {tc("cancel")}
         </button>
       </div>
     </form>

@@ -46,7 +46,8 @@
     "enabled": "Enabled",
     "disabled": "Disabled",
     "manage": "Manage",
-    "optional": "(optional)"
+    "optional": "(optional)",
+    "copy": "Copy"
   },
   "saved": "Saved",
   "deleted": "Deleted"
