@@ -24,7 +24,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aexy.core.config import Settings
-from aexy.models.dashboard import DashboardPreferences
 from aexy.models.developer import Developer
 from aexy.models.workspace import Workspace, WorkspaceMember
 
@@ -71,8 +70,8 @@ async def ensure_demo_account(
     Idempotent, and safe to call on every sign-in: everything is looked up
     before it is written. The owner `WorkspaceMember` is what grants access —
     `app_access_service` lets owners reach every module without any access
-    profile being configured — and `_ensure_full_sidebar` is what makes the
-    navigation agree with that.
+    profile being configured — and the sidebar follows access directly, so the
+    navigation agrees with that on its own.
     """
     developer = (
         await db.execute(select(Developer).where(Developer.id == DEMO_DEVELOPER_ID))
@@ -151,48 +150,11 @@ async def ensure_demo_account(
         )
         await db.flush()
 
-    await _ensure_full_sidebar(db, developer.id)
     await _ensure_ai_disabled(db, workspace.id)
 
     if commit:
         await db.commit()
     return developer, workspace
-
-
-async def _ensure_full_sidebar(db: AsyncSession, developer_id: str) -> None:
-    """Put the demo account on the sidebar view that shows every module.
-
-    `useSidebarPersona` resolves the view from an explicit `sidebar_persona`,
-    then the person's primary department, then `"developer"`. The demo account
-    has no department, so it lands on the developer view — a sidebar with no
-    CRM, no GTM, no Service Desk. The demo would then open on a fifth of the
-    product while the CRM the homepage leads with looked like it wasn't there
-    (the page itself was reachable; only the navigation hid it).
-
-    "admin" is the view that turns curation off, and the frontend only honours
-    it for someone the access resolver calls an admin — which an owner is.
-    """
-    prefs = (
-        await db.execute(
-            select(DashboardPreferences).where(
-                DashboardPreferences.developer_id == developer_id
-            )
-        )
-    ).scalar_one_or_none()
-    if prefs is None:
-        db.add(
-            DashboardPreferences(
-                id=str(uuid4()),
-                developer_id=developer_id,
-                preset_type="admin",
-                sidebar_persona="admin",
-            )
-        )
-        await db.flush()
-    elif prefs.sidebar_persona is None:
-        # Never overwrite a view the operator picked while poking around.
-        prefs.sidebar_persona = "admin"
-        await db.flush()
 
 
 async def _ensure_ai_disabled(db: AsyncSession, workspace_id: str) -> None:

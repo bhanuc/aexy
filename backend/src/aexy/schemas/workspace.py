@@ -266,7 +266,6 @@ class OnboardingSeededDepartment(BaseModel):
     name: str
     function_key: str | None = None
     access_profile_slug: str | None = None
-    default_persona: str | None = None
 
 
 class OnboardingSeededTeam(BaseModel):

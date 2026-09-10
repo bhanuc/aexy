@@ -431,7 +431,6 @@ async def get_member_effective_access(
         departments=[
             AccessDepartmentInfo(**department) for department in access["departments"]
         ],
-        suggested_persona=access["suggested_persona"],
     )
 
 
@@ -740,7 +739,7 @@ async def preview_access(
 
     service = AppAccessService(db)
     try:
-        app_config, baseline, baseline_detail, persona = await service.preview_access(
+        app_config, baseline, baseline_detail = await service.preview_access(
             workspace_id=workspace_id,
             department_ids=data.department_ids,
             access_template_id=data.access_template_id,
@@ -790,7 +789,6 @@ async def preview_access(
     return AccessPreviewResponse(
         baseline=baseline,
         baseline_detail=baseline_detail,
-        suggested_persona=persona,
         apps=apps,
         enabled_app_names=[app.name for app in apps],
     )

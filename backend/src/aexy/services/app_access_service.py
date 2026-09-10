@@ -250,9 +250,6 @@ class AppAccessStatus(TypedDict):
     # leaving an admin to guess.
     baseline: str
     departments: list[AccessDepartment]
-    # Default sidebar view implied by the person's primary department, or None
-    # when it implies nothing. A personal choice still wins over this.
-    suggested_persona: str | None
 
 
 def member_access_pinned_to_template(
@@ -511,7 +508,6 @@ class AppAccessService:
                 }
                 for d in departments
             ],
-            "suggested_persona": self._suggested_persona(departments),
         }
 
         if use_cache:
@@ -598,7 +594,7 @@ class AppAccessService:
         """Departments this person belongs to, primary first.
 
         ``_is_primary`` is stashed on each returned Department so callers can
-        pick the persona-defining one without a second query. It is a transient
+        pick the primary one without a second query. It is a transient
         attribute, not a column.
         """
         stmt = (
@@ -619,22 +615,6 @@ class AppAccessService:
             department._is_primary = bool(is_primary)
             departments.append(department)
         return departments
-
-    @staticmethod
-    def _suggested_persona(departments: list[Department]) -> str | None:
-        """The sidebar view implied by the person's primary department.
-
-        Only the primary department gets a say: someone in Sales and Support
-        needs one navigation, and averaging two personas produces neither.
-        """
-        for department in departments:
-            if getattr(department, "_is_primary", False) and department.default_persona:
-                return department.default_persona
-        for department in departments:
-            if department.default_persona:
-                return department.default_persona
-        return None
-
     async def check_app_access(
         self,
         workspace_id: str,
@@ -885,14 +865,14 @@ class AppAccessService:
         department_ids: list[str],
         access_template_id: str | None = None,
         role: str = "member",
-    ) -> tuple[dict, str, str | None, str | None]:
+    ) -> tuple[dict, str, str | None]:
         """Resolve what a hypothetical member would get, for the invite screen.
 
         Deliberately shares the same union/fallback code as real resolution: a
         preview that agrees with the invite screen but disagrees with what the
         person actually receives is worse than no preview.
 
-        Returns ``(app_config, baseline, baseline_detail, suggested_persona)``.
+        Returns ``(app_config, baseline, baseline_detail)``.
         """
         if access_template_id:
             template = await self._get_template(access_template_id)
@@ -904,7 +884,6 @@ class AppAccessService:
                 dict(template.app_config or {}),
                 SOURCE_MEMBER_TEMPLATE,
                 template.name,
-                None,
             )
 
         departments: list[Department] = []
@@ -924,7 +903,6 @@ class AppAccessService:
                 department._is_primary = index == 0
 
         profiled = [d for d in departments if d.app_config]
-        persona = self._suggested_persona(departments)
 
         if profiled:
             detail = ", ".join(d.name for d in profiled)
@@ -932,14 +910,12 @@ class AppAccessService:
                 union_app_configs([d.app_config for d in profiled]),
                 SOURCE_DEPARTMENT,
                 detail,
-                persona,
             )
 
         return (
             dict(get_default_app_access_for_role(role or "member")),
             SOURCE_ROLE_FALLBACK,
             ROLE_TEMPLATES.get(role, {}).get("name", role),
-            persona,
         )
 
     async def _resolve_baseline(
@@ -1471,7 +1447,6 @@ class AppAccessService:
             "is_admin": False,
             "baseline": SOURCE_ROLE_FALLBACK,
             "departments": [],
-            "suggested_persona": None,
         }
 
     # =========================================================================

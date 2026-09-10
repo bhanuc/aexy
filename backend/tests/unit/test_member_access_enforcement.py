@@ -48,7 +48,6 @@ def _patch_access(monkeypatch, *, apps, workspace_settings=None, is_admin=False)
             "is_admin": is_admin,
             "baseline": "department",
             "departments": [],
-            "suggested_persona": None,
         }
 
     async def fake_get_workspace(_self, _ws):

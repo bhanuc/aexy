@@ -159,7 +159,6 @@ export function useAppAccess(workspaceId: string | null, developerId: string | n
     baseline: effectiveAccess?.baseline ?? null,
     departments: effectiveAccess?.departments ?? [],
     /** Sidebar view implied by the primary department; a personal choice wins. */
-    suggestedPersona: effectiveAccess?.suggested_persona ?? null,
 
     // Loading state
     isLoading,

@@ -14526,12 +14526,6 @@ export interface DashboardPreferences {
   checklist_dismissed: boolean;
   sidebar_page_visits: Record<string, number>;
   sidebar_pinned_items: string[];
-  /**
-   * The sidebar view this person chose. Null means "derive it from my
-   * department" — deliberately separate from `preset_type`, which is the
-   * dashboard *widget* preset and defaults to "developer" for everybody.
-   */
-  sidebar_persona: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -14547,7 +14541,6 @@ export interface DashboardPreferencesUpdate {
   sidebar_page_visits?: Record<string, number>;
   sidebar_pinned_items?: string[];
   /** Empty string means "go back to deriving my view from my department". */
-  sidebar_persona?: string | null;
 }
 
 export interface DashboardPresetInfo {
@@ -19252,8 +19245,6 @@ export interface MemberEffectiveAccess {
   /** Where the baseline came from: "department", "role_fallback", "member_template". */
   baseline: AccessSource;
   departments: AccessDepartmentInfo[];
-  /** Sidebar view implied by the primary department; a personal choice wins. */
-  suggested_persona: string | null;
 }
 
 /** A single three-state override. `enabled: null` means inherit. */
@@ -19272,7 +19263,6 @@ export interface AccessPreviewApp {
 export interface AccessPreviewResponse {
   baseline: AccessSource;
   baseline_detail: string | null;
-  suggested_persona: string | null;
   apps: AccessPreviewApp[];
   enabled_app_names: string[];
 }
