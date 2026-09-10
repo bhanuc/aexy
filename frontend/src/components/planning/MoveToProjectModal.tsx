@@ -154,7 +154,10 @@ export function MoveToProjectModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+      data-testid="move-to-project-modal"
+    >
       <div className="bg-card rounded-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
         <h3 className="text-xl font-semibold text-foreground mb-1">
           {isBulk
@@ -182,6 +185,8 @@ export function MoveToProjectModal({
                 <select
                   value={targetProjectId}
                   onChange={(e) => setTargetProjectId(e.target.value)}
+                  aria-label="Destination project"
+                  data-testid="move-destination-project"
                   autoFocus
                   className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground focus:outline-none focus:border-primary-500"
                 >
@@ -206,6 +211,8 @@ export function MoveToProjectModal({
                   <select
                     value={targetStatusSlug}
                     onChange={(e) => setTargetStatusSlug(e.target.value)}
+                    aria-label="Status on destination board"
+                    data-testid="move-destination-status"
                     className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground focus:outline-none focus:border-primary-500"
                   >
                     {targetStatuses

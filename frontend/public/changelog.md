@@ -5,6 +5,64 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.37.2] - 2026-09-10
+
+The `/` menu can be driven with the arrow keys, and a table or inline database
+can be taken back out of a document.
+
+### Fixed: the `/` block menu looked like it ignored the arrow keys
+
+Typing `/` in a document opens a menu of blocks to insert. Pressing Down or Up
+appeared to do nothing at all, so the only way to choose a block was to reach
+for the mouse. In the same menu the document's own text showed through from
+behind, because the menu had no background.
+
+The arrow keys were working the entire time. The menu is drawn with plain DOM
+and inline styles, and every colour in it was written as a bare
+`var(--popover)`, `var(--accent)`, `var(--muted-foreground)`. Those theme
+tokens hold HSL *components* — `--accent: 75 14% 89%` — and are meant to be
+read as `hsl(var(--accent))`. Used bare, each declaration is invalid the moment
+the browser computes it, so it paints nothing: no menu background, and no
+highlight on the row the arrow keys had just moved to. The selection was moving
+under an invisible highlight.
+
+The menu now paints its background and its highlight, and the highlighted row
+also carries `aria-selected`, so a screen reader announces the same movement a
+sighted reader can now see. Home and End jump to the ends of the list, Tab
+accepts the highlighted block the way Enter does, and when a query matches
+nothing the arrow keys fall through to the document instead of being swallowed.
+
+### Fixed: an inserted table or inline database could not be removed
+
+Both were one-way doors. The editor toolbar offered Insert Table and nothing to
+undo it with; the floating selection menu that would normally carry row and
+column controls had been removed earlier to fix a crash, and ProseMirror will
+not delete a table from inside a cell with Backspace. An inline database was
+worse: its node offered Collapse and, for a linked module table, Open in
+module, but no way out — and its "Add an inline database" placeholder led only
+forward, since every Cancel and Back inside it returned to that same prompt. A
+table or database inserted by accident stayed in the document for good.
+
+The toolbar now grows a table group whenever the caret is inside a table — add
+row, add column, delete row, delete column, delete table — and disappears again
+when it isn't. An inline database has a remove control in all three of its
+states: the placeholder, the collapsed card and the full table.
+
+Removing an inline database is a document edit, not a data deletion: the embed
+goes and the underlying table and all its rows stay, which is what the linked
+CRM and project cases require. It is undoable with the editor's own undo.
+
+### Docs editor and cross-project task moves now have end-to-end coverage
+
+Twenty-seven new end-to-end tests run against a real backend. They cover the
+`/` menu's keyboard path and the visibility of its highlight; removing tables,
+rows, columns and inline databases; every block the `/` menu can insert
+surviving a save and a reload, including an inline database keeping its table
+link and collapsed state; and moving a task from one project to another through
+the board and task detail, with the destination picker, the "Moved from"
+breadcrumb, the refusal to move a task that has subtasks, and the cascade that
+carries the subtree across.
+
 ## [0.37.1] - 2026-09-07
 
 Adding a status category to a project no longer empties the project's category
