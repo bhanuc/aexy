@@ -20,13 +20,14 @@ The contract now: a parent must be a live, top-level task on the same board.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aexy.models.developer import Developer
 from aexy.models.project import Project, ProjectTeam
-from aexy.models.sprint import SprintTask
+from aexy.models.sprint import Sprint, SprintTask
 from aexy.models.team import Team
 from aexy.models.workspace import Workspace
 from aexy.services.sprint_task_service import (
@@ -226,6 +227,107 @@ async def test_parent_with_no_board_recorded_is_accepted(db_session: AsyncSessio
             team_id=str(other_project.id),
         )
     assert exc.value.code == "parent_task_other_workspace"
+
+
+async def _make_sprint(db: AsyncSession, ws: Workspace, project: Project, name: str) -> Sprint:
+    sp = Sprint(
+        id=str(uuid.uuid4()),
+        workspace_id=ws.id,
+        team_id=project.id,
+        name=name,
+        status="active",
+        start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        end_date=datetime(2026, 1, 14, tzinfo=timezone.utc),
+    )
+    db.add(sp)
+    await db.commit()
+    await db.refresh(sp)
+    return sp
+
+
+@pytest.mark.asyncio
+async def test_add_task_refuses_a_bad_parent_even_with_no_sprint(
+    db_session: AsyncSession,
+):
+    """`add_task` used to gate the whole guard on its sprint lookup, so the
+    check vanished exactly where the automation callers land: both
+    `workflow_actions._create_subtask` and its CRM twin pass
+    `sprint_id=parent.sprint_id`, and a project-backlog parent has no sprint.
+    An archived, missing or already-nested parent went straight onto the row.
+
+    Without a sprint there is no board to compare against, so the board and
+    workspace checks are skipped — but these three are not."""
+    ws = await _make_workspace(db_session, "sp-nosprint")
+    project = await _make_project(db_session, ws, "sp-nosprint-p")
+    service = SprintTaskService(db_session)
+
+    # Missing parent.
+    with pytest.raises(TaskValidationError) as exc:
+        await service.add_task(
+            sprint_id=None, title="orphan child", parent_task_id=str(uuid.uuid4())
+        )
+    assert exc.value.code == "parent_task_not_found"
+
+    # Archived parent.
+    archived = await _make_task(
+        db_session, ws, str(project.id), title="gone", is_archived=True
+    )
+    with pytest.raises(TaskValidationError) as exc:
+        await service.add_task(
+            sprint_id=None, title="child of archived", parent_task_id=str(archived.id)
+        )
+    assert exc.value.code == "parent_task_not_found"
+
+    # Already a subtask — one level only.
+    parent = await _make_task(db_session, ws, str(project.id))
+    child = await _make_task(
+        db_session, ws, str(project.id), title="child", parent_task_id=str(parent.id)
+    )
+    with pytest.raises(TaskValidationError) as exc:
+        await service.add_task(
+            sprint_id=None, title="grandchild", parent_task_id=str(child.id)
+        )
+    assert exc.value.code == "parent_task_is_subtask"
+
+
+@pytest.mark.asyncio
+async def test_add_task_accepts_a_good_parent_with_no_sprint(
+    db_session: AsyncSession,
+):
+    """The guard must not break the case the automations actually rely on."""
+    ws = await _make_workspace(db_session, "sp-nosprint-ok")
+    project = await _make_project(db_session, ws, "sp-nosprint-ok-p")
+    parent = await _make_task(db_session, ws, str(project.id))
+
+    subtask = await SprintTaskService(db_session).add_task(
+        sprint_id=None, title="legitimate subtask", parent_task_id=str(parent.id)
+    )
+    assert str(subtask.parent_task_id) == str(parent.id)
+
+
+@pytest.mark.asyncio
+async def test_add_task_refuses_a_parent_on_another_board(db_session: AsyncSession):
+    """With a sprint the board is known, so the comparison does apply."""
+    ws = await _make_workspace(db_session, "sp-sprint")
+    here = await _make_project(db_session, ws, "sp-sprint-here")
+    there = await _make_project(db_session, ws, "sp-sprint-there")
+    sprint = await _make_sprint(db_session, ws, here, "S1")
+    foreign_parent = await _make_task(db_session, ws, str(there.id))
+
+    with pytest.raises(TaskValidationError) as exc:
+        await SprintTaskService(db_session).add_task(
+            sprint_id=str(sprint.id),
+            title="child of a foreign parent",
+            parent_task_id=str(foreign_parent.id),
+        )
+    assert exc.value.code == "parent_task_other_project"
+
+    # A parent on this board is fine.
+    ok_parent = await _make_task(db_session, ws, str(here.id), title="local")
+    subtask = await SprintTaskService(db_session).add_task(
+        sprint_id=str(sprint.id), title="local child", parent_task_id=str(ok_parent.id)
+    )
+    assert str(subtask.parent_task_id) == str(ok_parent.id)
 
 
 @pytest.mark.asyncio

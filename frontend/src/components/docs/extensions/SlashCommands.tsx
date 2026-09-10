@@ -146,15 +146,29 @@ function createIcon(svgPath: string): SVGSVGElement {
   return svg;
 }
 
+/** Unique per menu instance, so ids stay stable and distinct across opens. */
+let menuInstanceCount = 0;
+
 class CommandListDOM {
   element: HTMLDivElement;
   private items: SlashCommand[] = [];
   private selectedIndex = 0;
   private onSelect: ((item: SlashCommand) => void) | null = null;
   private buttons: HTMLButtonElement[] = [];
+  /**
+   * The editor's contenteditable. Focus never leaves it while the menu is
+   * open, so `aria-selected` on the option alone is inert — a screen reader
+   * only announces the moving selection if the focused element points at the
+   * active option via `aria-activedescendant`.
+   */
+  private editorDom: HTMLElement | null;
+  private idPrefix: string;
 
-  constructor() {
+  constructor(editorDom: HTMLElement | null = null) {
+    this.editorDom = editorDom;
+    this.idPrefix = `slash-menu-${++menuInstanceCount}`;
     this.element = document.createElement("div");
+    this.element.id = `${this.idPrefix}-list`;
     this.element.setAttribute("role", "listbox");
     this.element.setAttribute("aria-label", "Insert block");
     this.element.dataset.slashMenu = "";
@@ -182,16 +196,26 @@ class CommandListDOM {
       return;
     }
 
-    // Group by category
+    // Group by category. The headers are the groups' own labels rather than
+    // loose divs between options, because a listbox's children have to be
+    // options or groups for the roles to mean anything.
     let lastCategory = "";
+    let group: HTMLDivElement = this.element;
     this.items.forEach((item, idx) => {
       if (item.category !== lastCategory) {
         lastCategory = item.category;
+        group = document.createElement("div");
+        group.setAttribute("role", "group");
+        group.setAttribute("aria-label", item.category);
+
         const header = document.createElement("div");
+        header.id = `${this.idPrefix}-group-${idx}`;
+        header.setAttribute("aria-hidden", "true");
         header.style.cssText =
           "padding:10px 12px 4px;font-size:10px;font-weight:600;color:hsl(var(--muted-foreground));text-transform:uppercase;letter-spacing:0.05em;";
         header.textContent = item.category;
-        this.element.appendChild(header);
+        group.appendChild(header);
+        this.element.appendChild(group);
       }
 
       const btn = document.createElement("button");
@@ -200,6 +224,7 @@ class CommandListDOM {
       btn.dataset.index = String(idx);
       btn.dataset.slashItem = item.id;
       btn.type = "button";
+      btn.id = `${this.idPrefix}-option-${item.id}`;
       btn.setAttribute("role", "option");
 
       const iconWrap = document.createElement("div");
@@ -232,7 +257,7 @@ class CommandListDOM {
         this.highlightSelected();
       });
 
-      this.element.appendChild(btn);
+      group.appendChild(btn);
       this.buttons.push(btn);
     });
 
@@ -252,8 +277,22 @@ class CommandListDOM {
       btn.dataset.selected = selected ? "true" : "false";
       btn.setAttribute("aria-selected", selected ? "true" : "false");
       btn.style.background = selected ? "hsl(var(--accent))" : "transparent";
-      btn.style.color = selected ? "hsl(var(--accent-foreground))" : "";
+      if (selected) {
+        this.editorDom?.setAttribute("aria-controls", this.element.id);
+        this.editorDom?.setAttribute("aria-activedescendant", btn.id);
+      }
     });
+    if (this.items.length === 0) this.detach();
+  }
+
+  /**
+   * Drop the pointer into a menu that is going away. Left behind, it would
+   * name an element no longer in the document, which some screen readers
+   * report as a broken reference.
+   */
+  detach() {
+    this.editorDom?.removeAttribute("aria-activedescendant");
+    this.editorDom?.removeAttribute("aria-controls");
   }
 
   private moveSelection(delta: number) {
@@ -326,10 +365,18 @@ const suggestionConfig = {
   render: () => {
     let commandList: CommandListDOM | null = null;
     let popup: TippyInstance | null = null;
+    // Escape hides the popup, but the suggestion plugin stays active until the
+    // `/query` range is left — so without this flag the hidden menu kept
+    // handling keys. Enter (and, once Tab was added, Tab) went on running the
+    // highlighted command and deleting the typed text, from a menu nobody
+    // could see: `/head` + Escape + Enter produced an <h1> instead of the
+    // newline the Escape had just asked for.
+    let dismissed = false;
 
     return {
       onStart: (props: SuggestionProps) => {
-        commandList = new CommandListDOM();
+        dismissed = false;
+        commandList = new CommandListDOM(props.editor.view.dom as HTMLElement);
         commandList.update(props.items as SlashCommand[], (item) => {
           props.command(item);
         });
@@ -350,6 +397,10 @@ const suggestionConfig = {
       },
 
       onUpdate: (props: SuggestionProps) => {
+        // A dismissed menu stays dismissed for the rest of this `/` run —
+        // re-rendering it here would repopulate the list behind a hidden
+        // popup and put the keyboard back under its control.
+        if (dismissed) return;
         commandList?.update(props.items as SlashCommand[], (item) => {
           props.command(item);
         });
@@ -359,7 +410,14 @@ const suggestionConfig = {
       },
 
       onKeyDown: (props: SuggestionKeyDownProps) => {
+        // Once dismissed the keyboard belongs to the editor again: returning
+        // false lets Enter split the paragraph, Tab indent, arrows move the
+        // caret — all with the typed `/query` left alone as plain text.
+        if (dismissed) return false;
+
         if (props.event.key === "Escape") {
+          dismissed = true;
+          commandList?.detach();
           popup?.hide();
           return true;
         }
@@ -367,7 +425,12 @@ const suggestionConfig = {
       },
 
       onExit: () => {
+        dismissed = false;
+        commandList?.detach();
         popup?.destroy();
+        // The instance is dead after destroy(); clearing the handle stops a
+        // late onUpdate calling setProps on it.
+        popup = null;
         commandList = null;
       },
     };

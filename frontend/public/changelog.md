@@ -5,6 +5,67 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.37.4] - 2026-09-10
+
+Escape now hands the keyboard back to the document, a subtask's parent is
+checked on every create path, and the `/` menu's selection is genuinely
+announced to a screen reader.
+
+Three defects found reviewing 0.37.2/0.37.3 after the fact. Two were introduced
+or widened by those releases.
+
+### Fixed: pressing Escape hid the `/` menu but kept the keyboard
+
+Dismissing the block menu with Escape hid it and then went on handling keys
+from behind. Typing `/head`, pressing Escape, and pressing Enter for a newline
+gave a Heading 1 instead — and deleted the `/head` that Escape had just been
+used to keep.
+
+Escape hid the Tippy popup but the underlying suggestion plugin stays active
+until the `/query` range is left, so the still-populated menu kept receiving
+keystrokes. Enter and the arrow keys had behaved this way all along; 0.37.2
+widened it to Tab, Home and End while adding those shortcuts. The menu also
+could not be brought back, since nothing ever re-showed the popup — so the keys
+were captured by something the person had no way to see or reach.
+
+Escape now marks the menu dismissed for the rest of that `/` run: every
+subsequent key falls through to the editor, so Enter splits the paragraph, Tab
+indents, and the typed text is left alone as plain text.
+
+### Fixed: a subtask's parent went unchecked when the task had no sprint
+
+0.37.3 added a guard requiring a subtask's parent to be a live, top-level task
+on the same board, and claimed all three create paths shared it. One did not:
+in `add_task` the guard was gated on the sprint lookup succeeding.
+
+That is exactly where it was needed. The two automation callers that create
+subtasks — the "create subtask" workflow action and its CRM equivalent — pass
+the parent's own sprint, and a task sitting in a project backlog has none. So
+for the commonest automated case the check was skipped entirely and a
+nonexistent, archived, or already-nested parent was written straight onto the
+row.
+
+The guard now runs on every path. Where the board genuinely is not known — a
+sprint-less `add_task` — the board and workspace comparisons are skipped while
+the existence, archived and one-level-deep checks still apply, rather than the
+whole check being dropped.
+
+### Fixed: the `/` menu's selection was not actually announced
+
+0.37.3 said a screen reader announces the same selection movement a sighted
+reader can see. It did not. `aria-selected` was set on each option, but focus
+never leaves the editor's own editable element while the menu is open, and
+nothing connected the two — so assistive technology had no way to know which
+option was active. The claim was wrong, and this is the fix rather than a
+retraction.
+
+The options now carry ids, and the editor points at the active one with
+`aria-activedescendant`, which is what makes the movement audible. The
+reference is dropped when the menu closes instead of naming a removed element.
+The category headings became labelled groups, too: they had been bare `div`s
+sitting between the options as direct children of the listbox, which is not a
+structure the roles permit.
+
 ## [0.37.3] - 2026-09-10
 
 A fresh `docker-compose up` starts, all 185 migrations apply, chart gridlines

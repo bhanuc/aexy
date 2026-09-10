@@ -223,6 +223,102 @@ test.describe("Docs editor / slash menu keyboard navigation (live)", () => {
     await expect(page.locator(MENU)).toBeHidden({ timeout: 5_000 });
   });
 
+  test("Escape hands the keyboard back — Enter makes a newline, not a heading", async ({
+    page,
+  }) => {
+    await openSlashMenu(page);
+    await page.keyboard.type("head");
+    await expect(page.locator(`${MENU} [data-slash-item="heading1"]`)).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await expect(page.locator(MENU)).toBeHidden({ timeout: 5_000 });
+
+    // The menu is gone, so Enter belongs to the document again. Before this
+    // was fixed the hidden menu still handled the key: it ran Heading 1 and
+    // deleted the typed text, so pressing Enter after dismissing produced an
+    // <h1> and lost the "/head" the person had just kept.
+    const headingsBefore = await page.locator(".ProseMirror h1").count();
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("plain text");
+
+    await expect(
+      page.locator(".ProseMirror h1"),
+      "Enter after Escape still ran the highlighted command",
+    ).toHaveCount(headingsBefore, { timeout: 10_000 });
+    await expect(
+      page.locator(".ProseMirror", { hasText: "/head" }),
+      "the typed /head was consumed by a dismissed menu",
+    ).toBeVisible();
+    await expect(
+      page.locator(".ProseMirror p", { hasText: "plain text" }),
+    ).toBeVisible();
+  });
+
+  test("Escape hands the keyboard back — Tab does not insert a block", async ({
+    page,
+  }) => {
+    await openSlashMenu(page);
+    await page.keyboard.type("bullet");
+    await expect(page.locator(`${MENU} [data-slash-item="bullet_list"]`)).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await expect(page.locator(MENU)).toBeHidden({ timeout: 5_000 });
+
+    const listsBefore = await page.locator(".ProseMirror ul").count();
+    await page.keyboard.press("Tab");
+    await page.waitForTimeout(500);
+    await expect(
+      page.locator(".ProseMirror ul"),
+      "Tab after Escape still accepted the highlighted item",
+    ).toHaveCount(listsBefore);
+  });
+
+  test("the active option is announced to a screen reader", async ({ page }) => {
+    await openSlashMenu(page);
+    const editor = page.locator(".ProseMirror");
+
+    // `aria-selected` on the option is inert on its own: focus stays in the
+    // editor, so only aria-activedescendant on the focused element makes the
+    // moving selection audible.
+    const activeId = () => editor.getAttribute("aria-activedescendant");
+    const firstId = await activeId();
+    expect(
+      firstId,
+      "the editor does not point at the highlighted option, so nothing is announced",
+    ).toBeTruthy();
+    expect(
+      await page.locator(`${MENU} [aria-selected="true"]`).getAttribute("id"),
+    ).toBe(firstId);
+
+    await page.keyboard.press("ArrowDown");
+    const secondId = await activeId();
+    expect(secondId, "the pointer did not follow the selection").not.toBe(firstId);
+    expect(
+      await page.locator(`${MENU} [aria-selected="true"]`).getAttribute("id"),
+    ).toBe(secondId);
+
+    // Categories are groups, not loose divs, so every direct child of the
+    // listbox carries a role a listbox may contain.
+    const strayChildren = await page.locator(MENU).evaluate((el) =>
+      Array.from(el.children).filter(
+        (c) => !["option", "group"].includes(c.getAttribute("role") ?? ""),
+      ).length,
+    );
+    expect(
+      strayChildren,
+      "the listbox has children that are neither options nor groups",
+    ).toBe(0);
+
+    // And the reference is dropped when the menu goes, rather than naming a
+    // detached node.
+    await page.keyboard.press("Escape");
+    await expect(page.locator(MENU)).toBeHidden({ timeout: 5_000 });
+    expect(
+      await activeId(),
+      "aria-activedescendant outlived the menu it pointed into",
+    ).toBeNull();
+  });
+
   test("arrow keys are not swallowed when nothing matches", async ({ page }) => {
     await openSlashMenu(page);
     await page.keyboard.type("zzzznotacommand");
