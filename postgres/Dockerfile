@@ -8,7 +8,16 @@
 # pgvector v0.8.1 is the first tag with PostgreSQL 18 support — earlier tags
 # fail to compile against the v18 headers.
 
-FROM postgres:18-alpine
+# Overridable so the same recipe can build a pgvector-enabled image for an
+# older major, which is what a PG_VERSION-mismatch recovery needs: dumping a
+# database that has `vector` columns requires the extension's library to be
+# loadable, and the stock postgres images do not carry it. Keeping the alpine
+# base across versions also keeps the postgres UID and the libc collations the
+# existing volume was created with — see the note below.
+#   docker build -t aexy-postgres:17-alpine-pgvector \
+#     --build-arg PG_IMAGE=postgres:17-alpine ./postgres
+ARG PG_IMAGE=postgres:18-alpine
+FROM ${PG_IMAGE}
 
 ARG PGVECTOR_VERSION=v0.8.1
 
