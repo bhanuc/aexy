@@ -22,7 +22,6 @@ import {
     X,
     Plus,
     Loader2,
-    ArrowRight,
     Bell,
     Clock,
     Send,
@@ -41,12 +40,12 @@ import { useAuth } from "@/hooks/useAuth";
 import { useNotifications } from "@/hooks/useNotifications";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/utils";
-import { useSidebarPersona, MAX_FAVORITES } from "@/hooks/useSidebarPersona";
+import { useSidebarPreferences, MAX_FAVORITES } from "@/hooks/useSidebarPreferences";
 import { LocaleSelector } from "@/components/LocaleSelector";
-import { SidebarItemConfig, SidebarSectionConfig, SidebarLayoutConfig, isSidebarItemActive } from "@/config/sidebarLayouts";
+import { SidebarItemConfig, SidebarSectionConfig, isSidebarItemActive } from "@/config/sidebarLayouts";
 import { appAccessApi } from "@/lib/api";
 import { useAccessRequests } from "@/hooks/useAccessRequests";
-import { getAppIdFromPath, getModuleIdFromPath, APP_CATALOG, CATEGORY_LABELS, PERSONA_LABELS, AppCategory, AppDefinition } from "@/config/appDefinitions";
+import { getAppIdFromPath, getModuleIdFromPath, APP_CATALOG, CATEGORY_LABELS, AppCategory, AppDefinition } from "@/config/appDefinitions";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 interface SidebarProps {
@@ -91,7 +90,8 @@ function buildItemLookup(sections: SidebarSectionConfig[]): Map<string, Favorite
     return map;
 }
 
-type HiddenReason = "no_access" | "persona_hidden";
+/** Access is the only thing that hides an item now the presets are gone. */
+type HiddenReason = "no_access";
 
 interface DiscoverItem {
     item: SidebarItemConfig;
@@ -99,32 +99,11 @@ interface DiscoverItem {
     appDef: AppDefinition | undefined;
     category: AppCategory | "other";
     reason: HiddenReason;
-    availableInPersonas?: string[];
 }
 
 /** Placeholder row widths for the loading skeleton — varied so it reads as
  *  navigation rather than as a progress bar. */
 const SKELETON_ROWS = ["60%", "45%", "70%", "40%", "55%", "65%", "38%", "50%"];
-
-/** Check if personas array matches the given persona */
-function matchesPersona(personas: string[] | undefined, currentPersona: string): boolean {
-    if (!personas || personas.length === 0) return true;
-    return personas.includes(currentPersona);
-}
-
-/** Get the list of non-admin personas that would see a given item href */
-function getItemPersonas(targetHref: string, layout: SidebarLayoutConfig): string[] {
-    const allPersonas = ["developer", "manager", "product", "hr", "support", "sales"];
-    return allPersonas.filter(p => {
-        for (const section of layout.sections) {
-            if (!matchesPersona(section.personas, p)) continue;
-            if (section.items.some(item => item.href === targetHref && matchesPersona(item.personas, p))) {
-                return true;
-            }
-        }
-        return false;
-    });
-}
 
 export function Sidebar({ className, user, logout }: SidebarProps) {
     const pathname = usePathname();
@@ -147,30 +126,18 @@ export function Sidebar({ className, user, logout }: SidebarProps) {
     // Sidebar layout preference
     const { layoutConfig } = useSidebarLayout();
 
-    // Persona filtering and favorites
+    // Favourites and pins. Nothing filters the layout but access, below.
     const {
-        persona,
-        isPersonaDerived,
-        isLoading: personaLoading,
-        filterByPersona,
-        keepDespitePersona,
+        isLoading: preferencesLoading,
         favoriteItems,
         pinnedItems,
         togglePin,
         dismissRecent,
-    } = useSidebarPersona();
+    } = useSidebarPreferences();
 
-    // Apply persona filter to layout
-    const personaConfig = useMemo(
-        () => filterByPersona(layoutConfig),
-        [filterByPersona, layoutConfig]
-    );
-
-    // Build item lookup from persona-filtered layout for favorites rendering
-    // This ensures favorites only show items the current persona can see
     const itemLookup = useMemo(
-        () => buildItemLookup(personaConfig.sections),
-        [personaConfig.sections]
+        () => buildItemLookup(layoutConfig.sections),
+        [layoutConfig.sections]
     );
 
     // Check if on automation editor page (edit or new)
@@ -222,7 +189,7 @@ export function Sidebar({ className, user, logout }: SidebarProps) {
      *  mount and the workspace arriving, replacing the old paint-then-vanish
      *  flicker with a paint-nothing-then-appear one. */
     const navIsResolving =
-        !accessUnavailable && (!effectiveAccess || personaLoading);
+        !accessUnavailable && (!effectiveAccess || preferencesLoading);
 
     // Access requests for non-admin discover section
     const { getRequestForApp, createRequest, isCreatingRequest } = useAccessRequests(workspaceId);
@@ -552,32 +519,24 @@ export function Sidebar({ className, user, logout }: SidebarProps) {
                 if (seen.has(item.href)) continue;
                 seen.add(item.href);
 
-                // Must agree with `filterByPersona`, or an item access rescued
-                // from the persona filter would be listed twice: once in the
-                // nav and once here as "hidden by your view".
-                const isPersonaVisible =
-                    (matchesPersona(section.personas, persona) &&
-                        matchesPersona(item.personas, persona)) ||
-                    keepDespitePersona(item.href);
                 const appId = getAppIdFromPath(item.href);
                 const hasAccess = appId ? hasAppAccess(appId) : true;
 
-                if (isPersonaVisible && hasAccess) continue; // Already in main nav
+                if (hasAccess) continue; // Already in the main nav
 
                 const appDef = appId ? APP_CATALOG[appId] : undefined;
                 const category: AppCategory | "other" = appDef?.category || "other";
 
-                const reason: HiddenReason = !hasAccess ? "no_access" : "persona_hidden";
-                const availableInPersonas = reason === "persona_hidden"
-                    ? getItemPersonas(item.href, layoutConfig)
-                    : undefined;
-
-                items.push({ item, appId, appDef, category, reason, availableInPersonas });
+                // Everything here is missing for one reason now: no access.
+                // It used to also collect items a persona had hidden, which
+                // is why Discover had two sections and a "hidden by your
+                // view" explanation.
+                items.push({ item, appId, appDef, category, reason: "no_access" });
             }
         }
 
         return items;
-    }, [navIsResolving, accessUnavailable, layoutConfig, persona, hasAppAccess, keepDespitePersona]);
+    }, [navIsResolving, accessUnavailable, layoutConfig, hasAppAccess]);
 
     /** Split by *reason*, then group by category within each.
      *
@@ -599,17 +558,9 @@ export function Sidebar({ className, user, logout }: SidebarProps) {
         () => discoverItems.filter(d => d.reason === "no_access"),
         [discoverItems]
     );
-    const personaHiddenItems = useMemo(
-        () => discoverItems.filter(d => d.reason === "persona_hidden"),
-        [discoverItems]
-    );
     const groupedNoAccess = useMemo(
         () => groupByCategory(noAccessItems),
         [groupByCategory, noAccessItems]
-    );
-    const groupedPersonaHidden = useMemo(
-        () => groupByCategory(personaHiddenItems),
-        [groupByCategory, personaHiddenItems]
     );
 
     // Admin quick-enable: toggle an app on for the current user
@@ -875,27 +826,13 @@ export function Sidebar({ className, user, logout }: SidebarProps) {
                                                                 <p className="text-xs font-medium text-muted-foreground/70 truncate">
                                                                     {di.item.label}
                                                                 </p>
-                                                                {di.reason === "no_access" ? (
-                                                                    <p className="text-[10px] text-muted-foreground/40 leading-tight">
-                                                                        {!isAdmin && di.appId && getRequestForApp(di.appId) ? "Request pending" : "Not enabled"}
-                                                                    </p>
-                                                                ) : di.availableInPersonas && di.availableInPersonas.length > 0 ? (
-                                                                    <p className="text-[10px] text-primary/50 leading-tight">
-                                                                        Available in {di.availableInPersonas.map(p => PERSONA_LABELS[p] || p).join(", ")} view
-                                                                    </p>
-                                                                ) : null}
+                                                                <p className="text-[10px] text-muted-foreground/40 leading-tight">
+                                                                    {!isAdmin && di.appId && getRequestForApp(di.appId) ? "Request pending" : "Not enabled"}
+                                                                </p>
                                                             </div>
 
                                                             {/* Action button */}
-                                                            {di.reason === "persona_hidden" ? (
-                                                                <Link
-                                                                    href={di.item.href}
-                                                                    className="shrink-0 p-1 rounded text-muted-foreground/40 hover:text-primary opacity-0 group-hover/discover:opacity-100 transition-opacity"
-                                                                    title={`Go to ${di.item.label}`}
-                                                                >
-                                                                    <ArrowRight className="h-3 w-3" />
-                                                                </Link>
-                                                            ) : isAdmin && di.appId ? (
+                                                            {isAdmin && di.appId ? (
                                                                 <button
                                                                     onClick={() => handleToggleApp(di.appId!)}
                                                                     disabled={isToggling}
@@ -989,14 +926,6 @@ export function Sidebar({ className, user, logout }: SidebarProps) {
                 noAccessItems,
                 groupedNoAccess,
                 true,
-            )}
-            {renderDiscoverGroup(
-                "__discover_persona",
-                `Hidden in ${PERSONA_LABELS[persona] || persona} view`,
-                Compass,
-                personaHiddenItems,
-                groupedPersonaHidden,
-                false,
             )}
         </>
     );
@@ -1111,8 +1040,8 @@ export function Sidebar({ className, user, logout }: SidebarProps) {
                                     {/* Favorites section - pinned + frequently used */}
                                     {renderFavoritesSection()}
 
-                                    {/* Render sections based on persona-filtered layout config */}
-                                    {personaConfig.sections.map(section => renderSection(section))}
+                                    {/* Sections in layout order; access filtering happens per item */}
+                                    {layoutConfig.sections.map(section => renderSection(section))}
 
                                     {/* Discover more tools - shows filtered-out modules */}
                                     {renderDiscoverSection()}
@@ -1130,24 +1059,6 @@ export function Sidebar({ className, user, logout }: SidebarProps) {
                                 <div className="flex-1 overflow-hidden">
                                     <p className="truncate text-sm font-medium">{user?.name || "User"}</p>
                                     <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
-                                    {/* Link, not a label: the view now comes from
-                                        somewhere (a department, or your own
-                                        choice), so it needs to be findable and
-                                        changeable rather than just asserted. */}
-                                    <Link
-                                        href="/settings/appearance"
-                                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                                        title={
-                                            isPersonaDerived
-                                                ? "This view comes from your department. Click to choose your own."
-                                                : "Click to change your sidebar view"
-                                        }
-                                    >
-                                        {PERSONA_LABELS[persona] || persona} view
-                                        {isPersonaDerived && (
-                                            <span className="text-muted-foreground/60"> · from department</span>
-                                        )}
-                                    </Link>
                                 </div>
                             )}
                             <Link

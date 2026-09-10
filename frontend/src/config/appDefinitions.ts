@@ -527,17 +527,6 @@ export const CATEGORY_LABELS: Record<AppCategory | "other", string> = {
   other: "Other",
 };
 
-export const PERSONA_LABELS: Record<string, string> = {
-  developer: "Developer",
-  manager: "Manager",
-  product: "Product",
-  hr: "HR",
-  support: "Support",
-  sales: "Sales",
-  admin: "Admin",
-  custom: "Custom",
-};
-
 // Get app definition by ID
 export function getAppById(appId: string): AppDefinition | undefined {
   return APP_CATALOG[appId];

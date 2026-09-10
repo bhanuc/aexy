@@ -7,7 +7,7 @@ import { toast } from "sonner";
 
 import { organizationApi, DepartmentAccessProfile } from "@/lib/organization-api";
 import { useMemberAppAccess } from "@/hooks/useAppAccess";
-import { APP_CATALOG, AppAccessConfig, PERSONA_LABELS } from "@/config/appDefinitions";
+import { APP_CATALOG, AppAccessConfig } from "@/config/appDefinitions";
 import { DepartmentProfileEditor } from "@/components/access/DepartmentProfileEditor";
 
 /**
@@ -28,15 +28,6 @@ const PROFILE_OPTIONS = [
   { slug: "people", label: "People" },
   { slug: "business", label: "Business" },
   { slug: "full_access", label: "Full access" },
-];
-
-const PERSONA_OPTIONS = [
-  "developer",
-  "manager",
-  "product",
-  "hr",
-  "support",
-  "sales",
 ];
 
 const PROFILES_KEY = "departmentAccessProfiles";
@@ -84,17 +75,14 @@ export function DepartmentProfilesPanel({
     mutationFn: ({
       departmentId,
       profileSlug,
-      persona,
       appConfig,
     }: {
       departmentId: string;
       profileSlug?: string | null;
-      persona?: string | null;
       appConfig?: Record<string, AppAccessConfig>;
     }) =>
       organizationApi.setAccessProfile(workspaceId, departmentId, {
         ...(profileSlug !== undefined ? { profile_slug: profileSlug } : {}),
-        ...(persona !== undefined ? { default_persona: persona } : {}),
         // Sent only when the grid was used. Passing both is how "Business,
         // tweaked" is expressed: the server takes the config and keeps the slug
         // as a label.
@@ -244,27 +232,6 @@ export function DepartmentProfilesPanel({
                     </select>
                   </td>
 
-                  <td className="px-4 py-3">
-                    <select
-                      value={profile.default_persona ?? ""}
-                      disabled={isSaving}
-                      onChange={(e) => {
-                        setSavingId(profile.department_id);
-                        mutation.mutate({
-                          departmentId: profile.department_id,
-                          persona: e.target.value || null,
-                        });
-                      }}
-                      className="w-full rounded-md border border-border bg-muted/50 px-2 py-1.5 text-sm text-foreground focus:border-primary focus:outline-none disabled:opacity-50"
-                    >
-                      <option value="">Platform default</option>
-                      {PERSONA_OPTIONS.map((persona) => (
-                        <option key={persona} value={persona}>
-                          {PERSONA_LABELS[persona] ?? persona}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
 
                   <td className="px-4 py-3">
                     {appNames.length > 0 ? (

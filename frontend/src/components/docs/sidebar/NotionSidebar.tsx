@@ -21,7 +21,6 @@ import { useWorkspace } from "@/hooks/useWorkspace";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppAccess } from "@/hooks/useAppAccess";
 import { useSidebarLayout } from "@/hooks/useSidebarLayout";
-import { useSidebarPersona } from "@/hooks/useSidebarPersona";
 import { useRecentApps } from "@/hooks/useRecentApps";
 import { SidebarItemConfig, SIDEBAR_LAYOUTS } from "@/config/sidebarLayouts";
 import { SIDEBAR_TO_APP_MAP } from "@/config/appDefinitions";
@@ -46,7 +45,6 @@ export function NotionSidebar({
   // sidebar's grouping so the user sees the same Engineering / People /
   // Business / etc. structure, plus a "Recent" strip at the top.
   const { layoutConfig: userLayoutConfig } = useSidebarLayout();
-  const { filterByPersona } = useSidebarPersona();
   const { hasAppAccess } = useAppAccess(workspaceId, user?.id ?? null);
 
   // Always use the grouped layout in the docs sidebar — the flat layout
@@ -56,8 +54,8 @@ export function NotionSidebar({
     : SIDEBAR_LAYOUTS.grouped;
 
   const personaConfig = useMemo(
-    () => filterByPersona(baseLayout),
-    [filterByPersona, baseLayout]
+    () => baseLayout,
+    [baseLayout]
   );
 
   const filterItemsByAccess = useMemo(() => {
