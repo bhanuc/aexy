@@ -205,7 +205,13 @@ test.describe("Docs editor / removing tables and databases (live)", () => {
     await expect(placeholder).toBeVisible({ timeout: 15_000 });
 
     // The reported dead end: nothing here led back out.
-    const remove = page.getByTestId("inline-db-remove");
+    // Scoped through the node rather than page-wide: all three of the node's
+    // states carry the same testid, so an unscoped selector is ambiguous the
+    // moment a document holds two inline databases.
+    const remove = page
+      .getByTestId("inline-database-node")
+      .first()
+      .getByTestId("inline-db-remove");
     await expect(
       remove,
       "the placeholder offers no way to remove itself",
@@ -214,6 +220,78 @@ test.describe("Docs editor / removing tables and databases (live)", () => {
 
     await expect(placeholder).toHaveCount(0, { timeout: 10_000 });
     await expect(page.getByTestId("inline-database-node")).toHaveCount(0);
+  });
+
+  test("with two databases in a document, remove takes out only the one clicked", async ({
+    page,
+    request,
+  }) => {
+    // The case the shared testid used to make untestable: two nodes render two
+    // remove buttons, so anything selecting page-wide is ambiguous — and this
+    // is where removing the wrong embed would actually matter.
+    const names = [`e2e-first-${Date.now()}`, `e2e-second-${Date.now()}`];
+    const tables: { id: string; name: string }[] = [];
+    for (const name of names) {
+      const resp = await request.post(
+        `${API_BASE}/workspaces/${REAL_BACKEND_WORKSPACE_ID}/tables`,
+        { headers: authHeaders(), data: { name, visibility: "workspace" } },
+      );
+      test.skip(!resp.ok(), `tables API unavailable (${resp.status()})`);
+      tables.push({ id: (await resp.json()).id, name });
+    }
+
+    await request.patch(
+      `${API_BASE}/workspaces/${REAL_BACKEND_WORKSPACE_ID}/documents/${docId}`,
+      {
+        headers: authHeaders(),
+        data: {
+          content: {
+            type: "doc",
+            content: [
+              { type: "paragraph", content: [{ type: "text", text: "Body" }] },
+              ...tables.map((t) => ({
+                type: "inlineDatabase",
+                attrs: {
+                  tableId: t.id,
+                  scope: "standalone",
+                  height: 400,
+                  collapsed: false,
+                },
+              })),
+            ],
+          },
+        },
+      },
+    );
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.locator(".ProseMirror")).toBeVisible({ timeout: 30_000 });
+    const nodes = page.getByTestId("inline-database-node");
+    await expect(nodes).toHaveCount(2, { timeout: 25_000 });
+    await expect(page.getByText(names[0])).toBeVisible();
+    await expect(page.getByText(names[1])).toBeVisible();
+
+    // Remove the first; the second must be untouched.
+    await nodes.first().getByTestId("inline-db-remove").click();
+
+    await expect(nodes).toHaveCount(1, { timeout: 10_000 });
+    await expect(
+      page.getByText(names[0]),
+      "removing the first embed left it in place",
+    ).toHaveCount(0);
+    await expect(
+      page.getByText(names[1]),
+      "removing the first embed took the second one with it",
+    ).toBeVisible();
+
+    for (const t of tables) {
+      await request
+        .delete(
+          `${API_BASE}/workspaces/${REAL_BACKEND_WORKSPACE_ID}/tables/${t.id}`,
+          { headers: authHeaders() },
+        )
+        .catch(() => {});
+    }
   });
 
   test("removing an inline database is undoable and does not delete the table", async ({
@@ -259,7 +337,10 @@ test.describe("Docs editor / removing tables and databases (live)", () => {
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(page.locator(".ProseMirror")).toBeVisible({ timeout: 20_000 });
 
-    const remove = page.getByTestId("inline-db-remove");
+    const remove = page
+      .getByTestId("inline-database-node")
+      .first()
+      .getByTestId("inline-db-remove");
     await expect(remove).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId("inline-database-node")).toHaveCount(1);
     await remove.click();

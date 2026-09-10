@@ -331,6 +331,93 @@ async def test_add_task_refuses_a_parent_on_another_board(db_session: AsyncSessi
 
 
 @pytest.mark.asyncio
+async def test_a_second_team_on_a_project_does_not_split_the_board(
+    db_session: AsyncSession,
+):
+    """`SprintTask.team_id` and `Sprint.team_id` are not the same id space.
+
+    A project's tasks can carry either the project id (`move_to_project`, and
+    the `/teams/{id}` path param as the frontend calls it) or a real team id
+    (`add_workspace_task`, via `ProjectTeam`), while a sprint always carries a
+    team id. Comparing the two columns raw only worked because every project
+    happens to have one team sharing its id.
+
+    Here the project owns a *second* team. A parent tagged with that team and a
+    sprint on the project are on the same board, and the guard has to say so.
+    """
+    ws = await _make_workspace(db_session, "sp-2team")
+    project = await _make_project(db_session, ws, "sp-2team-p")
+
+    # A second team on the same project — what add_workspace_task's own
+    # comment says is possible.
+    second = Team(
+        id=str(uuid.uuid4()), workspace_id=ws.id, name="Second", slug="sp-2team-b"
+    )
+    db_session.add(second)
+    db_session.add(
+        ProjectTeam(id=str(uuid.uuid4()), project_id=project.id, team_id=second.id)
+    )
+    await db_session.commit()
+
+    # Parent recorded against the second team; sprint against the project.
+    parent = await _make_task(db_session, ws, str(second.id), title="on team B")
+    sprint = await _make_sprint(db_session, ws, project, "S-2team")
+
+    resolved = await SprintTaskService(db_session).resolve_parent_task(
+        parent_task_id=str(parent.id),
+        workspace_id=str(ws.id),
+        team_id=str(sprint.team_id),
+    )
+    assert resolved == str(parent.id), (
+        "a parent on a sibling team of the same project was rejected as being "
+        "on another board"
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_parent_on_a_genuinely_different_project_is_still_refused(
+    db_session: AsyncSession,
+):
+    """Normalising through project_teams must not blunt the check itself."""
+    ws = await _make_workspace(db_session, "sp-norm")
+    here = await _make_project(db_session, ws, "sp-norm-here")
+    there = await _make_project(db_session, ws, "sp-norm-there")
+    sprint = await _make_sprint(db_session, ws, here, "S-norm")
+    foreign = await _make_task(db_session, ws, str(there.id))
+
+    with pytest.raises(TaskValidationError) as exc:
+        await SprintTaskService(db_session).resolve_parent_task(
+            parent_task_id=str(foreign.id),
+            workspace_id=str(ws.id),
+            team_id=str(sprint.team_id),
+        )
+    assert exc.value.code == "parent_task_other_project"
+
+
+@pytest.mark.asyncio
+async def test_board_project_id_maps_both_directions(db_session: AsyncSession):
+    ws = await _make_workspace(db_session, "sp-map")
+    project = await _make_project(db_session, ws, "sp-map-p")
+    extra = Team(
+        id=str(uuid.uuid4()), workspace_id=ws.id, name="Extra", slug="sp-map-extra"
+    )
+    db_session.add(extra)
+    db_session.add(
+        ProjectTeam(id=str(uuid.uuid4()), project_id=project.id, team_id=extra.id)
+    )
+    await db_session.commit()
+
+    service = SprintTaskService(db_session)
+    assert await service.board_project_id(str(project.id)) == str(project.id)
+    assert await service.board_project_id(str(extra.id)) == str(project.id)
+    # An id in neither column is its own board rather than an error — legacy
+    # rows predate the link table.
+    stray = str(uuid.uuid4())
+    assert await service.board_project_id(stray) == stray
+    assert await service.board_project_id(None) is None
+
+
+@pytest.mark.asyncio
 async def test_add_workspace_task_refuses_a_foreign_parent(db_session: AsyncSession):
     """The guard has to be on the create path, not only callable from it."""
     ws = await _make_workspace(db_session, "sp-wt")
