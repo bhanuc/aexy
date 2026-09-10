@@ -54,11 +54,9 @@ export default function TicketSubmissionsPage() {
 
   const params = useMemo(
     () => ({
-      // Both, because most form-raised rows record no source at all and a list
-      // of values cannot express null. Alert-sourced rows are excluded by
-      // asking only for "form" and null.
-      source: ["form"],
-      source_is_null: true,
+      // Everything that is not an alert. The server resolves which sources
+      // those are, so this screen never needs the provider list.
+      intake: "submissions" as const,
       form_id: formId || undefined,
       priority: priority ? [priority] : undefined,
       status: showClosed ? undefined : OPEN_STATUSES,

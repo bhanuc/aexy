@@ -25,7 +25,7 @@
       "includeResolved": "Include resolved",
       "count": "{count} alerts",
       "alert": "Alert",
-      "service": "Form",
+      "service": "Service",
       "seen": "Seen",
       "lastSeen": "Last seen",
       "status": "Status",

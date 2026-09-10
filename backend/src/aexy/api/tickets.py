@@ -146,6 +146,7 @@ def ticket_to_list_response(ticket) -> TicketListResponse:
         occurrence_count=ticket.occurrence_count,
         last_seen_at=ticket.last_seen_at,
         sla_due_at=ticket.sla_due_at,
+        service_name=(ticket.field_values or {}).get("service_name"),
     )
 
 
@@ -219,6 +220,8 @@ async def list_tickets(
     # form-raised rows record no source at all and a value list cannot say so.
     source: list[str] | None = Query(default=None),
     source_is_null: bool | None = Query(default=None),
+    # The same question without the client needing the provider list.
+    intake: Literal["alerts", "submissions"] | None = Query(default=None),
     sort: TicketSortKey = "created",
     direction: Literal["asc", "desc"] = "desc",
     limit: int = Query(default=50, le=100),
@@ -240,6 +243,7 @@ async def list_tickets(
         sla_breached=sla_breached,
         source=source,
         source_is_null=source_is_null,
+        intake=intake,
         sort=sort,
         direction=direction,
     )

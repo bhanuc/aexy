@@ -78,6 +78,18 @@ _SAFE_FILENAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
 # which is nearly the worst possible order for a queue. These map each value to
 # its magnitude so the largest number is the most urgent, which makes
 # `direction="desc"` mean "worst first" as a first click on the column implies.
+def _alert_sources() -> list[str]:
+    """Every provider slug an alert can arrive under.
+
+    Read from `AlertProvider` rather than written out, because the same list
+    existed in a frontend constant and a SQL migration and would have drifted
+    the first time a provider was added.
+    """
+    from aexy.models.alerting import AlertProvider
+
+    return [provider.value for provider in AlertProvider]
+
+
 _SEVERITY_RANK = {"critical": 3, "high": 2, "medium": 1, "low": 0}
 _PRIORITY_RANK = {"urgent": 3, "high": 2, "medium": 1, "low": 0}
 
@@ -429,6 +441,18 @@ class TicketService:
                 source_clauses.append(Ticket.source.in_(filters.source))
             if filters.source_is_null:
                 source_clauses.append(Ticket.source.is_(None))
+            # `intake` is the same question asked without the caller having to
+            # know which providers exist. `AlertProvider` is the one list, so a
+            # new provider reaches both screens without a frontend release.
+            if filters.intake == "alerts":
+                source_clauses.append(Ticket.source.in_(_alert_sources()))
+            elif filters.intake == "submissions":
+                source_clauses.append(
+                    or_(
+                        Ticket.source.is_(None),
+                        Ticket.source.notin_(_alert_sources()),
+                    )
+                )
             if source_clauses:
                 base_stmt = base_stmt.where(or_(*source_clauses))
 

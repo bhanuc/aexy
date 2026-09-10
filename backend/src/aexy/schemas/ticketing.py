@@ -393,6 +393,11 @@ class TicketListResponse(BaseModel):
     occurrence_count: int = 1
     last_seen_at: datetime | None = None
     sla_due_at: datetime | None = None
+    # Which service the alert fired for. It is the single most useful column in
+    # an alert queue and it lives in `field_values`, which a list response
+    # deliberately does not carry — returning whole JSONB blobs for a table is
+    # how a list gets slow. Lifted out as one string instead.
+    service_name: str | None = None
 
 
 # What a ticket list may be ordered by. `last_seen` is the natural order for a
@@ -425,6 +430,11 @@ class TicketFilters(BaseModel):
     # a Submissions list has to be able to ask for it — and a list of values
     # cannot express null.
     source_is_null: bool | None = None
+    # The question a caller actually has, resolved server-side from
+    # `AlertProvider`. Asking with `source` meant the client hardcoding the
+    # provider slugs, so adding a provider needed a frontend release and the
+    # list existed in three places at once. `intake` needs no such knowledge.
+    intake: Literal["alerts", "submissions"] | None = None
     sort: TicketSortKey = "created"
     direction: Literal["asc", "desc"] = "desc"
 

@@ -235,6 +235,7 @@ export function useTickets(
     sla_breached?: boolean;
     source?: string[];
     source_is_null?: boolean;
+    intake?: "alerts" | "submissions";
     sort?: TicketSortKey;
     direction?: "asc" | "desc";
     limit?: number;

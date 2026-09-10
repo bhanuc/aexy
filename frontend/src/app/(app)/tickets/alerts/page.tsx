@@ -29,13 +29,6 @@ import { useWorkspace } from "@/hooks/useWorkspace";
 import { TicketSeverity, TicketSortKey, TicketStatus } from "@/lib/api";
 import { ticketFieldLabel } from "@/components/tickets/ticketLabels";
 
-/**
- * The provider slugs `AlertProvider` defines. Listed rather than inferred from
- * "not a form submission", so a ticket from some future non-alert source never
- * turns up here by accident.
- */
-const ALERT_SOURCES = ["openobserve", "grafana", "datadog", "sentry", "generic"];
-
 /** Worst first. Separate from the stakeholder palette — this is a judgement
  *  about how bad, not about who holds it. */
 const SEVERITY_CLASS: Record<string, string> = {
@@ -66,7 +59,11 @@ export default function AlertTicketsPage() {
 
   const params = useMemo(
     () => ({
-      source: ALERT_SOURCES,
+      // `intake` rather than a list of provider slugs: the server resolves it
+      // from `AlertProvider`, so a new provider reaches this screen without a
+      // frontend release. The slugs used to be written out here as well as in
+      // the enum and a SQL migration.
+      intake: "alerts" as const,
       severity: severity ? [severity] : undefined,
       // Default to what is still wrong. A queue that opens with six months of
       // resolved incidents buries the three that matter.
@@ -202,7 +199,11 @@ export default function AlertTicketsPage() {
                       </Link>
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">
-                      {tk.form_name ?? "—"}
+                      {/* The service the alert fired for. Lifted out of
+                          field_values server-side — it is the first thing
+                          anybody looks for and the list response deliberately
+                          carries no JSONB. */}
+                      {tk.service_name ?? "—"}
                     </td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums">
                       {tk.occurrence_count > 1 ? (

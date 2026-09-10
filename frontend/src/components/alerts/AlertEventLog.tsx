@@ -54,6 +54,24 @@ export const ALERT_ACTIONS = [
   "error",
 ] as const;
 
+/**
+ * Outcomes that attached a ticket to the event, so a missing ticket number
+ * means the ticket was deleted rather than never made.
+ *
+ * All five paths in `AlertIngestionService` that set `event.ticket_id`:
+ * created, the throttled/updated bump, reopened, and resolved. Only `dropped`,
+ * `error` and a null action legitimately have none — listing just
+ * created/updated left a resolved event whose ticket had gone rendering a
+ * blank cell, which is the exact ambiguity the message exists to remove.
+ */
+const ACTIONS_WITH_A_TICKET = new Set([
+  "created",
+  "updated",
+  "throttled",
+  "reopened",
+  "resolved",
+]);
+
 function actionKey(event: AlertEvent): string {
   return event.action_taken ?? "pending";
 }
@@ -123,7 +141,7 @@ function EventRow({
             >
               TKT-{event.ticket_number}
             </Link>
-          ) : event.action_taken === "created" || event.action_taken === "updated" ? (
+          ) : ACTIONS_WITH_A_TICKET.has(event.action_taken ?? "") ? (
             <span className="text-muted-foreground italic">{t("ticketDeleted")}</span>
           ) : null}
 

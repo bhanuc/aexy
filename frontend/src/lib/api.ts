@@ -9528,6 +9528,9 @@ export interface TicketListItem {
   /** When it last recurred. Null when it never has. */
   last_seen_at?: string | null;
   sla_due_at?: string | null;
+  /** The service the alert fired for, lifted out of field_values so an alert
+   *  list can show it without the server returning whole JSONB blobs. */
+  service_name?: string | null;
 }
 
 export interface TicketComment {
@@ -9745,11 +9748,14 @@ export const ticketsApi = {
       team_id?: string;
       submitter_email?: string;
       sla_breached?: boolean;
-      /** Provider slugs, for an alerts list. */
+      /** Provider slugs, for an alerts list. Prefer `intake`, which does not
+       *  require the client to know which providers exist. */
       source?: TicketSource[];
       /** Also match rows with no source recorded — which most form
        *  submissions are, and which a value list cannot express. */
       source_is_null?: boolean;
+      /** Which intake, resolved server-side from the provider list. */
+      intake?: "alerts" | "submissions";
       sort?: TicketSortKey;
       direction?: "asc" | "desc";
       limit?: number;

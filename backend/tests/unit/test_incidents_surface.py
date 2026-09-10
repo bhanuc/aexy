@@ -323,3 +323,106 @@ async def test_no_matching_policy_leaves_no_clock(db_session: AsyncSession) -> N
     await db_session.commit()
 
     assert t.sla_due_at is None
+
+
+# ============================================ intake, and the service column
+
+
+@pytest.mark.asyncio
+async def test_intake_alerts_needs_no_provider_list_from_the_caller(
+    db_session: AsyncSession,
+) -> None:
+    """The provider slugs were written out in three places at once.
+
+    The `AlertProvider` enum, a SQL migration, and a frontend constant — so
+    adding a provider meant a frontend release to make its tickets visible.
+    `intake` asks the question instead and the server resolves it.
+    """
+    d = await _shop(db_session, "inc-intake-a")
+    await _ticket(db_session, d, 1, source="openobserve")
+    await _ticket(db_session, d, 2, source="sentry")
+    await _ticket(db_session, d, 3, source=None)
+    await _ticket(db_session, d, 4, source="form")
+    await db_session.commit()
+
+    assert sorted(await _numbers(db_session, d, intake="alerts")) == [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_intake_submissions_is_everything_that_is_not_an_alert(
+    db_session: AsyncSession,
+) -> None:
+    """Including rows with no source at all, which most form submissions are."""
+    d = await _shop(db_session, "inc-intake-s")
+    await _ticket(db_session, d, 1, source="openobserve")
+    await _ticket(db_session, d, 2, source=None)
+    await _ticket(db_session, d, 3, source="form")
+    await db_session.commit()
+
+    assert sorted(await _numbers(db_session, d, intake="submissions")) == [2, 3]
+
+
+@pytest.mark.asyncio
+async def test_intake_covers_every_provider_the_enum_defines(
+    db_session: AsyncSession,
+) -> None:
+    """A provider added to the enum reaches the Alerts list with no other change."""
+    from aexy.models.alerting import AlertProvider
+    from aexy.services.ticket_service import _alert_sources
+
+    assert _alert_sources() == [p.value for p in AlertProvider]
+
+    d = await _shop(db_session, "inc-intake-all")
+    for n, provider in enumerate(AlertProvider, start=1):
+        await _ticket(db_session, d, n, source=provider.value)
+    await db_session.commit()
+
+    seen = await _numbers(db_session, d, intake="alerts")
+    assert len(seen) == len(list(AlertProvider))
+
+
+@pytest.mark.asyncio
+async def test_the_affected_service_reaches_the_list(db_session: AsyncSession) -> None:
+    """The first column anybody looks for in an alert queue.
+
+    It lives in `field_values`, which a list response deliberately does not
+    carry — returning whole JSONB blobs for a table is how a list gets slow.
+    Lifted out as one string so the column can exist at all.
+    """
+    from aexy.api.tickets import ticket_to_list_response
+
+    d = await _shop(db_session, "inc-service")
+    t = await _ticket(db_session, d, 1, source="openobserve", severity="high")
+    # The alert path writes no `title` column — the headline goes into
+    # field_values — so the fixture has to be null here or it is not testing
+    # the case that matters.
+    t.title = None
+    t.field_values = {"title": "[HIGH] payments-api: 5xx spike", "service_name": "payments-api"}
+    await db_session.commit()
+
+    # Through the real query, which eager-loads the two relationships the
+    # serializer reads. Constructing a bare row and serializing it raises
+    # MissingGreenlet on the first lazy access under async SQLAlchemy.
+    rows, _ = await TicketService(db_session).list_tickets(
+        d.ws.id, filters=TicketFilters(intake="alerts")
+    )
+    row = ticket_to_list_response(rows[0])
+    assert row.service_name == "payments-api"
+    # And the headline survives the alert path never setting the title column.
+    assert row.title == "[HIGH] payments-api: 5xx spike"
+
+
+@pytest.mark.asyncio
+async def test_a_submission_has_no_service_and_says_so(
+    db_session: AsyncSession,
+) -> None:
+    from aexy.api.tickets import ticket_to_list_response
+
+    d = await _shop(db_session, "inc-service-none")
+    await _ticket(db_session, d, 1, source=None)
+    await db_session.commit()
+
+    rows, _ = await TicketService(db_session).list_tickets(
+        d.ws.id, filters=TicketFilters(intake="submissions")
+    )
+    assert ticket_to_list_response(rows[0]).service_name is None
