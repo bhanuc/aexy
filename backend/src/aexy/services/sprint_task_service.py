@@ -221,14 +221,18 @@ class SprintTaskService:
         sprint = sprint_result.scalar_one_or_none()
         workspace_id = sprint.workspace_id if sprint else None
 
-        # Same parent guard the other two create paths use. Only checkable once
-        # the sprint has resolved, since that is what names the board.
-        if sprint is not None:
-            parent_task_id = await self.resolve_parent_task(
-                parent_task_id=parent_task_id,
-                workspace_id=str(sprint.workspace_id),
-                team_id=str(sprint.team_id),
-            )
+        # Same parent guard the other two create paths use. Runs whether or not
+        # the sprint resolved: gating the whole check on the sprint left the
+        # commonest automation case unguarded, because `_create_subtask` in
+        # workflow_actions (and its CRM twin) call this with
+        # `sprint_id=parent.sprint_id`, and a project-backlog parent has no
+        # sprint at all. A nonexistent, archived or already-nested parent was
+        # written straight onto the row there.
+        parent_task_id = await self.resolve_parent_task(
+            parent_task_id=parent_task_id,
+            workspace_id=str(sprint.workspace_id) if sprint else None,
+            team_id=str(sprint.team_id) if sprint else None,
+        )
 
         task = SprintTask(
             id=str(uuid4()),
@@ -1168,8 +1172,8 @@ class SprintTaskService:
         self,
         *,
         parent_task_id: str | None,
-        workspace_id: str,
-        team_id: str,
+        workspace_id: str | None = None,
+        team_id: str | None = None,
     ) -> str | None:
         """Validate a subtask's parent and return it, or None if there is none.
 
@@ -1192,8 +1196,15 @@ class SprintTaskService:
         `team_id` — it derives the board from the sprint at read time — so
         those rows genuinely do not record one, and there is nothing for a
         board check to contradict. Rejecting them would break the ordinary
-        case of a subtask added to a sprint task. The workspace, archived and
-        depth checks still apply.
+        case of a subtask added to a sprint task.
+
+        `workspace_id` and `team_id` are optional for the same reason from the
+        other side: a caller that cannot say which board the new task lands on
+        should still not be allowed to attach it to a task that does not exist,
+        is archived, or is already a subtask. Omitting one skips only that
+        comparison — never the existence, archived and depth checks. Passing
+        both is strongly preferred; the looser call is for `add_task` when its
+        sprint lookup comes back empty.
         """
         if not parent_task_id:
             return None
@@ -1202,9 +1213,13 @@ class SprintTaskService:
         parent = (await self.db.execute(stmt)).scalar_one_or_none()
         if parent is None or parent.is_archived:
             raise TaskValidationError("parent_task_not_found")
-        if str(parent.workspace_id) != str(workspace_id):
+        if workspace_id is not None and str(parent.workspace_id) != str(workspace_id):
             raise TaskValidationError("parent_task_other_workspace")
-        if parent.team_id is not None and str(parent.team_id) != str(team_id):
+        if (
+            team_id is not None
+            and parent.team_id is not None
+            and str(parent.team_id) != str(team_id)
+        ):
             raise TaskValidationError("parent_task_other_project")
         if parent.parent_task_id:
             raise TaskValidationError("parent_task_is_subtask")
