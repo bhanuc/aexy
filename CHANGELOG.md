@@ -5,6 +5,63 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.37.5] - 2026-09-10
+
+Three loose ends from the 0.37.3 review: a subtask's board is now compared on
+project identity rather than on two columns that disagree, the database
+recovery instructions are correct and runnable, and removing one inline
+database out of several is finally testable.
+
+### Fixed: a project with a second team could split its own board
+
+`SprintTask.team_id` has no single meaning. The three creation paths write it
+from three different sources — the `/teams/{id}` path parameter, a real team id
+resolved through `project_teams`, and a project id on a cross-project move —
+while `Sprint.team_id` is always a team id. The subtask guard compared those
+two columns directly, which works only because every project happens to be
+created with one team sharing its id.
+
+Give a project a second team, which the workspace create path explicitly
+allows, and a parent recorded against that team looks like it lives on another
+board: adding a subtask to it fails with "parent task is on another project"
+even though both are on the same project. Both sides are now mapped to the
+owning project before being compared, so sibling teams of one project count as
+one board. An id in neither column is treated as its own board, which leaves
+rows predating the link table exactly as they were.
+
+### Fixed: the database recovery instructions could not be followed
+
+When the postgres image refuses to start on a volume holding an older cluster,
+it prints the steps to migrate. Two things were wrong with them.
+
+They named a stock `postgres:<old>-alpine` image for the dump. This database
+has `vector` columns, and dumping their rows calls the extension's output
+function, so a stock image fails at exactly the step you least want to fail —
+and only on a deployment that has embeddings, which is to say only where there
+is data worth rescuing. The image build now takes the base as an argument, and
+the instructions build a pgvector-enabled image for the old major, on the same
+alpine base so the postgres UID and libc collations still match the volume.
+Verified end to end: the printed command builds, the server starts, and
+`pg_dumpall` emits the vector rows.
+
+They also treated a same-major cluster as an upgrade. The guard fires on any
+cluster at the volume root, PostgreSQL 18 included — which is reachable for
+anyone who worked around the pre-0.37.3 startup failure by setting `PGDATA`
+there themselves and has since picked up a compose file that puts it one level
+down. Nothing needs upgrading in that case; the server is pointed at the wrong
+directory inside the right volume. That case now gets its own message, saying
+so and offering the two one-step fixes instead of a dump and restore.
+
+### Fixed: the inline-database remove control could not be tested in numbers
+
+All three states of the node — placeholder, collapsed, expanded — carry the
+same test id, so any document holding two inline databases produced two
+matches and an ambiguous selector. The tests could only ever cover the
+single-database case, which is not the one where removing the wrong embed
+matters. Selections are now scoped through the node, and a new test puts two
+databases in a document, removes the first, and checks the second is still
+there.
+
 ## [0.37.4] - 2026-09-10
 
 Escape now hands the keyboard back to the document, a subtask's parent is
