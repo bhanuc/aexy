@@ -15,6 +15,10 @@ export type RequestType = string;
 export type PendingWith = string;
 
 export type TicketOrigin = "email" | "manual" | "internal";
+/** Mirrors the backend Literal. Highest urgency first in `PRIORITY_ORDER`. */
+export type TicketPriority = "low" | "medium" | "high" | "urgent";
+/** The order a queue should be worked in — and the order the server sorts by. */
+export const PRIORITY_ORDER: TicketPriority[] = ["urgent", "high", "medium", "low"];
 export type MailboxChannel = "webhook" | "gmail_sync";
 export type BreachLevel = "green" | "amber" | "red";
 
@@ -120,6 +124,11 @@ export interface Mailbox {
   integration_id: string | null;
   is_active: boolean;
   created_at: string;
+  /** Whether a reply can actually leave this mailbox. Outbound needs a connected
+   *  Gmail account, so a `webhook` mailbox receives everything and can answer
+   *  nothing — worth saying on the settings page rather than at the moment
+   *  somebody presses Send. */
+  can_send: boolean;
 }
 
 export interface ServiceDeskTicket {
@@ -143,6 +152,9 @@ export interface ServiceDeskTicket {
   needs_triage: boolean;
   ai_confidence: number | null;
   created_at: string;
+  /** How urgent, as opposed to how long it has waited. Null means nobody has
+   *  said — deliberately distinct from "medium". */
+  priority: TicketPriority | null;
 }
 
 export interface Segment {
@@ -248,6 +260,24 @@ export interface HumanSplitResponse {
   created_ticket_display_ids: string[];
 }
 
+/** An internal note: the desk's own record, never sent to anybody. Kept apart
+ *  from correspondence, which means "mail that left or arrived". */
+export interface TicketNote {
+  id: string;
+  author_id: string | null;
+  author_name: string | null;
+  content: string;
+  created_at: string;
+  /** True when the desk wrote it — a transition, a routing decision, a merge. */
+  system: boolean;
+}
+
+export interface MessageSplitResult {
+  ticket_id: string;
+  display_id: string;
+  moved: number;
+}
+
 export interface ServiceDeskTicketDetail extends ServiceDeskTicket {
   body: string | null;
   linked_task_id: string | null;
@@ -255,6 +285,7 @@ export interface ServiceDeskTicketDetail extends ServiceDeskTicket {
   split_done_indexes: number[];
   segments: Segment[];
   correspondence: CorrespondenceEntry[];
+  notes: TicketNote[];
   email_recipients: TicketEmailRecipient[];
   /** Prefills the compose box so a reply keeps the people already on the mail. */
   reply_all: TicketReplyAll;
@@ -262,6 +293,11 @@ export interface ServiceDeskTicketDetail extends ServiceDeskTicket {
   /** Why this ticket has the owner it has, when the answer was not simply
    *  Master Data. Null when nothing had to be explained. */
   assignment_note: string | null;
+  /** The colleague who logged this ticket, for one taken by phone or WhatsApp.
+   *  Null for anything the desk received rather than logged — an email ticket
+   *  has a requester, not a creator. */
+  logged_by_id: string | null;
+  logged_by_name: string | null;
   // Set once this ticket's answer has been published to the public community
   // forum, so nobody writes the same answer twice.
   community_topic: TicketCommunityTopic | null;
@@ -522,7 +558,7 @@ export interface TicketQuery {
   q?: string;
   /** Ordering. Lives with the filters so an export comes back in the order of
    *  the screen it was generated from. */
-  sort?: "created" | "ticket" | "subject" | "account" | "type" | "pending" | "status";
+  sort?: "created" | "ticket" | "subject" | "account" | "type" | "pending" | "status" | "priority";
   direction?: "asc" | "desc";
   /** Narrow to the caller's own queue, within their desk scope. */
   assigned_to_me?: boolean;
@@ -539,6 +575,8 @@ export interface TicketQuery {
   origin?: string;
   status?: string;
   assigned_to?: string;
+  /** Narrows to one urgency. Absent means every ticket, including unset ones. */
+  priority?: TicketPriority;
   needs_triage?: boolean;
   /** Whether the ticket is in this workspace's terminal stage, whatever it is
    *  called here — a report should not have to know the slug. */
@@ -770,6 +808,28 @@ export const serviceDeskApi = {
    */
   downloadAttachment: async (ws: string, id: string, index: number): Promise<Blob> =>
     (await api.get(`${base(ws)}/tickets/${id}/attachments/${index}`, { responseType: "blob" })).data,
+  listNotes: async (ws: string, id: string): Promise<TicketNote[]> =>
+    (await api.get(`${base(ws)}/tickets/${id}/notes`)).data,
+  addNote: async (ws: string, id: string, content: string): Promise<TicketNote> =>
+    (await api.post(`${base(ws)}/tickets/${id}/notes`, { content })).data,
+  /**
+   * Move correspondence off this ticket onto a new one.
+   *
+   * Distinct from `splitDetectedIssues`, which acts on issues the model found
+   * inside a single message. This acts on the messages themselves, and is the
+   * only thing that repairs a ticket that absorbed somebody else's request.
+   */
+  splitMessages: async (
+    ws: string,
+    id: string,
+    data: {
+      response_ids: string[];
+      title?: string | null;
+      pending_with?: PendingWith | null;
+      assigned_owner_id?: string | null;
+    },
+  ): Promise<MessageSplitResult> =>
+    (await api.post(`${base(ws)}/tickets/${id}/split-messages`, data)).data,
   splitDetectedIssues: async (
     ws: string, id: string, issue_indexes: number[],
   ): Promise<HumanSplitResponse> =>
@@ -783,8 +843,8 @@ export const serviceDeskApi = {
   ): Promise<ServiceDeskTicketDetail> =>
     (await api.patch(`${base(ws)}/tickets/${id}`, data)).data,
   createManual: async (
-    ws: string, data: { subject: string; body?: string; requester_email?: string; requester_name?: string; request_type?: RequestType; product_id?: string; account_id?: string },
-  ): Promise<{ ticket_id: string }> =>
+    ws: string, data: { subject: string; body?: string; requester_email?: string; requester_name?: string; request_type?: RequestType; product_id?: string; account_id?: string; assigned_owner_id?: string },
+  ): Promise<{ ticket_id: string; display_id: string }> =>
     (await api.post(`${base(ws)}/tickets/manual`, data)).data,
   emailStakeholder: async (
     ws: string, id: string,
@@ -836,6 +896,10 @@ export const serviceDeskApi = {
   listVendors: async (ws: string): Promise<Vendor[]> => (await api.get(`${base(ws)}/vendors`)).data,
   createVendor: async (ws: string, data: { name: string; domains?: string[] }): Promise<Vendor> =>
     (await api.post(`${base(ws)}/vendors`, data)).data,
+  // The PATCH has always existed server-side; only the client was missing, so
+  // correcting a vendor's domains meant deleting the row and retyping it.
+  updateVendor: async (ws: string, id: string, data: Partial<{ name: string; domains: string[]; is_active: boolean }>): Promise<Vendor> =>
+    (await api.patch(`${base(ws)}/vendors/${id}`, data)).data,
   deleteVendor: async (ws: string, id: string): Promise<void> => { await api.delete(`${base(ws)}/vendors/${id}`); },
 
   // products

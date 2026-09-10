@@ -19,11 +19,14 @@ from fastapi import (
     UploadFile,
     status,
 )
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aexy.api.developers import get_current_developer
 from aexy.core.database import get_db
 from aexy.models.developer import Developer
+from aexy.models.ticketing import Ticket
+from aexy.services.service_desk_config import ticket_prefix_display
 from aexy.schemas.service_desk import (
     ApplyIndustryTemplateRequest,
     ApplyIndustryTemplateResponse,
@@ -41,6 +44,9 @@ from aexy.schemas.service_desk import (
     ProductResponse,
     HumanSplitRequest,
     HumanSplitResponse,
+    MessageSplitRequest,
+    MessageSplitResponse,
+    NoteCreate,
     MailboxCreate,
     MailboxResponse,
     ConvertToTaskRequest,
@@ -56,6 +62,7 @@ from aexy.schemas.service_desk import (
     ServiceDeskSettingsUpdate,
     ServiceDeskTemplate,
     ServiceDeskTemplateUpdate,
+    ServiceDeskNote,
     ServiceDeskTicketDetail,
     PublishToCommunityRequest,
     PublishTargetsResponse,
@@ -808,9 +815,20 @@ async def create_manual_ticket(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only a member of the desk's owning team or a Service Desk manager can log a manual ticket",
         )
-    ticket_id = await ServiceDeskService(db).create_manual_ticket(workspace_id, data)
+    ticket_id = await ServiceDeskService(db).create_manual_ticket(
+        workspace_id, data, logged_by_id=str(current.id)
+    )
     await _queue_manual_ticket_receipt(ticket_id, background)
-    return {"ticket_id": ticket_id}
+    # The display id comes back too. It is what the operator reads out to the
+    # caller they are still on the phone with, and it is what a partial-failure
+    # message needs in order to say *which* ticket to open.
+    number = (
+        await db.execute(select(Ticket.ticket_number).where(Ticket.id == ticket_id))
+    ).scalar_one_or_none()
+    return {
+        "ticket_id": ticket_id,
+        "display_id": await ticket_prefix_display(db, workspace_id, number),
+    }
 
 
 async def _queue_manual_ticket_receipt(ticket_id: str, background: BackgroundTasks) -> None:
@@ -1000,6 +1018,72 @@ async def split_detected_issues(
         ticket_id,
         data.issue_indexes,
         split_by_id=current.id,
+        scope_developer_id=current.id,
+    )
+
+
+@router.post(
+    "/tickets/{ticket_id}/split-messages",
+    response_model=MessageSplitResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def split_messages(
+    workspace_id: str,
+    ticket_id: str,
+    data: MessageSplitRequest,
+    db: AsyncSession = Depends(get_db),
+    current: Developer = Depends(get_current_developer),
+):
+    """Move correspondence off this ticket onto a new one.
+
+    Repairs a ticket that absorbed a second, unrelated request. Distinct from
+    ``/split``, which acts on issues the model found inside one message; this
+    acts on the messages themselves, and is the only thing that can repair
+    tickets that were already merged.
+    """
+    return await ServiceDeskTicketService(db).split_messages(
+        workspace_id,
+        ticket_id,
+        data.response_ids,
+        actor_id=current.id,
+        title=data.title,
+        pending_with=data.pending_with,
+        assigned_owner_id=data.assigned_owner_id,
+        scope_developer_id=current.id,
+    )
+
+
+@router.get("/tickets/{ticket_id}/notes", response_model=list[ServiceDeskNote])
+async def list_ticket_notes(
+    workspace_id: str,
+    ticket_id: str,
+    db: AsyncSession = Depends(get_db),
+    current: Developer = Depends(get_current_developer),
+):
+    """This ticket's internal notes — the desk's own record, never sent to anybody."""
+    return await ServiceDeskTicketService(db).list_notes(
+        workspace_id, ticket_id, scope_developer_id=current.id
+    )
+
+
+@router.post(
+    "/tickets/{ticket_id}/notes",
+    response_model=ServiceDeskNote,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_ticket_note(
+    workspace_id: str,
+    ticket_id: str,
+    data: NoteCreate,
+    db: AsyncSession = Depends(get_db),
+    current: Developer = Depends(get_current_developer),
+):
+    """Add an internal note. Requires edit authority on the ticket, not just view."""
+    return await ServiceDeskTicketService(db).add_note(
+        workspace_id,
+        ticket_id,
+        data.content,
+        author_id=current.id,
         scope_developer_id=current.id,
     )
 

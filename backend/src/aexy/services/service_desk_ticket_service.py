@@ -29,8 +29,10 @@ from aexy.models.service_desk import (
 from aexy.models.ticketing import Ticket, TicketResponse, TicketStatus
 from aexy.schemas.service_desk import (
     DetectedIssue,
+    MessageSplitResponse,
     SegmentResponse,
     ServiceDeskCorrespondence,
+    ServiceDeskNote,
     ServiceDeskTicketDetail,
     TicketAttachment,
     TicketCommunityTopic,
@@ -428,15 +430,22 @@ class ServiceDeskTicketService:
         """403 unless ``can_edit_ticket`` grants this caller write authority."""
         from aexy.services.service_desk_service import can_edit_ticket
 
-        assignee_id = (
-            await self.db.execute(select(Ticket.assignee_id).where(Ticket.id == sd.ticket_id))
-        ).scalar_one_or_none()
+        row = (
+            await self.db.execute(
+                select(Ticket.assignee_id, Ticket.field_values).where(
+                    Ticket.id == sd.ticket_id
+                )
+            )
+        ).first()
+        assignee_id = row[0] if row is not None else None
+        logged_by_id = (row[1] or {}).get("logged_by_id") if row is not None else None
         if await can_edit_ticket(
             self.db,
             workspace_id,
             str(developer_id),
             assignee_id=assignee_id,
             pending_with=sd.pending_with,
+            logged_by_id=logged_by_id,
         ):
             return
         raise HTTPException(
@@ -700,10 +709,38 @@ class ServiceDeskTicketService:
         prior_assignee_id = (
             await self.db.execute(select(Ticket.assignee_id).where(Ticket.id == ticket_id))
         ).scalar_one_or_none()
+        prior_account_id = sd.account_id
+
+        # `priority` lives on `Ticket`, every other field in this payload on
+        # `ServiceDeskTicket`. Taken out before the loop below, which would
+        # otherwise set an attribute the row does not have and silently drop it.
+        priority = payload.pop("priority", None)
 
         changed = {k: v for k, v in payload.items() if getattr(sd, k, None) != v}
         for k, v in payload.items():
             setattr(sd, k, v)
+
+        row = await self.db.get(Ticket, ticket_id)
+        if priority is not None and row is not None and row.priority != priority:
+            row.priority = priority
+            changed["priority"] = priority
+
+        # Correcting the partner is a routing decision, not just a relabelling.
+        # Setting `account_id` used to write the column and stop there, so a
+        # ticket that had been handed to an arbitrary owner by the unmatched
+        # fallback kept that owner even once somebody had told the desk which
+        # partner it belonged to — with the stale assignment note still on the
+        # ticket explaining an owner it no longer deserved.
+        #
+        # Skipped when the same request also names an owner explicitly: the
+        # person filling in the form outranks the mapping.
+        if (
+            assigned is None
+            and sd.account_id is not None
+            and sd.account_id != prior_account_id
+        ):
+            assigned = await self._owner_for_account(workspace_id, sd)
+
         if assigned is not None:
             await reassign_service_desk_ticket_family(
                 self.db, workspace_id, ticket_id, assigned
@@ -881,6 +918,349 @@ class ServiceDeskTicketService:
             ],
         }
 
+    async def _owner_for_account(
+        self, workspace_id: str, sd: ServiceDeskTicket
+    ) -> str | None:
+        """Whose ticket this is, now that its partner is known.
+
+        Same precedence intake uses, and deliberately borrowed from it rather
+        than reimplemented: the account/product pairing is the narrowest answer,
+        the account's own owner is the fallback. Returns None when Master Data
+        names nobody, which leaves the current owner alone — an unowned partner
+        is not a reason to take a ticket off the person holding it.
+        """
+        from aexy.services.service_desk_intake_service import ServiceDeskIntakeService
+
+        intake = ServiceDeskIntakeService(self.db)
+        return await intake.product_owner(
+            sd.account_id, sd.product_id
+        ) or await intake.account_owner(sd.account_id)
+
+    # ------------------------------------------------------------ internal notes
+
+    async def add_note(
+        self,
+        workspace_id: str,
+        ticket_id: str,
+        content: str,
+        author_id: str,
+        scope_developer_id: str | None = None,
+    ) -> ServiceDeskNote:
+        """Record an internal note on a ticket.
+
+        Stored as ``TicketResponse(is_internal=True)`` — the same row the desk
+        has always written its own audit trail into, so a colleague's note and
+        the system's account of what it did read as one history rather than two
+        parallel ones. It is never sent anywhere: a note the requester can see is
+        an email, and that is the compose box.
+
+        Scoped through ``_sd`` with ``for_edit`` like every other mutation, so
+        somebody who may only *view* a ticket cannot annotate it.
+        """
+        await self._sd(workspace_id, ticket_id, developer_id=scope_developer_id, for_edit=True)
+
+        text = content.strip()
+        if not text:
+            raise HTTPException(status_code=422, detail="A note cannot be empty")
+
+        note = TicketResponse(
+            id=str(uuid4()),
+            ticket_id=ticket_id,
+            author_id=author_id,
+            content=text,
+            is_internal=True,
+        )
+        self.db.add(note)
+        await self.db.flush()
+
+        author = await self.db.get(Developer, author_id)
+        return ServiceDeskNote(
+            id=note.id,
+            author_id=author_id,
+            author_name=(author.name or author.email) if author is not None else None,
+            content=note.content,
+            created_at=note.created_at,
+            system=False,
+        )
+
+    async def list_notes(
+        self, workspace_id: str, ticket_id: str, scope_developer_id: str | None = None
+    ) -> list[ServiceDeskNote]:
+        """This ticket's internal notes, oldest first. Read-scoped, not edit-scoped."""
+        await self._sd(workspace_id, ticket_id, developer_id=scope_developer_id)
+        rows = (
+            await self.db.execute(
+                select(TicketResponse, Developer.name, Developer.email)
+                .outerjoin(Developer, Developer.id == TicketResponse.author_id)
+                .where(
+                    TicketResponse.ticket_id == ticket_id,
+                    TicketResponse.is_internal.is_(True),
+                )
+                .order_by(TicketResponse.created_at)
+            )
+        ).all()
+        return [
+            ServiceDeskNote(
+                id=note.id,
+                author_id=note.author_id,
+                author_name=(name or email) if note.author_id else None,
+                content=note.content,
+                created_at=note.created_at,
+                system=note.author_id is None,
+            )
+            for note, name, email in rows
+        ]
+
+    # ------------------------------------------------- splitting a merged thread
+
+    async def split_messages(
+        self,
+        workspace_id: str,
+        ticket_id: str,
+        response_ids: list[str],
+        actor_id: str,
+        title: str | None = None,
+        pending_with: str | None = None,
+        assigned_owner_id: str | None = None,
+        scope_developer_id: str | None = None,
+    ) -> MessageSplitResponse:
+        """Move correspondence off this ticket onto a new one.
+
+        The repair for a ticket that absorbed a second, unrelated request. Until
+        the thread matcher was qualified, any message arriving in the same
+        provider conversation was appended — so a booking run and a COI recon
+        sheet, or an API onboarding question and a demo follow-up, became one
+        ticket with one clock, one classification and one closure.
+
+        Distinct from ``split_detected_issues``, which acts on what the model
+        read *inside a single message*. This acts on the messages themselves, and
+        is the only thing that can repair tickets already merged.
+
+        The new ticket inherits the source's account, product, request type and
+        owner unless told otherwise, because a wrongly-merged message is nearly
+        always the same partner — that similarity is why it merged. It gets its
+        own ``thread_ref`` of None: two rows sharing one would break the very
+        lookup that caused this.
+        """
+        from aexy.models.service_desk import ServiceDeskTicket as SDT
+        from aexy.services.service_desk_intake_service import ServiceDeskIntakeService
+
+        sd = await self._sd(
+            workspace_id, ticket_id, developer_id=scope_developer_id, for_edit=True
+        )
+        source = await self.db.get(Ticket, ticket_id)
+        if source is None:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+
+        wanted = list(dict.fromkeys(response_ids))
+        rows = (
+            await self.db.execute(
+                select(TicketResponse).where(
+                    TicketResponse.ticket_id == ticket_id,
+                    TicketResponse.id.in_(wanted),
+                    # Notes stay with the ticket they were written on: they are
+                    # commentary about this ticket's handling, not the requester's
+                    # correspondence, and moving them would rewrite its history.
+                    TicketResponse.is_internal.is_(False),
+                )
+            )
+        ).scalars().all()
+        if len(rows) != len(wanted):
+            raise HTTPException(
+                status_code=404,
+                detail="Some of those messages are not correspondence on this ticket",
+            )
+        # Everything would leave the source ticket with no conversation at all,
+        # which is a move, not a split — and the caller almost certainly has the
+        # wrong ids.
+        remaining = (
+            await self.db.execute(
+                select(func.count())
+                .select_from(TicketResponse)
+                .where(
+                    TicketResponse.ticket_id == ticket_id,
+                    TicketResponse.is_internal.is_(False),
+                )
+            )
+        ).scalar() or 0
+        if remaining <= len(rows):
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "That would move every message off this ticket. Leave at least one, "
+                    "or move the ticket instead of splitting it."
+                ),
+            )
+
+        ordered = sorted(rows, key=lambda r: r.created_at)
+        taxonomy = await load_taxonomy(self.db, workspace_id, seed=False)
+        target_stage = pending_with or sd.pending_with
+        if not taxonomy.stakeholder(target_stage):
+            known = ", ".join(s.slug for s in taxonomy.stakeholders) or "none configured"
+            raise HTTPException(
+                status_code=422,
+                detail=f"Unknown stakeholder {target_stage!r} for this workspace (known: {known})",
+            )
+        if assigned_owner_id is not None:
+            await self._validate_member(workspace_id, assigned_owner_id)
+
+        headline = (title or "").strip() or self._headline_of(ordered[0]) or source.title
+        # Inserted through intake's `_insert_ticket`, which allocates the number
+        # and retries inside a SAVEPOINT. `ticket_number` is max()+1 against a
+        # real `uq_ticket_number` constraint, so a split racing an inbound email
+        # collides — and an IntegrityError escaping here would not merely fail
+        # the split, it would leave the session needing rollback and turn the
+        # whole request into a 500. Calling `_next_ticket_number` and building
+        # the row by hand skipped exactly that protection.
+        new_ticket = await ServiceDeskIntakeService(self.db)._insert_ticket(
+            workspace_id,
+            form_id=source.form_id,
+            title=headline,
+            submitter_email=source.submitter_email,
+            submitter_name=source.submitter_name,
+            status=TicketStatus.NEW.value,
+            priority=source.priority,
+            assignee_id=assigned_owner_id or source.assignee_id,
+            source=source.source,
+            field_values={
+                "subject": headline,
+                "body": ordered[0].content,
+                # Not inherited: the participants and reply-to of the source
+                # belong to its conversation. Intake rebuilds them from the next
+                # message that arrives, and until then the requester is the
+                # answer — which `_reply_all` already falls back to.
+                "thread_participants": [],
+                "split_from": source.id,
+            },
+        )
+        # No `db.add`: `_insert_ticket` has already added it inside its savepoint.
+        await self.db.flush()
+
+        self.db.add(
+            SDT(
+                id=str(uuid4()),
+                workspace_id=workspace_id,
+                ticket_id=new_ticket.id,
+                mailbox_id=sd.mailbox_id,
+                request_type=sd.request_type,
+                product_id=sd.product_id,
+                account_id=sd.account_id,
+                vendor_id=sd.vendor_id,
+                pending_with=target_stage,
+                origin=sd.origin,
+                # A human decided this belongs elsewhere, which is exactly the
+                # judgement triage exists to collect — but the new ticket's
+                # request type and product are inherited guesses, so it is worth
+                # somebody confirming them.
+                needs_triage=True,
+                thread_ref=None,
+            )
+        )
+        await self.db.flush()
+
+        for row in ordered:
+            row.ticket_id = new_ticket.id
+
+        display_id = render_display_id(
+            await ticket_prefix(self.db, workspace_id), new_ticket.ticket_number
+        )
+        source_display = render_display_id(
+            await ticket_prefix(self.db, workspace_id), source.ticket_number
+        )
+        actor = await self.db.get(Developer, actor_id)
+        actor_label = (actor.name or actor.email) if actor is not None else "somebody"
+
+        # Both ends of the split say so, because either ticket can be the one
+        # somebody is looking at when they wonder where a message went.
+        self.db.add(
+            TicketResponse(
+                id=str(uuid4()),
+                ticket_id=ticket_id,
+                author_id=actor_id,
+                is_internal=True,
+                content=(
+                    f"{len(ordered)} message(s) moved to {display_id} by {actor_label} — "
+                    "they belonged to a different request."
+                ),
+            )
+        )
+        self.db.add(
+            TicketResponse(
+                id=str(uuid4()),
+                ticket_id=new_ticket.id,
+                author_id=actor_id,
+                is_internal=True,
+                content=(
+                    f"Split from {source_display} by {actor_label}, carrying "
+                    f"{len(ordered)} message(s). Fields are inherited from that ticket — "
+                    "confirm the request type and product."
+                ),
+            )
+        )
+        self.db.add(
+            TicketPendingSegment(
+                id=str(uuid4()),
+                workspace_id=workspace_id,
+                ticket_id=new_ticket.id,
+                pending_with=target_stage,
+                entered_at=datetime.now(timezone.utc),
+                changed_by_id=actor_id,
+                note=f"Split from {source_display}",
+            )
+        )
+        await self.db.flush()
+
+        # A split produces a real ticket with a real owner, so it announces
+        # itself like every other creation path does. Without this the new owner
+        # had no signal until the next daily digest, and an automation watching
+        # `service_desk.ticket_created` never ran for it — intake dispatches the
+        # same event, and so do the transition paths for `ticket_updated`.
+        new_sd = (
+            await self.db.execute(
+                select(SDT).where(SDT.ticket_id == new_ticket.id)
+            )
+        ).scalar_one()
+        await dispatch_service_desk_event(
+            self.db, workspace_id, "service_desk.ticket_created", new_ticket, new_sd
+        )
+        # Queued rather than sent: this class mutates the ticket and the API
+        # layer commits only once the handler returns, so a notification sent
+        # inline would announce a ticket a rollback could still remove.
+        if new_ticket.assignee_id and str(new_ticket.assignee_id) != str(actor_id):
+            identity = await self._alert_identity(
+                workspace_id, new_ticket, new_sd, actor_id
+            )
+            self._queue_alert(
+                "assigned",
+                recipient_id=str(new_ticket.assignee_id),
+                actor_id=actor_id,
+                **identity,
+            )
+
+        return MessageSplitResponse(
+            ticket_id=new_ticket.id, display_id=display_id, moved=len(ordered)
+        )
+
+    @staticmethod
+    def _headline_of(response: TicketResponse) -> str | None:
+        """A subject for a moved message, from its own stored text.
+
+        Outbound rows are stored with a ``Subject:`` line (the compose box writes
+        it); inbound rows are the raw body. Falls back to the first non-empty
+        line, trimmed to something that fits a list column.
+        """
+        for line in (response.content or "").splitlines():
+            stripped = line.strip()
+            if stripped.lower().startswith("subject:"):
+                value = stripped[8:].strip()
+                if value:
+                    return value[:200]
+        for line in (response.content or "").splitlines():
+            stripped = line.strip()
+            if stripped and not stripped.startswith(("To:", "Cc:", ">")):
+                return stripped[:200]
+        return None
+
     # ------------------------------------------------- outbound stakeholder mail
 
     async def _email_recipients(
@@ -911,12 +1291,21 @@ class ServiceDeskTicketService:
         account_slug = external_slug_for(taxonomy, "account")
         vendor_slug = external_slug_for(taxonomy, "vendor")
 
+        from aexy.services.service_desk_config import is_non_reply_address
+        from aexy.services.service_desk_intake_service import MANUAL_SENDER_ADDRESS
+
         out: list[TicketEmailRecipient] = []
         seen: set[str] = set()
 
         def add(address: str | None, label: str, stage: str | None = None) -> None:
             key = (address or "").strip().lower()
             if "@" not in key or key in seen:
+                return
+            # An address nothing can be delivered to is not an option, however
+            # much it looks like one. The phone-ticket sentinel has an `@` in it,
+            # so it passed the check above and was offered in the dropdown as
+            # "Requester" — picking it produced a 422 from the mail provider.
+            if key == MANUAL_SENDER_ADDRESS or is_non_reply_address(key):
                 return
             seen.add(key)
             out.append(TicketEmailRecipient(email=key, label=label, stage=stage))
@@ -983,6 +1372,7 @@ class ServiceDeskTicketService:
         ]
         # Falls back to the requester: a ticket that predates participant capture
         # can still answer the person who opened it, which is what it did before.
+        from aexy.services.service_desk_config import is_non_reply_address
         from aexy.services.service_desk_intake_service import MANUAL_SENDER_ADDRESS
 
         raw_to = values.get("thread_reply_to") or ticket.submitter_email or ""
@@ -990,12 +1380,24 @@ class ServiceDeskTicketService:
         # A ticket logged by phone has no requester address, only the sentinel
         # standing in for one. Prefilling it would put an undeliverable address
         # in the To box, which reads as a real recipient until the send fails.
-        if to == MANUAL_SENDER_ADDRESS:
-            to = None
+        #
+        # A daemon or no-reply address is refused for the same reason and one
+        # more: intake no longer stores one, but tickets that already have one
+        # stored are unanswerable until it stops being read. Asking on read
+        # rather than migrating means those recover the moment this ships, and
+        # a `thread_reply_to` nobody can write to falls back to the requester —
+        # who is, on a bounced thread, exactly the person still waiting.
+        if to == MANUAL_SENDER_ADDRESS or is_non_reply_address(to):
+            requester = (ticket.submitter_email or "").strip().lower() or None
+            to = None if requester == MANUAL_SENDER_ADDRESS else requester
         desk = (desk_address or "").strip().lower()
         return TicketReplyAll(
             to=to,
-            cc=[address for address in participants if address != to and address != desk],
+            cc=[
+                address
+                for address in participants
+                if address != to and address != desk and not is_non_reply_address(address)
+            ],
         )
 
     @staticmethod
@@ -1014,6 +1416,7 @@ class ServiceDeskTicketService:
         Who a reply goes *to* is untouched — that is still the last person who
         wrote in, not the last person the desk wrote to.
         """
+        from aexy.services.service_desk_config import is_non_reply_address
         from aexy.services.service_desk_intake_service import THREAD_PARTICIPANT_LIMIT
 
         desk = ""
@@ -1033,6 +1436,11 @@ class ServiceDeskTicketService:
         for candidate in [recipient, *cc]:
             value = (candidate or "").strip().lower()
             if not value or value == desk or value in participants:
+                continue
+            # Keeps the poisoning from coming back round: if a daemon address is
+            # ever the recipient of a send, recording it would restore exactly
+            # the state the read-side guard is there to undo.
+            if is_non_reply_address(value):
                 continue
             if len(participants) >= THREAD_PARTICIPANT_LIMIT:
                 break
@@ -1822,6 +2230,7 @@ class ServiceDeskTicketService:
                 str(scope_developer_id),
                 assignee_id=ticket.assignee_id,
                 pending_with=sd.pending_with,
+                logged_by_id=(ticket.field_values or {}).get("logged_by_id"),
             )
 
         account_name = None
@@ -1914,6 +2323,34 @@ class ServiceDeskTicketService:
             )
         ).all()
 
+        # Who logged it, resolved to a name. Only manual tickets carry this —
+        # the id is stamped by `create_manual_ticket` — so an email ticket
+        # answers "nobody here logged it, it arrived", which is what a null
+        # says.
+        logged_by_id = (fv or {}).get("logged_by_id")
+        logged_by_name = None
+        if logged_by_id:
+            logger_row = await self.db.get(Developer, str(logged_by_id))
+            if logger_row is not None:
+                logged_by_name = logger_row.name or logger_row.email
+            logged_by_id = str(logged_by_id)
+
+        # Internal notes, as their own stream. Filtered out of the detail
+        # entirely until now, which hid both a colleague's note and the desk's
+        # own account of what it did — every stage transition, split, routing
+        # decision and thread merge is written here.
+        notes = (
+            await self.db.execute(
+                select(TicketResponse, Developer.name, Developer.email)
+                .outerjoin(Developer, Developer.id == TicketResponse.author_id)
+                .where(
+                    TicketResponse.ticket_id == ticket_id,
+                    TicketResponse.is_internal.is_(True),
+                )
+                .order_by(TicketResponse.created_at)
+            )
+        ).all()
+
         return ServiceDeskTicketDetail(
             id=sd.id,
             ticket_id=sd.ticket_id,
@@ -1939,7 +2376,22 @@ class ServiceDeskTicketService:
             needs_triage=sd.needs_triage,
             ai_confidence=sd.ai_confidence,
             created_at=sd.created_at,
+            priority=ticket.priority,
             linked_task_id=ticket.linked_task_id,
+            notes=[
+                ServiceDeskNote(
+                    id=note.id,
+                    author_id=note.author_id,
+                    author_name=(note_author or note_email) if note.author_id else None,
+                    content=note.content,
+                    created_at=note.created_at,
+                    # No author means the desk wrote it. Marked so the UI can
+                    # style it as the system explaining itself rather than as a
+                    # colleague's remark.
+                    system=note.author_id is None,
+                )
+                for note, note_author, note_email in notes
+            ],
             detected_issues=detected_issues,
             split_done_indexes=_split_done_indexes(fv, len(detected_issues)),
             segments=[SegmentResponse.model_validate(s) for s in segments],
@@ -1966,6 +2418,8 @@ class ServiceDeskTicketService:
             reply_all=self._reply_all(ticket, desk_address),
             attachments=self._detail_attachments(ticket),
             assignment_note=await self._assignment_note(ticket),
+            logged_by_id=logged_by_id,
+            logged_by_name=logged_by_name,
             community_topic=self._community_topic(ticket),
             tat=tat,
             can_edit=can_edit,

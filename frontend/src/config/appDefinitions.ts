@@ -149,12 +149,24 @@ export const APP_CATALOG: Record<string, AppDefinition> = {
   tickets: {
     id: "tickets",
     name: "Tickets",
-    description: "Support ticket management",
+    description: "Observability alerts and form submissions",
     icon: Ticket,
-    category: "business",
+    // Engineering, not business. The queue is worked by whoever is on call: it
+    // holds observability alerts with a severity and a recurrence count, and
+    // the bug reports and support requests raised against the product. The
+    // customer-facing desk is a separate app.
+    category: "engineering",
     baseRoute: "/tickets",
     requiredPermission: "can_view_tickets",
-    modules: [],
+    // `/tickets` itself stays a redirect to Home — the command palette, the `t`
+    // shortcut, the app header, several dashboard widgets and the uptime
+    // incident pages all link to it expecting the personal work list. The
+    // module routes below are the real screens.
+    modules: [
+      { id: "alerts", name: "Alerts", description: "Tickets opened by observability alerts", route: "/alerts" },
+      { id: "submissions", name: "Submissions", description: "Bug reports and support requests", route: "/submissions" },
+      { id: "alert_history", name: "Alert history", description: "Every alert received, and what it did", route: "/alert-history" },
+    ],
   },
   service_desk: {
     id: "service_desk",
@@ -596,7 +608,7 @@ export const SYSTEM_BUNDLES: AppBundleTemplate[] = [
       community: { enabled: true },
       tracking: { enabled: true, modules: { standups: true, blockers: true, time: true } },
       sprints: { enabled: true, modules: { board: true, epics: true, tasks: true, backlog: true } },
-      tickets: { enabled: true },
+      tickets: { enabled: true, modules: { alerts: true, submissions: true, alert_history: true } },
       docs: { enabled: true },
       learning: { enabled: false }, // availability: "contact_support"
       oncall: { enabled: true },
@@ -682,7 +694,7 @@ export const SYSTEM_BUNDLES: AppBundleTemplate[] = [
         modules: { overview: true, inbox: true, agents: true, activities: true, automations: true, calendar: true },
       },
       email_marketing: { enabled: true, modules: { campaigns: true, templates: true, settings: true } },
-      tickets: { enabled: true },
+      tickets: { enabled: true, modules: { alerts: true, submissions: true, alert_history: true } },
       docs: { enabled: true },
       forms: { enabled: true },
       tracking: { enabled: false },
@@ -722,7 +734,7 @@ export const SYSTEM_BUNDLES: AppBundleTemplate[] = [
       community: { enabled: true },
       tracking: { enabled: true, modules: { standups: true, blockers: true, time: true } },
       sprints: { enabled: true, modules: { board: true, epics: true, tasks: true, backlog: true } },
-      tickets: { enabled: true },
+      tickets: { enabled: true, modules: { alerts: true, submissions: true, alert_history: true } },
       reviews: { enabled: true, modules: { cycles: true, goals: true, peer_requests: true, manage: true } },
       hiring: {
         enabled: true,
@@ -763,6 +775,9 @@ export const SIDEBAR_TO_APP_MAP: Record<string, string> = {
   "/tracking/time": "tracking",
   "/sprints": "sprints",
   "/tickets": "tickets",
+  "/tickets/alerts": "tickets",
+  "/tickets/submissions": "tickets",
+  "/tickets/alert-history": "tickets",
   "/organization": "organization",
   "/organization/departments": "organization",
   "/organization/directory": "organization",

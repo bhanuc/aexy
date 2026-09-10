@@ -17,6 +17,7 @@ import {
   TicketStatus,
   TicketPriority,
   TicketSeverity,
+  TicketSortKey,
   FormTheme,
   FormDestinationConfig,
   ConditionalRule,
@@ -228,9 +229,15 @@ export function useTickets(
     form_id?: string;
     status?: TicketStatus[];
     priority?: TicketPriority[];
+    severity?: TicketSeverity[];
     assignee_id?: string;
     team_id?: string;
     sla_breached?: boolean;
+    source?: string[];
+    source_is_null?: boolean;
+    intake?: "alerts" | "submissions";
+    sort?: TicketSortKey;
+    direction?: "asc" | "desc";
     limit?: number;
     offset?: number;
   }
@@ -246,6 +253,9 @@ export function useTickets(
     queryKey: ["tickets", workspaceId, params],
     queryFn: () => ticketsApi.list(workspaceId!, params),
     enabled: !!workspaceId,
+    // Paging a queue should not blank the table between pages — the rows the
+    // reader was looking at stay put until the next page lands.
+    placeholderData: (previous) => previous,
   });
 
   const deleteMutation = useMutation({

@@ -191,6 +191,43 @@ async def list_integrations(
     return [_to_response(i) for i in integrations]
 
 
+@router.get("/events", response_model=AlertEventListResponse)
+async def list_workspace_events(
+    workspace_id: str,
+    limit: int = Query(50, le=200),
+    offset: int = Query(0, ge=0),
+    action: list[str] | None = Query(default=None),
+    fingerprint: str | None = Query(default=None),
+    unresolved_only: bool = Query(default=False),
+    current_user: Developer = Depends(get_current_developer),
+    db: AsyncSession = Depends(get_db),
+) -> AlertEventListResponse:
+    """Every integration's alert history, newest first.
+
+    Declared before ``/{integration_id}/events`` so the literal path wins:
+    FastAPI matches in declaration order, and a route parameter would otherwise
+    swallow "events" as an integration id.
+
+    Read-only, so ``_verify_access`` at its default "viewer" level — a developer
+    debugging a noisy alert should not need permission to reconfigure the
+    integration.
+    """
+    await _verify_access(workspace_id, current_user, db)
+    events, total = await AlertIntegrationService(db).list_events(
+        workspace_id,
+        None,
+        limit=limit,
+        offset=offset,
+        actions=action,
+        fingerprint=fingerprint,
+        unresolved_only=unresolved_only,
+    )
+    return AlertEventListResponse(
+        events=[AlertEventResponse.model_validate(e) for e in events],
+        total=total,
+    )
+
+
 @router.get("/{integration_id}", response_model=AlertIntegrationResponse)
 async def get_integration(
     workspace_id: str,
@@ -260,12 +297,21 @@ async def list_events(
     integration_id: str,
     limit: int = Query(50, le=200),
     offset: int = Query(0, ge=0),
+    action: list[str] | None = Query(default=None),
+    fingerprint: str | None = Query(default=None),
+    unresolved_only: bool = Query(default=False),
     current_user: Developer = Depends(get_current_developer),
     db: AsyncSession = Depends(get_db),
 ) -> AlertEventListResponse:
     await _verify_access(workspace_id, current_user, db)
     events, total = await AlertIntegrationService(db).list_events(
-        workspace_id, integration_id, limit=limit, offset=offset
+        workspace_id,
+        integration_id,
+        limit=limit,
+        offset=offset,
+        actions=action,
+        fingerprint=fingerprint,
+        unresolved_only=unresolved_only,
     )
     return AlertEventListResponse(
         events=[AlertEventResponse.model_validate(e) for e in events],

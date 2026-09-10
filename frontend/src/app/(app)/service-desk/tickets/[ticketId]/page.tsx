@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Clock,
+  StickyNote,
   Download,
   FileText,
   GitBranch,
@@ -32,7 +33,7 @@ import {
 import { PublishToCommunityCard } from "./PublishToCommunityCard";
 import { useProjects } from "@/hooks/useProjects";
 import { useWorkspace, useWorkspaceMembers } from "@/hooks/useWorkspace";
-import { PendingWith, RequestType, TicketAttachment } from "@/lib/service-desk-api";
+import { PendingWith, PRIORITY_ORDER, TicketAttachment } from "@/lib/service-desk-api";
 import {
   getStatusColor,
   SERVICE_DESK_BREACH_COLORS,
@@ -70,6 +71,8 @@ function fmtDays(seconds: number): string {
 
 export default function ServiceDeskTicketDetailPage() {
   const t = useTranslations("serviceDesk");
+  // Shared strings (Cancel, Save, …) live in the `common` namespace.
+  const tc = useTranslations("common");
   const router = useRouter();
   const params = useParams();
   const ticketId = params.ticketId as string;
@@ -102,6 +105,8 @@ export default function ServiceDeskTicketDetailPage() {
     downloadAttachment,
     splitDetectedIssues,
     updateTicket,
+    addNote,
+    splitMessages,
     emailStakeholder,
     uploadFiles,
     deleteUpload,
@@ -134,6 +139,11 @@ export default function ServiceDeskTicketDetailPage() {
   // Only the fields the KAM has actually touched. Anything absent keeps whatever
   // the ticket already holds, so a background refetch never fights the form.
   const [draft, setDraft] = useState<Record<string, string>>({});
+  const [noteDraft, setNoteDraft] = useState("");
+  // Which messages are selected to be moved onto a new ticket. Empty until
+  // somebody starts a split, which is the repair for a merged thread.
+  const [splitIds, setSplitIds] = useState<string[]>([]);
+  const [splitting, setSplitting] = useState(false);
   const [mailTo, setMailTo] = useState("");
   // Chips rather than a comma-separated string. The addresses are prefilled from
   // the thread now, so the common act is removing one — and picking a name out of
@@ -246,6 +256,20 @@ export default function ServiceDeskTicketDetailPage() {
   const bc = SERVICE_DESK_BREACH_COLORS[ticket.tat.breach_level];
   const sc = getStatusColor(TICKET_STATUS_COLORS, ticket.status ?? "new");
   const detectedIssues = ticket.detected_issues ?? [];
+  // Same guard as `detected_issues` above: a payload cached from before this
+  // field shipped has no `notes`, and reading `.length` off it blanks the page.
+  const notes = ticket.notes ?? [];
+  // A ticket logged by phone has no requester address, only the sentinel
+  // standing in for one. The backend already refuses to send mail to it and
+  // refuses to prefill it in the compose box; showing it as the requester was
+  // the last place it leaked, and "manual@local" reads to a KAM as a real
+  // address they could write to.
+  const requesterLabel =
+    ticket.requester_name ||
+    (ticket.requester_email && ticket.requester_email !== "manual@local"
+      ? ticket.requester_email
+      : null) ||
+    t("detail.noRequester");
   const splitDoneIndexes = new Set(ticket.split_done_indexes ?? []);
 
   const apply = async () => {
@@ -487,6 +511,22 @@ export default function ServiceDeskTicketDetailPage() {
               {ticket.correspondence.map((entry) => (
                 <li key={entry.id} className="rounded-md border border-border p-3">
                   <div className="flex flex-wrap items-center gap-2">
+                    {/* Only while a split is in progress, so the ordinary
+                        reading view stays a conversation rather than a form. */}
+                    {canEdit && splitting && (
+                      <input
+                        type="checkbox"
+                        checked={splitIds.includes(entry.id)}
+                        aria-label={t("detail.splitSelect")}
+                        onChange={(e) =>
+                          setSplitIds((ids) =>
+                            e.target.checked
+                              ? [...ids, entry.id]
+                              : ids.filter((x) => x !== entry.id),
+                          )
+                        }
+                      />
+                    )}
                     <span className="break-all text-sm font-medium">{entry.author_email || t("detail.unknownSender")}</span>
                     <Badge variant={entry.direction === "outgoing" ? "default" : "secondary"}>
                       {entry.direction === "outgoing" ? t("detail.outgoing") : t("detail.incoming")}
@@ -502,6 +542,55 @@ export default function ServiceDeskTicketDetailPage() {
                 </li>
               ))}
               </ol>
+
+              {/* Repairing a merged thread. Until the matcher required subject
+                  agreement, any message arriving in the same provider
+                  conversation was appended — so two unrelated requests could end
+                  up sharing one ticket, one clock and one closure. This is the
+                  only thing that separates them again. */}
+              {canEdit && ticket.correspondence.length > 1 && (
+                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
+                  {!splitting ? (
+                    <>
+                      <Button size="sm" variant="outline" onClick={() => setSplitting(true)}>
+                        {t("detail.splitStart")}
+                      </Button>
+                      <span className="text-xs text-muted-foreground">
+                        {t("detail.splitHint")}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        size="sm"
+                        disabled={splitIds.length === 0 || splitMessages.isPending}
+                        onClick={async () => {
+                          const result = await splitMessages.mutateAsync({
+                            id: ticketId,
+                            data: { response_ids: splitIds },
+                          });
+                          setSplitting(false);
+                          setSplitIds([]);
+                          // Straight to the new ticket: the reason for splitting
+                          // is that those messages need handling on their own.
+                          router.push(`/service-desk/tickets/${result.ticket_id}`);
+                        }}
+                      >
+                        {splitMessages.isPending
+                          ? t("detail.splitMoving")
+                          : t("detail.splitMove", { count: splitIds.length })}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => { setSplitting(false); setSplitIds([]); }}
+                      >
+                        {tc("cancel")}
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
             </Card>
           )}
 
@@ -587,14 +676,41 @@ export default function ServiceDeskTicketDetailPage() {
           <Card className="space-y-4 p-4">
             <div className="text-sm font-semibold">{t("detail.details")}</div>
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-1">
-              <Field label={t("detail.requester")} value={ticket.requester_name || ticket.requester_email || "—"} />
+              <Field label={t("detail.requester")} value={requesterLabel} />
               <Field
                 label={t("detail.pendingWith")}
                 value={<span className={`inline-flex rounded px-1.5 py-0.5 text-xs ${pc?.bg} ${pc?.text}`}>{stakeholderLabel(ticket.pending_with)}</span>}
               />
+              {/* How this ticket got here. `origin` has been on the API all
+                  along and was never rendered, so a call somebody logged and an
+                  email that arrived by itself looked identical — which matters,
+                  because only one of them has a requester you can reply to. */}
+              <Field label={t("detail.source")} value={t(`origin.${ticket.origin}`)} />
+              {/* Who logged it. Only manual tickets have one: an email ticket
+                  has a requester, not a creator. Rendered only when there is
+                  one, rather than as a dash on every emailed ticket. */}
+              {ticket.logged_by_name && (
+                <Field label={t("detail.loggedBy")} value={ticket.logged_by_name} />
+              )}
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1">
+              {/* Urgency, which the desk had no way to express. TAT breach level
+                  answers "how long has this waited", which is a clock — a P1
+                  outage and a routine address change looked identical until time
+                  ran out on both. Left blank rather than defaulted, so "nobody
+                  has said" stays visible. */}
+              <Picker
+                label={t("detail.priority")}
+                value={pick("priority", ticket.priority)}
+                onChange={(v) => setDraft((d) => ({ ...d, priority: v }))}
+                placeholder={t("detail.priorityUnset")}
+                disabled={!canEdit}
+                options={PRIORITY_ORDER.map((p) => ({
+                  value: p,
+                  label: t(`priority.${p}`),
+                }))}
+              />
               <Picker
                 label={t("detail.requestType")}
                 value={pick("request_type", ticket.request_type)}
@@ -1113,6 +1229,63 @@ export default function ServiceDeskTicketDetailPage() {
               </div>
             </Card>
           )}
+
+          {/* Internal notes — the desk talking to itself.
+              Deliberately a second stream rather than folded into
+              Correspondence, which means "mail that left or arrived": merging
+              them is how somebody comes to believe a partner was told
+              something. The system's own notes (transitions, splits, thread
+              merges) surface here too, and were previously unreachable. */}
+          <Card className="p-4" data-testid="sd-notes">
+            <div className="mb-3 flex items-center gap-1.5 text-sm font-semibold">
+              <StickyNote className="h-4 w-4" /> {t("detail.notes")}
+            </div>
+            {notes.length === 0 ? (
+              <p className="text-sm text-muted-foreground">{t("detail.notesEmpty")}</p>
+            ) : (
+              <ol className="space-y-3">
+                {notes.map((n) => (
+                  <li
+                    key={n.id}
+                    className={`rounded-md border p-2.5 text-sm ${
+                      n.system ? "border-dashed bg-muted/40" : "border-border"
+                    }`}
+                  >
+                    <div className="mb-1 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">
+                        {n.system ? t("detail.noteSystem") : n.author_name || t("detail.noteUnknown")}
+                      </span>
+                      <span>{new Date(n.created_at).toLocaleString()}</span>
+                    </div>
+                    <p className="whitespace-pre-wrap break-words">{n.content}</p>
+                  </li>
+                ))}
+              </ol>
+            )}
+            {canEdit && (
+              <div className="mt-3 space-y-2">
+                <textarea
+                  value={noteDraft}
+                  onChange={(e) => setNoteDraft(e.target.value)}
+                  placeholder={t("detail.notePlaceholder")}
+                  rows={3}
+                  maxLength={10000}
+                  aria-label={t("detail.notePlaceholder")}
+                  className="w-full rounded-md border border-input bg-background p-2 text-sm"
+                />
+                <Button
+                  size="sm"
+                  disabled={!noteDraft.trim() || addNote.isPending}
+                  onClick={async () => {
+                    await addNote.mutateAsync({ id: ticketId, content: noteDraft.trim() });
+                    setNoteDraft("");
+                  }}
+                >
+                  {addNote.isPending ? t("detail.noteSaving") : t("detail.noteAdd")}
+                </Button>
+              </div>
+            )}
+          </Card>
 
           {/* Timeline */}
           {/* Photographed on its own by `e2e/docs-shots/service-desk.spec.ts`

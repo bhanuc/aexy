@@ -119,6 +119,8 @@ vi.mock("@/hooks/useServiceDesk", () => ({
     changePendingWith: { mutateAsync: vi.fn(), isPending: false },
     convertToTask: { mutate: vi.fn(), isPending: false },
     updateTicket: { mutateAsync: vi.fn(), isPending: false, isError: false },
+    addNote: { mutateAsync: vi.fn(), isPending: false },
+    splitMessages: { mutateAsync: vi.fn(), isPending: false },
     emailStakeholder: { mutateAsync: vi.fn(), isPending: false, isError: false },
     uploadFiles: { mutate: vi.fn(), isPending: false },
     deleteUpload: { mutate: vi.fn(), isPending: false },

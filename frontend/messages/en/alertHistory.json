@@ -1,0 +1,30 @@
+{
+  "alertHistory": {
+    "title": "Alert history",
+    "subtitle": "Every alert received and what it did. Deduplication means one ticket can stand for hundreds of alerts.",
+    "filterAction": "Outcome",
+    "allActions": "Any outcome",
+    "unresolvedOnly": "Only ones that went nowhere",
+    "filterByFingerprint": "Show every alert sharing this fingerprint",
+    "count": "{count} alerts",
+    "payload": "Payload",
+    "ticketDeleted": "ticket deleted",
+    "empty": "No alerts received yet.",
+    "noIntegrationTitle": "No alert integration connected",
+    "noIntegrationBody": "Connect OpenObserve or another provider and its alerts will open tickets here.",
+    "noIntegrationAction": "Set one up",
+    "previous": "Previous",
+    "next": "Next",
+    "page": "Page {page} of {pages}",
+    "action": {
+      "created": "Opened a ticket",
+      "updated": "Updated a ticket",
+      "throttled": "Throttled",
+      "reopened": "Reopened",
+      "resolved": "Resolved",
+      "dropped": "Dropped",
+      "error": "Failed",
+      "pending": "Never finished"
+    }
+  }
+}

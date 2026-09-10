@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 import bcrypt
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import and_, case, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -71,6 +71,72 @@ def headline_from_field_values(field_values: dict | None) -> str | None:
                 return text[:500]
     return None
 _SAFE_FILENAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+# Severity and priority are stored as words, so ordering by the column sorts
+# them alphabetically — "critical" above "high" above "low" above "medium",
+# which is nearly the worst possible order for a queue. These map each value to
+# its magnitude so the largest number is the most urgent, which makes
+# `direction="desc"` mean "worst first" as a first click on the column implies.
+def _alert_sources() -> list[str]:
+    """Every provider slug an alert can arrive under.
+
+    Read from `AlertProvider` rather than written out, because the same list
+    existed in a frontend constant and a SQL migration and would have drifted
+    the first time a provider was added.
+    """
+    from aexy.models.alerting import AlertProvider
+
+    return [provider.value for provider in AlertProvider]
+
+
+_SEVERITY_RANK = {"critical": 3, "high": 2, "medium": 1, "low": 0}
+_PRIORITY_RANK = {"urgent": 3, "high": 2, "medium": 1, "low": 0}
+
+
+def _ticket_order(filters) -> list:
+    """The ORDER BY for a ticket list, from a validated sort key.
+
+    Two properties worth keeping in mind:
+
+    * **Unset sorts last, whichever way the arrow points.** An absent severity
+      is not "less severe than low", it is nobody having said — so nullness is
+      its own leading key and is never reversed. Folding it into the rank with
+      an out-of-range value only works in one direction; reversed, a queue
+      sorted by severity opens with every untriaged row.
+    * **A stable tiebreaker.** Severity and priority have four values across
+      what may be thousands of rows, so without one the order inside a band
+      shuffles between pages and the same ticket appears twice.
+    """
+    key = getattr(filters, "sort", "created") or "created"
+    descending = getattr(filters, "direction", "desc") != "asc"
+
+    def ranked(column, ranks: dict[str, int]) -> list:
+        unset = case((column.is_(None), 1), else_=0)
+        rank = case(ranks, value=column, else_=-1)
+        return [unset.asc(), rank.desc() if descending else rank.asc()]
+
+    if key == "severity":
+        primary = ranked(Ticket.severity, _SEVERITY_RANK)
+    elif key == "priority":
+        primary = ranked(Ticket.priority, _PRIORITY_RANK)
+    elif key == "occurrences":
+        primary = [
+            Ticket.occurrence_count.desc() if descending else Ticket.occurrence_count.asc()
+        ]
+    elif key == "last_seen":
+        # A ticket nobody has seen recur has no `last_seen_at`; it belongs at
+        # the bottom of "most recently seen", not the top.
+        primary = [
+            case((Ticket.last_seen_at.is_(None), 1), else_=0).asc(),
+            Ticket.last_seen_at.desc() if descending else Ticket.last_seen_at.asc(),
+        ]
+    elif key == "updated":
+        primary = [Ticket.updated_at.desc() if descending else Ticket.updated_at.asc()]
+    else:
+        primary = [Ticket.created_at.desc() if descending else Ticket.created_at.asc()]
+
+    return [*primary, Ticket.ticket_number.desc()]
 
 
 class TicketService:
@@ -217,7 +283,14 @@ class TicketService:
         return int(row[0]) - 1
 
     async def _apply_sla(self, ticket: Ticket) -> None:
-        """Apply SLA policy to a ticket."""
+        """Apply the first matching SLA policy to a ticket.
+
+        Public via ``apply_sla`` for the alert path: this used to be called
+        from exactly one place, the form-submission create, so an
+        observability alert never got an ``sla_due_at`` and could therefore
+        never breach. A critical production alert had no clock at all while a
+        password-reset form submission did.
+        """
         # Find matching SLA policy
         stmt = (
             select(SLAPolicy)
@@ -244,6 +317,15 @@ class TicketService:
             if priorities and ticket.priority not in priorities:
                 continue
 
+            # Severity, for tickets nobody submitted. An alert has no form a
+            # policy could sensibly key on beyond "the incident form", and its
+            # priority is derived from its severity anyway — severity is the
+            # thing an on-call commitment is actually written against
+            # ("critical answered in 30 minutes").
+            severities = conditions.get("severities", [])
+            if severities and ticket.severity not in severities:
+                continue
+
             # Apply first matching policy
             if policy.first_response_target_minutes:
                 from datetime import timedelta
@@ -251,6 +333,14 @@ class TicketService:
                     minutes=policy.first_response_target_minutes
                 )
             break
+
+    async def apply_sla(self, ticket: Ticket) -> None:
+        """Public entry point for callers outside this service.
+
+        Named without the underscore so the alert ingestion path is not
+        reaching into a private method to get a clock onto its tickets.
+        """
+        await self._apply_sla(ticket)
 
     async def get_ticket(self, ticket_id: str) -> Ticket | None:
         """Get a ticket by ID."""
@@ -323,6 +413,11 @@ class TicketService:
                 base_stmt = base_stmt.where(Ticket.status.in_(filters.status))
             if filters.priority:
                 base_stmt = base_stmt.where(Ticket.priority.in_(filters.priority))
+            # `severity` has been on `TicketFilters` all along and was never
+            # translated into a clause — a filter the API accepted and silently
+            # ignored. It is the axis an alert list is actually worked by.
+            if filters.severity:
+                base_stmt = base_stmt.where(Ticket.severity.in_(filters.severity))
             if filters.assignee_id:
                 base_stmt = base_stmt.where(Ticket.assignee_id == filters.assignee_id)
             if filters.team_id:
@@ -337,6 +432,29 @@ class TicketService:
                 base_stmt = base_stmt.where(Ticket.created_at >= filters.created_after)
             if filters.created_before:
                 base_stmt = base_stmt.where(Ticket.created_at <= filters.created_before)
+            # Which intake, positively. An Alerts list asks for the provider
+            # slugs; a Submissions list asks for null-or-"form", which is why
+            # `source_is_null` exists separately — a list of values cannot
+            # express "no source recorded".
+            source_clauses = []
+            if filters.source:
+                source_clauses.append(Ticket.source.in_(filters.source))
+            if filters.source_is_null:
+                source_clauses.append(Ticket.source.is_(None))
+            # `intake` is the same question asked without the caller having to
+            # know which providers exist. `AlertProvider` is the one list, so a
+            # new provider reaches both screens without a frontend release.
+            if filters.intake == "alerts":
+                source_clauses.append(Ticket.source.in_(_alert_sources()))
+            elif filters.intake == "submissions":
+                source_clauses.append(
+                    or_(
+                        Ticket.source.is_(None),
+                        Ticket.source.notin_(_alert_sources()),
+                    )
+                )
+            if source_clauses:
+                base_stmt = base_stmt.where(or_(*source_clauses))
 
         # Service Desk tickets live in their own module (source='service_desk_*').
         # Exclude them from the generic tickets list unless a caller explicitly
@@ -355,7 +473,7 @@ class TicketService:
         stmt = (
             base_stmt
             .options(selectinload(Ticket.form), selectinload(Ticket.assignee))
-            .order_by(Ticket.created_at.desc())
+            .order_by(*_ticket_order(filters))
             .limit(limit)
             .offset(offset)
         )

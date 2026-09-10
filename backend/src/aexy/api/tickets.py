@@ -1,5 +1,7 @@
 """Tickets API endpoints."""
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
@@ -27,6 +29,8 @@ from aexy.schemas.ticketing import (
     TicketShareResponse,
     TicketStatus,
     TicketPriority,
+    TicketSeverity,
+    TicketSortKey,
 )
 from aexy.services.ticket_service import TicketService, headline_from_field_values
 from aexy.services.workspace_service import WorkspaceService
@@ -102,6 +106,10 @@ def ticket_to_response(ticket) -> TicketResponseSchema:
         team_id=str(ticket.team_id) if ticket.team_id else None,
         external_issues=ticket.external_issues or [],
         linked_task_id=str(ticket.linked_task_id) if ticket.linked_task_id else None,
+        source=ticket.source,
+        dedup_key=ticket.dedup_key,
+        occurrence_count=ticket.occurrence_count,
+        last_seen_at=ticket.last_seen_at,
         first_response_at=ticket.first_response_at,
         resolved_at=ticket.resolved_at,
         closed_at=ticket.closed_at,
@@ -133,6 +141,12 @@ def ticket_to_list_response(ticket) -> TicketListResponse:
         updated_at=ticket.updated_at,
         form_name=ticket.form.name if ticket.form else None,
         assignee_name=ticket.assignee.name if ticket.assignee else None,
+        source=ticket.source,
+        dedup_key=ticket.dedup_key,
+        occurrence_count=ticket.occurrence_count,
+        last_seen_at=ticket.last_seen_at,
+        sla_due_at=ticket.sla_due_at,
+        service_name=(ticket.field_values or {}).get("service_name"),
     )
 
 
@@ -196,10 +210,20 @@ async def list_tickets(
     form_id: str | None = None,
     status_filter: list[TicketStatus] | None = Query(default=None, alias="status"),
     priority_filter: list[TicketPriority] | None = Query(default=None, alias="priority"),
+    severity_filter: list[TicketSeverity] | None = Query(default=None, alias="severity"),
     assignee_id: str | None = None,
     team_id: str | None = None,
     submitter_email: str | None = None,
     sla_breached: bool | None = None,
+    # Which intake. `source` names provider slugs ("openobserve"); a
+    # Submissions list wants `source_is_null=true` as well, because most
+    # form-raised rows record no source at all and a value list cannot say so.
+    source: list[str] | None = Query(default=None),
+    source_is_null: bool | None = Query(default=None),
+    # The same question without the client needing the provider list.
+    intake: Literal["alerts", "submissions"] | None = Query(default=None),
+    sort: TicketSortKey = "created",
+    direction: Literal["asc", "desc"] = "desc",
     limit: int = Query(default=50, le=100),
     offset: int = Query(default=0, ge=0),
     current_user: Developer = Depends(get_current_developer),
@@ -212,10 +236,16 @@ async def list_tickets(
         form_id=form_id,
         status=status_filter,
         priority=priority_filter,
+        severity=severity_filter,
         assignee_id=assignee_id,
         team_id=team_id,
         submitter_email=submitter_email,
         sla_breached=sla_breached,
+        source=source,
+        source_is_null=source_is_null,
+        intake=intake,
+        sort=sort,
+        direction=direction,
     )
 
     # The source-based exclusion below opts Service Desk tickets back IN when a
@@ -411,6 +441,11 @@ async def _get_owned_ticket(
             developer_id,
             assignee_id=ticket.assignee_id,
             pending_with=sd.pending_with,
+            # A logged call is editable by whoever logged it, whatever Master
+            # Data then did with the owner — the generic module has to honour the
+            # same rule or the attachment upload 404s on a ticket its own author
+            # created seconds earlier.
+            logged_by_id=(ticket.field_values or {}).get("logged_by_id"),
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

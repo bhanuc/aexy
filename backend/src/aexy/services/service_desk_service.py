@@ -10,7 +10,7 @@ import re
 from uuid import uuid4
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete, false, func, or_, select
+from sqlalchemy import case, delete, false, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -60,6 +60,7 @@ from aexy.models.ticketing import Ticket
 from aexy.models.developer import Developer
 from aexy.models.workspace import Workspace
 from aexy.schemas.service_desk import (
+    PRIORITY_ORDER,
     InboundEmail,
     VendorCreate,
     VendorResponse,
@@ -195,6 +196,7 @@ async def can_edit_ticket(
     *,
     assignee_id: str | None,
     pending_with: str,
+    logged_by_id: str | None = None,
 ) -> bool:
     """Whether the caller may *change* this ticket, as opposed to read it.
 
@@ -222,6 +224,13 @@ async def can_edit_ticket(
     ):
         return True
     if assignee_id is not None and str(assignee_id) == str(developer_id):
+        return True
+    # Whoever logged the call may finish logging it — attach the file, raise the
+    # task, correct what they mistyped — regardless of who Master Data then
+    # handed it to. Read authority alone is not enough: the attachment endpoint
+    # asks for edit, which is why the upload 404'd on a ticket its own author
+    # had just created.
+    if logged_by_id is not None and str(logged_by_id) == str(developer_id):
         return True
     taxonomy = await load_taxonomy(db, workspace_id, seed=False)
     function_key = taxonomy.internal_function_keys.get(pending_with)
@@ -279,23 +288,53 @@ async def resolve_scope_clause(db: AsyncSession, workspace_id: str, developer_id
     clauses = []
     if pending_values:
         clauses.append(ServiceDeskTicket.pending_with.in_(pending_values))
-    # Anyone who owns a stakeholder queue also sees what is assigned to them
-    # personally — previously gated on the literal "ops_kam" function key.
-    if functions & set(taxonomy.internal_function_keys.values()):
-        clauses.append(Ticket.assignee_id == developer_id)
+    # A ticket assigned to you is always yours to see. Unconditionally.
+    #
+    # This used to be gated on the caller belonging to one of the desk's own
+    # internal functions, which quietly excluded everybody else in the company:
+    # on the Bimaplan desk the internal functions are operations/sales/finance/
+    # marketing, so an engineer in Tech assigned a ticket got the notification,
+    # clicked it, and was told the ticket does not exist. With no function and no
+    # queue the clause list came out empty and the whole scope collapsed to
+    # `false()` — every ticket hidden, including their own.
+    #
+    # Assignment is the strongest claim to a ticket there is; making it depend on
+    # departmental bookkeeping is indefensible, and a desk routinely hands work
+    # to Tech, Legal or Product without adding them to its taxonomy first.
+    clauses.append(Ticket.assignee_id == developer_id)
+    # And a ticket you logged yourself, whoever ended up owning it.
+    #
+    # Logging a call assigns the owner from Master Data or the unmatched
+    # fallback, which is usually somebody else — and the operator then lost the
+    # ticket the instant it existed. The visible symptom was "Ticket logged, but
+    # finishing up failed: Ticket not found": the attachment upload is a second,
+    # scope-checked request, and it 404'd against the ticket the same person had
+    # just created, so the file was silently left behind.
+    #
+    # Whoever took the call is part of that ticket's history and can answer
+    # questions about it, so this is right on its own terms and not only as a
+    # fix. It admits nothing else: `logged_by_id` is stamped by the manual path
+    # and appears on no other ticket.
+    clauses.append(Ticket.field_values["logged_by_id"].as_string() == str(developer_id))
     if not clauses:
         return false()
     return or_(*clauses)
 
 
 async def describe_scope(db: AsyncSession, workspace_id: str, developer_id: str) -> str:
-    """``"all"`` | ``"assigned"`` | ``"function"`` | ``"none"`` — how wide the view is.
+    """``"all"`` | ``"function"`` | ``"assigned"`` — how wide the view is.
 
     The clause returned by ``resolve_scope_clause`` can't be introspected by the
-    UI, and an empty ticket list is ambiguous three ways: someone who was never
-    added to a department, someone in the default bucket with nothing assigned
-    today, and a genuinely quiet workspace all look identical. Naming the scope
-    lets the page say which one it is instead of implying there is no work.
+    UI, and an empty ticket list is ambiguous: someone in the default bucket with
+    nothing assigned today and a genuinely quiet workspace look identical. Naming
+    the scope lets the page say which one it is instead of implying there is no
+    work.
+
+    ``"none"`` used to be returned for a caller in no desk department, alongside
+    a message saying no tickets could be routed to them. That is no longer true —
+    assignment grants visibility on its own — and it was the message an engineer
+    outside the desk's own functions would read while holding a ticket somebody
+    had just handed them.
     """
     if await has_full_service_desk_view(db, workspace_id, developer_id):
         return "all"
@@ -308,9 +347,11 @@ async def describe_scope(db: AsyncSession, workspace_id: str, developer_id: str)
         if fk != owner_function
     ):
         return "function"
-    if owner_function is not None and owner_function in functions:
-        return "assigned"
-    return "none"
+    # "assigned" is the floor, not "none". Everyone sees what is assigned to
+    # them and what they logged themselves, whatever department they are in — so
+    # telling somebody "no tickets can be routed to you" would be false, and it
+    # is the message an engineer in Tech holding a handed-off ticket would read.
+    return "assigned"
 
 
 async def generic_ticket_scope_clause(db: AsyncSession, workspace_id: str, developer_id: str):
@@ -363,6 +404,61 @@ async def is_service_desk_ticket_visible(
     return (
         await db.execute(select(Ticket.id).where(Ticket.id == ticket_id, clause))
     ).scalar_one_or_none() is not None
+
+
+async def resolve_desk_head_id(db: AsyncSession, workspace_id: str) -> str | None:
+    """Who heads the department that runs this desk, from either place it is recorded.
+
+    "Head of a department" is stored twice in this product and the two were never
+    wired together:
+
+    * ``Department.head_id`` — a column on the department.
+    * ``DepartmentMember.role_in_department == "head"`` — a membership role, and
+      the one the Organization → Departments screen actually writes.
+
+    Everything reading only the column therefore believed departments had no
+    head, however carefully somebody had filled in the org chart — the Bimaplan
+    desk shows Chandan Tyagi as Head of Operations and its ``head_id`` is null.
+    The visible consequence was the ``desk_head`` assignment policy silently
+    doing nothing, which is the worst way for a setting to fail: it looks
+    configured.
+
+    The column wins when set, because it is the more specific statement. The
+    membership role is the fallback rather than the other way round so that a
+    desk which has deliberately named a different head keeps it.
+
+    Membership is joined against ``WorkspaceMember`` for the same reason
+    ``_random_owner`` does it: department rows outlive the people in them, and
+    assigning tickets to somebody who left is worse than assigning nobody.
+    """
+    from aexy.models.organization import DepartmentMemberRole
+    from aexy.models.workspace import WorkspaceMember
+
+    dept = await resolve_desk_department(db, workspace_id)
+    if dept is None:
+        return None
+    if dept.head_id:
+        return str(dept.head_id)
+
+    return (
+        await db.execute(
+            select(DepartmentMember.developer_id)
+            .join(
+                WorkspaceMember,
+                (WorkspaceMember.developer_id == DepartmentMember.developer_id)
+                & (WorkspaceMember.workspace_id == workspace_id),
+            )
+            .where(
+                DepartmentMember.department_id == dept.id,
+                DepartmentMember.role_in_department == DepartmentMemberRole.HEAD.value,
+                WorkspaceMember.status == "active",
+            )
+            # Deterministic when a department has recorded two heads, so the
+            # same ticket does not land on a different person each restart.
+            .order_by(DepartmentMember.joined_at, DepartmentMember.id)
+            .limit(1)
+        )
+    ).scalar_one_or_none()
 
 
 async def resolve_desk_department(db: AsyncSession, workspace_id: str):
@@ -485,6 +581,35 @@ def _ticket_headline():
     )
 
 
+def _priority_order(direction: str) -> list:
+    """ORDER BY for priority, with "nobody has said" always last.
+
+    Two things have to be true at once and a single expression cannot do both.
+    The stated priorities need a rank, because the column stores words and
+    alphabetical order puts "high" above "urgent". And an unset priority has to
+    sort *after* every stated one whichever way the arrow points — it is the
+    absence of an answer, so it belongs at the bottom of "most urgent first" and
+    equally at the bottom of "least urgent first".
+
+    A single `case(...)` with `else_` outside the range only satisfies that in
+    one direction: reversed, the else value leads and a queue sorted by priority
+    opens with every ticket nobody has triaged. So nullness is its own leading
+    key, always ascending, and the severity rank follows it.
+    """
+    unset = case((Ticket.priority.is_(None), 1), else_=0)
+    # The rank is severity *magnitude*, not position in the list: urgent is the
+    # largest number, so descending means most-urgent-first, which is what a
+    # first click on a priority column is expected to do. Ranking by list index
+    # instead made `desc` open with "low".
+    severity = {
+        value: len(PRIORITY_ORDER) - 1 - index
+        for index, value in enumerate(PRIORITY_ORDER)
+    }
+    rank = case(severity, value=Ticket.priority, else_=-1)
+    # `unset` is never reversed — that is the whole point of separating it.
+    return [unset.asc(), rank.asc() if direction == "asc" else rank.desc()]
+
+
 _SORTABLE = {
     "created": lambda: Ticket.created_at,
     "ticket": lambda: Ticket.ticket_number,
@@ -503,11 +628,18 @@ def _ticket_order(filters) -> list:
     a 422 before reaching here; the fallback covers a filters object built in
     Python rather than parsed from a request.
     """
-    column = _SORTABLE.get(getattr(filters, "sort", "created") or "created")
+    key = getattr(filters, "sort", "created") or "created"
+    direction = getattr(filters, "direction", "desc")
+    # Priority is two keys, not one: nullness leads and never reverses, so that
+    # an unset priority sorts last whichever way the arrow points. It cannot be
+    # expressed as a single column in `_SORTABLE`.
+    if key == "priority":
+        return _priority_order(direction)
+    column = _SORTABLE.get(key)
     if column is None:
         return [Ticket.created_at.desc()]
     expr = column()
-    return [expr.asc() if getattr(filters, "direction", "desc") == "asc" else expr.desc()]
+    return [expr.asc() if direction == "asc" else expr.desc()]
 
 
 class ServiceDeskService:
@@ -1877,6 +2009,8 @@ class ServiceDeskService:
             query = query.where(Ticket.status == filters.status)
         if filters.assigned_to is not None:
             query = query.where(Ticket.assignee_id == filters.assigned_to)
+        if filters.priority is not None:
+            query = query.where(Ticket.priority == filters.priority)
         if filters.q:
             # LIKE metacharacters are escaped rather than rejected: somebody
             # searching for a subject containing "100%" means the character.
@@ -2009,11 +2143,14 @@ class ServiceDeskService:
                     needs_triage=sd.needs_triage,
                     ai_confidence=sd.ai_confidence,
                     created_at=sd.created_at,
+                    priority=ticket.priority,
                 )
             )
         return out
 
-    async def create_manual_ticket(self, workspace_id: str, data: ManualTicketCreate) -> str:
+    async def create_manual_ticket(
+        self, workspace_id: str, data: ManualTicketCreate, logged_by_id: str | None = None
+    ) -> str:
         """Log a phone/WhatsApp request as a ticket (same fields, origin=manual).
 
         Somebody is holding a phone in one hand and watching this form submit
@@ -2054,6 +2191,17 @@ class ServiceDeskService:
             )
         ).scalar_one()
         sd.origin = "manual"
+        # Who took the call, stamped on the ticket so they keep it.
+        #
+        # Read by `resolve_scope_clause` and `can_edit_ticket`: assignment goes
+        # to Master Data's owner or the unmatched fallback, which is usually
+        # somebody else, and without this the operator lost the ticket the
+        # instant it existed — the attachment upload is a separate, scope-checked
+        # request and it 404'd on the ticket its own author had just created.
+        if logged_by_id:
+            values = dict(ticket.field_values or {})
+            values["logged_by_id"] = str(logged_by_id)
+            ticket.field_values = values
         # `request_type` is optional on the wire: there is no universal default to
         # hardcode any more, so omitting it means "the workspace's default", which
         # intake has already applied. Only override when one was actually sent —
@@ -2096,14 +2244,27 @@ class ServiceDeskService:
         # the partner still landed the ticket on a random KAM, and every one had
         # to be moved by hand.
         #
-        # Most specific answer first: the account/product pairing, then the
-        # account's own owner. Nothing here overrides an assignee the caller set
-        # deliberately, because the manual endpoint does not accept one.
+        # Most specific answer first: an owner the operator named outright, then
+        # the account/product pairing, then the account's own owner.
         assignment_note: str | None = None
         product_owner_id = await intake.product_owner(sd.account_id, sd.product_id)
         account_owner_id = await intake.account_owner(sd.account_id)
 
-        if product_owner_id:
+        if data.assigned_owner_id:
+            from aexy.services.service_desk_ticket_service import ServiceDeskTicketService
+
+            # A person said who owns this, so nothing derived gets to argue. The
+            # endpoint used to accept no owner at all, which is why an operator
+            # who picked one watched the ticket go somewhere else — the only
+            # "Assign to" on the dialog was the task's, and it did nothing
+            # whatsoever unless a project was also chosen.
+            # Reuses the ticket service's check rather than a second copy, so
+            # "who may own a ticket" has one answer.
+            await ServiceDeskTicketService(self.db)._validate_member(
+                workspace_id, data.assigned_owner_id
+            )
+            ticket.assignee_id = data.assigned_owner_id
+        elif product_owner_id:
             ticket.assignee_id = product_owner_id
         elif account_owner_id:
             ticket.assignee_id = account_owner_id
@@ -2128,6 +2289,32 @@ class ServiceDeskService:
             from aexy.services.service_desk_intake_service import stamp_assignment_note
 
             self.db.add(stamp_assignment_note(ticket, assignment_note))
+        elif data.assigned_owner_id:
+            # Nothing to explain: a person chose this owner. But intake's note
+            # has to go, because it is still sitting on the ticket claiming
+            # "Assigned by fallback: no account is mapped to local" — the domain
+            # half of the `manual@local` sentinel — under an owner somebody set
+            # deliberately. Clearing it is the honest answer; inventing a note
+            # for a plain choice would just be noise on every logged call.
+            values = dict(ticket.field_values or {})
+            if values.pop("assignment_note", None) is not None:
+                ticket.field_values = values
+        elif not data.account_id:
+            # Intake's note is about a *sender domain*, and it read "no account is
+            # mapped to local" — the domain half of the `manual@local` sentinel.
+            # For a request taken over the phone there is no sender domain and
+            # nothing to add to Master Data, so the advice was not merely useless
+            # but wrong. Replaced with what actually happened.
+            from aexy.services.service_desk_intake_service import stamp_assignment_note
+
+            self.db.add(
+                stamp_assignment_note(
+                    ticket,
+                    "Logged by phone or WhatsApp with no partner named, so this ticket "
+                    "went to the desk's fallback owner. Pick the partner, or an owner, "
+                    "when logging to route it deliberately.",
+                )
+            )
 
         await self.db.flush()
 

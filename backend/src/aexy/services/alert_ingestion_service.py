@@ -289,6 +289,26 @@ class AlertIngestionService:
             # it here would silently drop a legitimately distinct alert.
             raise
 
+        # A response clock, if this workspace has a policy that matches. Applied
+        # after the insert rather than before, so a dedup loser that falls
+        # through to `_bump_ticket` above does not pay for a policy lookup it
+        # will not use.
+        #
+        # The alert path never did this: `_apply_sla` was called from exactly
+        # one place, the form-submission create. So a critical production alert
+        # had no `sla_due_at` and could never breach, while a password-reset
+        # form submission did. Best-effort — a missing clock is worth less than
+        # a lost alert.
+        try:
+            from aexy.services.ticket_service import TicketService
+
+            await TicketService(self.db).apply_sla(ticket)
+            await self.db.flush()
+        except Exception as exc:  # noqa: BLE001 — the ticket matters, the clock does not
+            logger.warning(
+                "Alert ticket %s created without an SLA due date (%s)", ticket.id, exc
+            )
+
         event.ticket_id = ticket.id
         result = await self._finish(event, AlertEventAction.CREATED)
         await self._dispatch(integration, ticket, "alert.ticket_created", ctx)
@@ -475,13 +495,29 @@ class AlertIngestionService:
         if incident_form:
             return incident_form
 
+        # Last resort: whichever form is oldest. It keeps the alert rather than
+        # dropping it, but the ticket lands on a form with no field for any of
+        # `service_name`, `severity`, `alert_name`, `log_context` or
+        # `trace_links` — so every piece of context this service writes renders
+        # as nothing, and the integration reads as broken when it is only
+        # unconfigured. Said out loud for exactly that reason: the symptom is
+        # invisible and the fix is one form.
         stmt = (
             select(TicketForm.id)
             .where(and_(TicketForm.workspace_id == workspace_id, TicketForm.is_active.is_(True)))
             .order_by(TicketForm.created_at)
             .limit(1)
         )
-        return (await self.db.execute(stmt)).scalar_one_or_none()
+        fallback = (await self.db.execute(stmt)).scalar_one_or_none()
+        if fallback is not None:
+            logger.warning(
+                "Workspace %s has no active 'incident_auto' ticket form, so alert tickets "
+                "are landing on form %s and their alert context will not render. Create one "
+                "from the Automated Incident template.",
+                workspace_id,
+                fallback,
+            )
+        return fallback
 
     async def _next_ticket_number(self, workspace_id: str) -> int:
         stmt = select(func.max(Ticket.ticket_number)).where(Ticket.workspace_id == workspace_id)

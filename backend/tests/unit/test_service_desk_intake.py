@@ -59,7 +59,11 @@ async def _workspace(db: AsyncSession, slug: str) -> Workspace:
     owner = Developer(email=f"owner-{slug}@example.com", name=f"Owner {slug}")
     db.add(owner)
     await db.flush()
-    ws = Workspace(name=f"WS {slug}", slug=slug, owner_id=owner.id)
+    ws = Workspace(
+        name=f"WS {slug}", slug=slug, owner_id=owner.id,
+        # The pool is no longer the default policy; these tests are about it.
+        settings={"service_desk": {"unmatched_assignment": "random"}},
+    )
     db.add(ws)
     await db.commit()
     await db.refresh(ws)

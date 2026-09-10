@@ -339,6 +339,13 @@ class TicketResponse(BaseModel):
     team_id: str | None = None
     external_issues: list[dict]
     linked_task_id: str | None = None
+    # Same three as the list plus the dedup key: a detail page for an alert
+    # has to be able to say "seen 131 times, last a minute ago", which is the
+    # difference between a live incident and a stale one.
+    source: str | None = None
+    dedup_key: str | None = None
+    occurrence_count: int = 1
+    last_seen_at: datetime | None = None
     first_response_at: datetime | None = None
     resolved_at: datetime | None = None
     closed_at: datetime | None = None
@@ -373,6 +380,30 @@ class TicketListResponse(BaseModel):
     updated_at: datetime
     form_name: str | None = None
     assignee_name: str | None = None
+    # What raised this ticket: a provider slug for an observability alert
+    # ("openobserve"), "form" or null for a form submission, "service_desk_*"
+    # for the desk. Returned so a list can tell an alert from a submission
+    # without inferring it from the form name.
+    source: str | None = None
+    # An alert recurring is the same ticket seen again, not a new one. These
+    # three are what urgency actually looks like for one: how severe, how many
+    # times, how recently. All were stored and none were returned, so the
+    # columns could not be rendered at all.
+    dedup_key: str | None = None
+    occurrence_count: int = 1
+    last_seen_at: datetime | None = None
+    sla_due_at: datetime | None = None
+    # Which service the alert fired for. It is the single most useful column in
+    # an alert queue and it lives in `field_values`, which a list response
+    # deliberately does not carry — returning whole JSONB blobs for a table is
+    # how a list gets slow. Lifted out as one string instead.
+    service_name: str | None = None
+
+
+# What a ticket list may be ordered by. `last_seen` is the natural order for a
+# queue of alerts — an incident that fired a minute ago outranks one that
+# opened last week and has been quiet since — which `created` cannot express.
+TicketSortKey = Literal["created", "updated", "last_seen", "severity", "priority", "occurrences"]
 
 
 class TicketFilters(BaseModel):
@@ -387,6 +418,25 @@ class TicketFilters(BaseModel):
     sla_breached: bool | None = None
     created_after: datetime | None = None
     created_before: datetime | None = None
+    # Which intake to show. `source` was only ever used as a negative module
+    # boundary (exclude `service_desk%`); this is the positive form, so an
+    # Alerts list can ask for provider-raised tickets and a Submissions list
+    # for the rest without either guessing from `form_name`.
+    #
+    # Service Desk rows stay excluded regardless — that boundary is not a
+    # filter and is not the caller's to lift.
+    source: list[str] | None = None
+    # Null source means "raised through a form" for most rows in this table, so
+    # a Submissions list has to be able to ask for it — and a list of values
+    # cannot express null.
+    source_is_null: bool | None = None
+    # The question a caller actually has, resolved server-side from
+    # `AlertProvider`. Asking with `source` meant the client hardcoding the
+    # provider slugs, so adding a provider needed a frontend release and the
+    # list existed in three places at once. `intake` needs no such knowledge.
+    intake: Literal["alerts", "submissions"] | None = None
+    sort: TicketSortKey = "created"
+    direction: Literal["asc", "desc"] = "desc"
 
 
 # ==================== Ticket Response (Comment) Schemas ====================

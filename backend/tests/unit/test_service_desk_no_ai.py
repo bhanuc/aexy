@@ -71,7 +71,13 @@ async def _desk(
         name=f"WS {slug}",
         slug=slug,
         owner_id=owner.id,
-        settings={"service_desk": {"ai_classification_enabled": False}},
+        settings={
+            "service_desk": {
+                "ai_classification_enabled": False,
+                # This file asserts on the KAM pool, which is no longer default.
+                "unmatched_assignment": "random",
+            }
+        },
     )
     db.add(ws)
     await db.flush()

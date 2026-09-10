@@ -9488,10 +9488,28 @@ export interface Ticket {
   team_name?: string;
 }
 
+/** How a ticket got here. Provider slugs are observability alerts; null or
+ *  "form" is a submission; "service_desk_*" never reaches this module. */
+export type TicketSource = string;
+
+/** What a ticket list may be ordered by. `last_seen` is the incident order —
+ *  something that fired a minute ago outranks something quiet since last week. */
+export type TicketSortKey =
+  | "created"
+  | "updated"
+  | "last_seen"
+  | "severity"
+  | "priority"
+  | "occurrences";
+
 export interface TicketListItem {
   id: string;
   form_id: string;
   ticket_number: number;
+  /** The ticket's own headline. Null for rows raised through a form with no
+   *  subject field, and for alert tickets — which put it in field_values. Use
+   *  `ticketHeadline()` rather than reading this directly. */
+  title?: string | null;
   submitter_email?: string;
   submitter_name?: string;
   status: TicketStatus;
@@ -9503,6 +9521,16 @@ export interface TicketListItem {
   updated_at: string;
   form_name?: string;
   assignee_name?: string;
+  source?: TicketSource | null;
+  dedup_key?: string | null;
+  /** How many times this alert has fired. 1 for anything raised by a person. */
+  occurrence_count: number;
+  /** When it last recurred. Null when it never has. */
+  last_seen_at?: string | null;
+  sla_due_at?: string | null;
+  /** The service the alert fired for, lifted out of field_values so an alert
+   *  list can show it without the server returning whole JSONB blobs. */
+  service_name?: string | null;
 }
 
 export interface TicketComment {
@@ -9715,10 +9743,21 @@ export const ticketsApi = {
       form_id?: string;
       status?: TicketStatus[];
       priority?: TicketPriority[];
+      severity?: TicketSeverity[];
       assignee_id?: string;
       team_id?: string;
       submitter_email?: string;
       sla_breached?: boolean;
+      /** Provider slugs, for an alerts list. Prefer `intake`, which does not
+       *  require the client to know which providers exist. */
+      source?: TicketSource[];
+      /** Also match rows with no source recorded — which most form
+       *  submissions are, and which a value list cannot express. */
+      source_is_null?: boolean;
+      /** Which intake, resolved server-side from the provider list. */
+      intake?: "alerts" | "submissions";
+      sort?: TicketSortKey;
+      direction?: "asc" | "desc";
       limit?: number;
       offset?: number;
     }
@@ -9947,6 +9986,18 @@ export interface AlertIntegrationWithSecret extends AlertIntegration {
   signing_secret: string;
 }
 
+export interface AlertEventQuery {
+  limit?: number;
+  offset?: number;
+  /** Filter to particular outcomes: created, updated, throttled, reopened,
+   *  resolved, dropped, error. */
+  action?: string[];
+  /** Prefix match, so the truncated fingerprint shown in a row is clickable. */
+  fingerprint?: string;
+  /** Only the ones worth chasing: dropped, error, or never completed. */
+  unresolved_only?: boolean;
+}
+
 export interface AlertEvent {
   id: string;
   integration_id: string;
@@ -9956,6 +10007,14 @@ export interface AlertEvent {
   error_message: string | null;
   received_at: string;
   processed_at: string | null;
+  /** Resolved server-side so a cross-integration history need not fetch names. */
+  integration_name?: string | null;
+  /** For linking to the ticket this event produced. Null when that ticket has
+   *  since been deleted — the history outlives the tickets. */
+  ticket_number?: number | null;
+  /** Exactly what the provider sent. The one thing worth having when asking
+   *  why an event was dropped. */
+  raw_payload?: Record<string, unknown> | null;
 }
 
 export interface AlertIntegrationCreate {
@@ -10006,9 +10065,18 @@ export const alertIntegrationsApi = {
   listEvents: async (
     workspaceId: string,
     id: string,
-    params?: { limit?: number; offset?: number }
+    params?: AlertEventQuery
   ): Promise<{ events: AlertEvent[]; total: number }> => {
     const response = await api.get(`/workspaces/${workspaceId}/alert-integrations/${id}/events`, { params });
+    return response.data;
+  },
+  /** Every integration's history, interleaved. The per-integration call above
+   *  meant one request each and no way to see them in one order. */
+  listAllEvents: async (
+    workspaceId: string,
+    params?: AlertEventQuery
+  ): Promise<{ events: AlertEvent[]; total: number }> => {
+    const response = await api.get(`/workspaces/${workspaceId}/alert-integrations/events`, { params });
     return response.data;
   },
   sendTest: async (workspaceId: string, id: string, payload: Record<string, unknown>): Promise<AlertTestResult> => {

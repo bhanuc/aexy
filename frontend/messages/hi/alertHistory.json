@@ -1,0 +1,30 @@
+{
+  "alertHistory": {
+    "title": "Alert history",
+    "subtitle": "प्राप्त हर alert और उसका परिणाम। Deduplication के कारण एक टिकट सैकड़ों alerts का प्रतिनिधित्व कर सकता है।",
+    "filterAction": "परिणाम",
+    "allActions": "कोई भी परिणाम",
+    "unresolvedOnly": "केवल वे जिनसे कुछ नहीं हुआ",
+    "filterByFingerprint": "इस fingerprint वाले सभी alerts दिखाएँ",
+    "count": "{count} alerts",
+    "payload": "Payload",
+    "ticketDeleted": "टिकट हटा दिया गया",
+    "empty": "अभी कोई alert प्राप्त नहीं हुआ।",
+    "noIntegrationTitle": "कोई alert integration नहीं जुड़ा",
+    "noIntegrationBody": "OpenObserve या कोई अन्य provider जोड़ें और उसके alerts यहाँ टिकट खोलेंगे।",
+    "noIntegrationAction": "सेट अप करें",
+    "previous": "पिछला",
+    "next": "अगला",
+    "page": "पृष्ठ {page} / {pages}",
+    "action": {
+      "created": "टिकट खोला",
+      "updated": "टिकट अपडेट किया",
+      "throttled": "Throttled",
+      "reopened": "फिर खोला",
+      "resolved": "हल किया",
+      "dropped": "छोड़ा गया",
+      "error": "विफल",
+      "pending": "पूरा नहीं हुआ"
+    }
+  }
+}

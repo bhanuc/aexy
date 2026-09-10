@@ -8,6 +8,7 @@ import {
   AlertIntegrationCreate,
   AlertIntegrationUpdate,
   AlertIntegrationWithSecret,
+  AlertEventQuery,
 } from "@/lib/api";
 
 const key = (workspaceId: string | null) => ["alertIntegrations", workspaceId];
@@ -23,12 +24,29 @@ export function useAlertIntegrations(workspaceId: string | null) {
 export function useAlertIntegrationEvents(
   workspaceId: string | null,
   integrationId: string | null,
-  limit = 50
+  query: AlertEventQuery = { limit: 50 }
 ) {
   return useQuery({
-    queryKey: ["alertIntegrationEvents", workspaceId, integrationId, limit],
-    queryFn: () => alertIntegrationsApi.listEvents(workspaceId!, integrationId!, { limit }),
+    // The whole query is in the key. It used to be `limit` alone and never
+    // forwarded `offset`, so the log capped out at one page however far you
+    // tried to scroll.
+    queryKey: ["alertIntegrationEvents", workspaceId, integrationId, query],
+    queryFn: () => alertIntegrationsApi.listEvents(workspaceId!, integrationId!, query),
     enabled: !!workspaceId && !!integrationId,
+    placeholderData: (previous) => previous,
+  });
+}
+
+/** Every integration's alert history in one list. */
+export function useAlertEvents(
+  workspaceId: string | null,
+  query: AlertEventQuery = { limit: 50 }
+) {
+  return useQuery({
+    queryKey: ["alertEvents", workspaceId, query],
+    queryFn: () => alertIntegrationsApi.listAllEvents(workspaceId!, query),
+    enabled: !!workspaceId,
+    placeholderData: (previous) => previous,
   });
 }
 
