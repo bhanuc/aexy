@@ -746,6 +746,16 @@ SYSTEM_APP_BUNDLES: dict[str, BundleConfig] = {
             "agents": {"enabled": True, "modules": {}},
             "mcp": {"enabled": True, "modules": dict(_MCP_MODULES_OFF)},
             "chat": {"enabled": True, "modules": {}},
+            # Catalogued after these bundles were written and never added to
+            # them, so every department profile silently revoked both — the
+            # same trap chat/gtm/leave/community fell into. Enabled everywhere
+            # for the same stated reason: making an app configurable must not
+            # remove it from anyone.
+            "drive": {"enabled": True, "modules": {"files": True, "smart_views": True, "search": True}},
+            "reports": {
+                "enabled": True,
+                "modules": {"custom_reports": True, "monthly_engineering": True, "exports": True},
+            },
             # In every bundle because the frontend's copy of these bundles has
             # always granted it, and the two are one decision: a department put on
             # this profile could not reach the desk while its own "Start from
@@ -819,6 +829,16 @@ SYSTEM_APP_BUNDLES: dict[str, BundleConfig] = {
             "agents": {"enabled": True, "modules": {}},
             "mcp": {"enabled": True, "modules": dict(_MCP_MODULES_OFF)},
             "chat": {"enabled": True, "modules": {}},
+            # Catalogued after these bundles were written and never added to
+            # them, so every department profile silently revoked both — the
+            # same trap chat/gtm/leave/community fell into. Enabled everywhere
+            # for the same stated reason: making an app configurable must not
+            # remove it from anyone.
+            "drive": {"enabled": True, "modules": {"files": True, "smart_views": True, "search": True}},
+            "reports": {
+                "enabled": True,
+                "modules": {"custom_reports": True, "monthly_engineering": True, "exports": True},
+            },
             # In every bundle because the frontend's copy of these bundles has
             # always granted it, and the two are one decision: a department put on
             # this profile could not reach the desk while its own "Start from
@@ -883,6 +903,16 @@ SYSTEM_APP_BUNDLES: dict[str, BundleConfig] = {
             "agents": {"enabled": True, "modules": {}},
             "mcp": {"enabled": True, "modules": dict(_MCP_MODULES_OFF)},
             "chat": {"enabled": True, "modules": {}},
+            # Catalogued after these bundles were written and never added to
+            # them, so every department profile silently revoked both — the
+            # same trap chat/gtm/leave/community fell into. Enabled everywhere
+            # for the same stated reason: making an app configurable must not
+            # remove it from anyone.
+            "drive": {"enabled": True, "modules": {"files": True, "smart_views": True, "search": True}},
+            "reports": {
+                "enabled": True,
+                "modules": {"custom_reports": True, "monthly_engineering": True, "exports": True},
+            },
             # In every bundle because the frontend's copy of these bundles has
             # always granted it, and the two are one decision: a department put on
             # this profile could not reach the desk while its own "Start from
@@ -986,6 +1016,16 @@ SYSTEM_APP_BUNDLES: dict[str, BundleConfig] = {
             "agents": {"enabled": True, "modules": {}},
             "mcp": {"enabled": True, "modules": dict(_MCP_MODULES_ON)},
             "chat": {"enabled": True, "modules": {}},
+            # Catalogued after these bundles were written and never added to
+            # them, so every department profile silently revoked both — the
+            # same trap chat/gtm/leave/community fell into. Enabled everywhere
+            # for the same stated reason: making an app configurable must not
+            # remove it from anyone.
+            "drive": {"enabled": True, "modules": {"files": True, "smart_views": True, "search": True}},
+            "reports": {
+                "enabled": True,
+                "modules": {"custom_reports": True, "monthly_engineering": True, "exports": True},
+            },
             # In every bundle because the frontend's copy of these bundles has
             # always granted it, and the two are one decision: a department put on
             # this profile could not reach the desk while its own "Start from
