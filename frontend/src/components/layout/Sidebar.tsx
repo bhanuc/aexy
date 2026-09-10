@@ -153,6 +153,7 @@ export function Sidebar({ className, user, logout }: SidebarProps) {
         isPersonaDerived,
         isLoading: personaLoading,
         filterByPersona,
+        keepDespitePersona,
         favoriteItems,
         pinnedItems,
         togglePin,
@@ -551,7 +552,13 @@ export function Sidebar({ className, user, logout }: SidebarProps) {
                 if (seen.has(item.href)) continue;
                 seen.add(item.href);
 
-                const isPersonaVisible = matchesPersona(section.personas, persona) && matchesPersona(item.personas, persona);
+                // Must agree with `filterByPersona`, or an item access rescued
+                // from the persona filter would be listed twice: once in the
+                // nav and once here as "hidden by your view".
+                const isPersonaVisible =
+                    (matchesPersona(section.personas, persona) &&
+                        matchesPersona(item.personas, persona)) ||
+                    keepDespitePersona(item.href);
                 const appId = getAppIdFromPath(item.href);
                 const hasAccess = appId ? hasAppAccess(appId) : true;
 
@@ -570,7 +577,7 @@ export function Sidebar({ className, user, logout }: SidebarProps) {
         }
 
         return items;
-    }, [navIsResolving, accessUnavailable, layoutConfig, persona, hasAppAccess]);
+    }, [navIsResolving, accessUnavailable, layoutConfig, persona, hasAppAccess, keepDespitePersona]);
 
     /** Split by *reason*, then group by category within each.
      *

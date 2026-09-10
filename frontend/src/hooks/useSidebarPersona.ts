@@ -25,6 +25,8 @@ import {
   SidebarSectionConfig,
   SidebarLayoutConfig,
 } from "@/config/sidebarLayouts";
+import { getAppIdFromPath } from "@/config/appDefinitions";
+import { accessOverridesPersona, AccessSource } from "@/lib/sidebarAccess";
 
 const DEFAULT_PERSONA = "developer";
 const MIN_VISITS_FOR_FREQUENT = 3;
@@ -47,10 +49,13 @@ export function useSidebarPersona() {
   const { preferences, isLoading } = useDashboardPreferences();
   const { user } = useAuth();
   const { currentWorkspace } = useWorkspace();
-  const { suggestedPersona, isAdmin, isLoading: accessLoading } = useAppAccess(
-    currentWorkspace?.id ?? null,
-    user?.id ?? null
-  );
+  const {
+    suggestedPersona,
+    isAdmin,
+    hasAppAccess,
+    getAccessSource,
+    isLoading: accessLoading,
+  } = useAppAccess(currentWorkspace?.id ?? null, user?.id ?? null);
 
   // The stored preference is not the same as an honoured one. "admin" is the
   // view that switches curation off entirely, and until recently Settings →
@@ -74,6 +79,25 @@ export function useSidebarPersona() {
     [preferences?.sidebar_pinned_items]
   );
 
+  /**
+   * Whether access says to show an item the persona would otherwise hide.
+   *
+   * The rule itself is `accessOverridesPersona`; this only feeds it the data,
+   * so the precedence can be tested without standing up the hook.
+   */
+  const keepDespitePersona = useCallback(
+    (href: string): boolean => {
+      const appId = getAppIdFromPath(href);
+      return accessOverridesPersona({
+        appId: appId ?? null,
+        hasAccess: appId ? hasAppAccess(appId) : false,
+        source: (appId ? getAccessSource(appId)?.source : null) as AccessSource | null,
+        chosenPersona,
+      });
+    },
+    [chosenPersona, hasAppAccess, getAccessSource]
+  );
+
   /** Filter a layout config by persona, removing sections/items that don't match */
   const filterByPersona = useCallback(
     (layout: SidebarLayoutConfig): SidebarLayoutConfig => {
@@ -83,10 +107,15 @@ export function useSidebarPersona() {
       const filteredSections: SidebarSectionConfig[] = [];
 
       for (const section of layout.sections) {
-        if (!matchesPersona(section.personas, persona)) continue;
+        const sectionMatches = matchesPersona(section.personas, persona);
 
-        const filteredItems = section.items.filter((item) =>
-          matchesPersona(item.personas, persona)
+        // A section the persona hides still returns if it holds something
+        // access says to keep — otherwise Service Desk stays unreachable for
+        // exactly the people who were granted it.
+        const filteredItems = section.items.filter(
+          (item) =>
+            (sectionMatches && matchesPersona(item.personas, persona)) ||
+            keepDespitePersona(item.href),
         );
 
         if (filteredItems.length > 0) {
@@ -96,7 +125,7 @@ export function useSidebarPersona() {
 
       return { ...layout, sections: filteredSections };
     },
-    [persona]
+    [persona, keepDespitePersona]
   );
 
   /** Compute favorite items: pinned first, then auto-detected from visits */
@@ -217,6 +246,8 @@ export function useSidebarPersona() {
     suggestedPersona,
     isPersonaDerived,
     setPersona,
+    /** Exported so the Discover panel agrees with the nav about what is hidden. */
+    keepDespitePersona,
     // Persona filtering runs off access data too, so callers that render a
     // skeleton should wait for both rather than filtering with a default view.
     isLoading: isLoading || accessLoading,
