@@ -253,10 +253,14 @@
     },
     "tickets": {
       "name": "Tickets",
-      "category": "business",
+      "category": "engineering",
       "base_route": "/tickets",
       "required_permission": "can_view_tickets",
-      "modules": []
+      "modules": [
+        "alert_history",
+        "alerts",
+        "submissions"
+      ]
     },
     "tracking": {
       "name": "Tracking",
@@ -361,7 +365,11 @@
           "modules": []
         },
         "tickets": {
-          "modules": []
+          "modules": [
+            "alert_history",
+            "alerts",
+            "submissions"
+          ]
         }
       }
     },
@@ -428,7 +436,11 @@
           "modules": []
         },
         "tickets": {
-          "modules": []
+          "modules": [
+            "alert_history",
+            "alerts",
+            "submissions"
+          ]
         },
         "tracking": {
           "modules": [
@@ -569,7 +581,11 @@
           "modules": []
         },
         "tickets": {
-          "modules": []
+          "modules": [
+            "alert_history",
+            "alerts",
+            "submissions"
+          ]
         },
         "tracking": {
           "modules": [

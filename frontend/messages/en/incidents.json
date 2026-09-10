@@ -1,0 +1,64 @@
+{
+  "incidents": {
+    "severity": {
+      "critical": "Critical",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "priority": {
+      "urgent": "Urgent",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "alerts": {
+      "title": "Alerts",
+      "subtitle": "Tickets opened by your observability alerts, worst first.",
+      "severity": "Severity",
+      "allSeverities": "Any severity",
+      "sortBy": "Sort by",
+      "sortLastSeen": "Last seen",
+      "sortSeverity": "Severity",
+      "sortOccurrences": "Times seen",
+      "sortCreated": "Newest",
+      "includeResolved": "Include resolved",
+      "count": "{count} alerts",
+      "alert": "Alert",
+      "service": "Form",
+      "seen": "Seen",
+      "lastSeen": "Last seen",
+      "status": "Status",
+      "owner": "Owner",
+      "unassigned": "Unassigned",
+      "emptyTitle": "Nothing is firing",
+      "emptyBody": "Alert tickets appear here automatically. If you expected some, check that an alert integration is connected and sending.",
+      "emptyAction": "Alert integrations",
+      "previous": "Previous",
+      "next": "Next",
+      "page": "Page {page} of {pages}"
+    },
+    "submissions": {
+      "title": "Submissions",
+      "subtitle": "Bug reports and support requests people raised through a form.",
+      "form": "Form",
+      "allForms": "All forms",
+      "priority": "Priority",
+      "allPriorities": "Any priority",
+      "sortBy": "Sort by",
+      "sortNewest": "Newest",
+      "sortUpdated": "Recently updated",
+      "sortPriority": "Priority",
+      "includeClosed": "Include closed",
+      "count": "{count} submissions",
+      "ticket": "Ticket",
+      "subject": "Subject",
+      "submitter": "From",
+      "status": "Status",
+      "age": "Age",
+      "breached": "SLA",
+      "emptyTitle": "No submissions",
+      "emptyBody": "Tickets raised through a form appear here."
+    }
+  }
+}

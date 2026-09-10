@@ -126,12 +126,20 @@ APP_CATALOG: dict[str, AppConfig] = {
     },
     "tickets": {
         "name": "Tickets",
-        "description": "Support ticket management",
+        "description": "Observability alerts and form submissions",
         "icon": "Ticket",
-        "category": AppCategory.BUSINESS,
+        # Engineering, not business. The queue is worked by whoever is on call:
+        # observability alerts with a severity and a recurrence count, plus the
+        # bug reports and support requests raised against the product. The
+        # customer-facing desk is a separate app.
+        "category": AppCategory.ENGINEERING,
         "base_route": "/tickets",
         "required_permission": "can_view_tickets",
-        "modules": {},
+        "modules": {
+            "alerts": {"name": "Alerts", "description": "Tickets opened by observability alerts", "route": "/alerts"},
+            "submissions": {"name": "Submissions", "description": "Bug reports and support requests", "route": "/submissions"},
+            "alert_history": {"name": "Alert history", "description": "Every alert received, and what it did", "route": "/alert-history"},
+        },
     },
     "service_desk": {
         "name": "Service Desk",
@@ -726,7 +734,7 @@ SYSTEM_APP_BUNDLES: dict[str, BundleConfig] = {
                     "backlog": True,
                 },
             },
-            "tickets": {"enabled": True, "modules": {}},
+            "tickets": {"enabled": True, "modules": {"alerts": True, "submissions": True, "alert_history": True}},
             "docs": {"enabled": True, "modules": {}},
             "learning": {"enabled": False},  # AppAvailability.CONTACT_SUPPORT
             "oncall": {"enabled": True, "modules": {}},
@@ -864,7 +872,7 @@ SYSTEM_APP_BUNDLES: dict[str, BundleConfig] = {
                 "enabled": True,
                 "modules": {"campaigns": True, "templates": True, "settings": True},
             },
-            "tickets": {"enabled": True, "modules": {}},
+            "tickets": {"enabled": True, "modules": {"alerts": True, "submissions": True, "alert_history": True}},
             "docs": {"enabled": True, "modules": {}},
             "forms": {"enabled": True, "modules": {}},
             "booking": {
@@ -926,7 +934,7 @@ SYSTEM_APP_BUNDLES: dict[str, BundleConfig] = {
                     "backlog": True,
                 },
             },
-            "tickets": {"enabled": True, "modules": {}},
+            "tickets": {"enabled": True, "modules": {"alerts": True, "submissions": True, "alert_history": True}},
             "reviews": {
                 "enabled": True,
                 "modules": {

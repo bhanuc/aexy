@@ -1,0 +1,64 @@
+{
+  "incidents": {
+    "severity": {
+      "critical": "गंभीर",
+      "high": "उच्च",
+      "medium": "मध्यम",
+      "low": "कम"
+    },
+    "priority": {
+      "urgent": "अत्यावश्यक",
+      "high": "उच्च",
+      "medium": "मध्यम",
+      "low": "कम"
+    },
+    "alerts": {
+      "title": "Alerts",
+      "subtitle": "आपके observability alerts से खुले टिकट, सबसे गंभीर पहले।",
+      "severity": "गंभीरता",
+      "allSeverities": "कोई भी गंभीरता",
+      "sortBy": "इसके अनुसार क्रम",
+      "sortLastSeen": "अंतिम बार देखा गया",
+      "sortSeverity": "गंभीरता",
+      "sortOccurrences": "कितनी बार",
+      "sortCreated": "नवीनतम",
+      "includeResolved": "हल किए गए भी दिखाएँ",
+      "count": "{count} alerts",
+      "alert": "Alert",
+      "service": "फ़ॉर्म",
+      "seen": "बार",
+      "lastSeen": "अंतिम बार",
+      "status": "स्थिति",
+      "owner": "मालिक",
+      "unassigned": "असाइन नहीं",
+      "emptyTitle": "कुछ भी fire नहीं हो रहा",
+      "emptyBody": "Alert टिकट यहाँ स्वतः दिखते हैं। अगर आपको कुछ अपेक्षित था, जाँचें कि alert integration जुड़ा है और भेज रहा है।",
+      "emptyAction": "Alert integrations",
+      "previous": "पिछला",
+      "next": "अगला",
+      "page": "पृष्ठ {page} / {pages}"
+    },
+    "submissions": {
+      "title": "Submissions",
+      "subtitle": "फ़ॉर्म के ज़रिए लोगों ने जो bug report और support request भेजे।",
+      "form": "फ़ॉर्म",
+      "allForms": "सभी फ़ॉर्म",
+      "priority": "प्राथमिकता",
+      "allPriorities": "कोई भी प्राथमिकता",
+      "sortBy": "इसके अनुसार क्रम",
+      "sortNewest": "नवीनतम",
+      "sortUpdated": "हाल में अपडेट",
+      "sortPriority": "प्राथमिकता",
+      "includeClosed": "बंद किए गए भी दिखाएँ",
+      "count": "{count} submissions",
+      "ticket": "टिकट",
+      "subject": "विषय",
+      "submitter": "से",
+      "status": "स्थिति",
+      "age": "आयु",
+      "breached": "SLA",
+      "emptyTitle": "कोई submission नहीं",
+      "emptyBody": "फ़ॉर्म से बनाए गए टिकट यहाँ दिखेंगे।"
+    }
+  }
+}

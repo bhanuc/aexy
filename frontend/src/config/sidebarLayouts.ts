@@ -33,6 +33,7 @@ import {
     FileStack,
     BarChart,
     Inbox,
+    Siren,
     Activity,
     Zap,
     Send,
@@ -194,6 +195,21 @@ const uptimeItems: SidebarItemConfig[] = [
     { href: "/uptime/history", label: "History", icon: History },
 ];
 
+// The on-call ticket queue: what fired in production, what people reported,
+// and the raw alert traffic behind both.
+//
+// `/tickets` itself is deliberately absent — it redirects to Home, because the
+// command palette, the `t` shortcut, the app header and several dashboard
+// widgets all link to it expecting the personal work list. So Alerts carries
+// the parent's own href instead, which is what keeps the group clickable
+// (`Sidebar.tsx` drops a parent whose children all filter out unless one of
+// them shares its href) without repointing a redirect five callers depend on.
+const ticketsItems: SidebarItemConfig[] = [
+    { href: "/tickets/alerts", label: "Alerts", icon: Siren },
+    { href: "/tickets/submissions", label: "Submissions", icon: Inbox },
+    { href: "/tickets/alert-history", label: "Alert history", icon: History },
+];
+
 // Unified "Autopilot" view — primary entry for agents + automations, plus the
 // MCP connector config. The focused pages remain as sub-items so power users
 // who want a single type still have a direct link.
@@ -337,6 +353,16 @@ export const GROUPED_LAYOUT: SidebarLayoutConfig = {
                     icon: MonitorCheck,
                     items: uptimeItems,
                     personas: ["developer", "manager", "admin"],
+                },
+                // Not called "Incidents": Uptime already has an item by that
+                // name for a different entity, and one name for two things is
+                // what this navigation keeps being cleaned up for.
+                {
+                    href: "/tickets/alerts",
+                    label: "Tickets",
+                    icon: Ticket,
+                    items: ticketsItems,
+                    personas: ["developer", "manager", "product", "admin"],
                 },
                 {
                     href: "/insights",
@@ -500,6 +526,15 @@ export const FLAT_LAYOUT: SidebarLayoutConfig = {
                     icon: MonitorCheck,
                     items: uptimeItems,
                     personas: ["developer", "manager", "admin"],
+                },
+                // Same item as in GROUPED. Flat has no sections to carry a
+                // persona filter, so it repeats on the item.
+                {
+                    href: "/tickets/alerts",
+                    label: "Tickets",
+                    icon: Ticket,
+                    items: ticketsItems,
+                    personas: ["developer", "manager", "product", "admin"],
                 },
                 {
                     href: "/compliance",

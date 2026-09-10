@@ -17,6 +17,7 @@ import {
   BookOpen,
 } from "lucide-react";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { AlertEventLog } from "@/components/alerts/AlertEventLog";
 import {
   useAlertIntegrations,
   useAlertIntegrationEvents,
@@ -29,7 +30,6 @@ import {
   alertIntegrationsApi,
 } from "@/lib/api";
 import { toast } from "sonner";
-import { formatDistanceToNow } from "date-fns";
 import { useTranslations } from "next-intl";
 import { SettingsPage } from "@/components/settings/SettingsPrimitives";
 
@@ -68,16 +68,6 @@ const OPENOBSERVE_TEMPLATE = `{
   "count": "{alert_count}",
   "rows": "{rows}"
 }`;
-
-const ACTION_COLORS: Record<string, string> = {
-  created: "text-emerald-400 bg-emerald-400/10",
-  updated: "text-blue-400 bg-blue-400/10",
-  throttled: "text-amber-400 bg-amber-400/10",
-  reopened: "text-purple-400 bg-purple-400/10",
-  resolved: "text-teal-400 bg-teal-400/10",
-  dropped: "text-muted-foreground bg-muted",
-  error: "text-red-400 bg-red-400/10",
-};
 
 function SecretBanner({ integration }: { integration: AlertIntegrationWithSecret }) {
   return (
@@ -180,7 +170,11 @@ function SetupGuide() {
               names (OpenObserve: <em>&quot;all stream fields are variables&quot;</em>). If your
               stream doesn&apos;t have them, replace the token with a literal —{" "}
               e.g. <code>&quot;severity&quot;: &quot;critical&quot;</code> — and use one alert per
-              tier. Severity accepts <code>critical|high|medium|low</code> (missing →{" "}
+              tier. A token that resolves to nothing arrives as the literal text{" "}
+              <code>{"{service}"}</code>, which is now ignored rather than used — so the
+              ticket falls back to the stream name and a severity of{" "}
+              <code>medium</code>, instead of being titled after the placeholder. Severity
+              accepts <code>critical|high|medium|low</code> (missing →{" "}
               <code>medium</code>). <code>rows</code> becomes the ticket&apos;s log context and
               is scanned for <code>trace_id=…</code> to build trace links. Send a paired alert
               with <code>&quot;status&quot;:&quot;resolved&quot;</code> on recovery to auto-resolve.
@@ -302,29 +296,13 @@ function RoutingRulesEditor({
   );
 }
 
+// The event log lives in `components/alerts/AlertEventLog` now, shared with
+// the standalone Alert history page so the two cannot drift. `compact` keeps
+// this card a glance rather than a debugging surface.
 function EventLog({ workspaceId, integrationId }: { workspaceId: string; integrationId: string }) {
   const { data, isLoading } = useAlertIntegrationEvents(workspaceId, integrationId);
-  if (isLoading) return <Loader2 className="h-4 w-4 animate-spin" />;
-  const events = data?.events ?? [];
-  if (events.length === 0)
-    return <p className="text-xs text-muted-foreground italic">No alerts received yet.</p>;
   return (
-    <div className="space-y-1">
-      {events.map((e) => (
-        <div key={e.id} className="flex items-center justify-between text-xs border-b border-border/50 py-1">
-          <span className="flex items-center gap-2">
-            <span className={`px-1.5 py-0.5 rounded ${ACTION_COLORS[e.action_taken ?? ""] ?? "bg-muted"}`}>
-              {e.action_taken ?? "pending"}
-            </span>
-            <code className="text-muted-foreground">{e.fingerprint?.slice(0, 12) ?? "—"}</code>
-            {e.error_message && <span className="text-red-400">{e.error_message}</span>}
-          </span>
-          <span className="text-muted-foreground">
-            {formatDistanceToNow(new Date(e.received_at), { addSuffix: true })}
-          </span>
-        </div>
-      ))}
-    </div>
+    <AlertEventLog events={data?.events ?? []} isLoading={isLoading} compact />
   );
 }
 
