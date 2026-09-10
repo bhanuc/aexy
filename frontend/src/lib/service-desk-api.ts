@@ -293,6 +293,11 @@ export interface ServiceDeskTicketDetail extends ServiceDeskTicket {
   /** Why this ticket has the owner it has, when the answer was not simply
    *  Master Data. Null when nothing had to be explained. */
   assignment_note: string | null;
+  /** The colleague who logged this ticket, for one taken by phone or WhatsApp.
+   *  Null for anything the desk received rather than logged — an email ticket
+   *  has a requester, not a creator. */
+  logged_by_id: string | null;
+  logged_by_name: string | null;
   // Set once this ticket's answer has been published to the public community
   // forum, so nobody writes the same answer twice.
   community_topic: TicketCommunityTopic | null;

@@ -169,7 +169,10 @@
       "splitHint": "Use this when unrelated requests ended up on one ticket.",
       "splitSelect": "Select this message to move",
       "splitMove": "Move {count} message(s)",
-      "splitMoving": "Moving…"
+      "splitMoving": "Moving…",
+      "source": "Source",
+      "loggedBy": "Logged by",
+      "noRequester": "No requester (logged here)"
     },
     "ai": {
       "title": "AI email categorisation",
@@ -543,6 +546,11 @@
       "medium": "Medium",
       "high": "High",
       "urgent": "Urgent"
+    },
+    "origin": {
+      "email": "Email",
+      "manual": "Phone or WhatsApp",
+      "internal": "Internal email"
     }
   }
 }

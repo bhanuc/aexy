@@ -573,3 +573,81 @@ async def test_the_split_notifies_an_owner_who_is_not_the_splitter(
     alerts = [a for a in service._pending_alerts if a["kind"] == "assigned"]
     assert len(alerts) == 1
     assert alerts[0]["recipient_id"] == str(d.kam.id)
+
+
+# ================================================= who logged it, and how it came
+
+
+@pytest.mark.asyncio
+async def test_the_detail_names_whoever_logged_the_call(
+    db_session: AsyncSession,
+) -> None:
+    """A ticket somebody raised on a call looked identical to one that arrived.
+
+    `logged_by_id` was stamped by the manual path and read by the visibility
+    rules, and never shown — so "who took this call?" could only be answered by
+    asking around.
+    """
+    d = await _desk(db_session, "np-loggedby", messages=1)
+    values = dict(d.ticket.field_values or {})
+    values["logged_by_id"] = str(d.kam.id)
+    d.ticket.field_values = values
+    await db_session.commit()
+
+    detail = await ServiceDeskTicketService(db_session).get_detail(d.ws.id, d.ticket.id)
+
+    assert detail.logged_by_id == str(d.kam.id)
+    assert detail.logged_by_name == "A KAM"
+
+
+@pytest.mark.asyncio
+async def test_an_emailed_ticket_has_no_creator(db_session: AsyncSession) -> None:
+    """It has a requester, which is a different thing.
+
+    Null rather than a placeholder, so the UI can leave the field out instead of
+    printing a dash on every emailed ticket.
+    """
+    d = await _desk(db_session, "np-loggedby-none", messages=1)
+
+    detail = await ServiceDeskTicketService(db_session).get_detail(d.ws.id, d.ticket.id)
+
+    assert detail.logged_by_id is None
+    assert detail.logged_by_name is None
+
+
+@pytest.mark.asyncio
+async def test_a_departed_logger_still_identifies_the_ticket(
+    db_session: AsyncSession,
+) -> None:
+    """The id survives the Developer row being unresolvable.
+
+    Losing the name is a cosmetic degradation; losing the id would also lose the
+    visibility grant that lets whoever logged it keep reaching the ticket.
+    """
+    d = await _desk(db_session, "np-loggedby-gone", messages=1)
+    ghost = str(uuid4())
+    values = dict(d.ticket.field_values or {})
+    values["logged_by_id"] = ghost
+    d.ticket.field_values = values
+    await db_session.commit()
+
+    detail = await ServiceDeskTicketService(db_session).get_detail(d.ws.id, d.ticket.id)
+
+    assert detail.logged_by_id == ghost
+    assert detail.logged_by_name is None
+
+
+@pytest.mark.asyncio
+async def test_the_detail_says_how_the_ticket_arrived(
+    db_session: AsyncSession,
+) -> None:
+    """`origin` was on the API all along and never rendered.
+
+    It is the difference between a ticket with a requester you can reply to and
+    one taken over the phone, which is worth knowing before composing.
+    """
+    d = await _desk(db_session, "np-origin", messages=1)
+
+    detail = await ServiceDeskTicketService(db_session).get_detail(d.ws.id, d.ticket.id)
+
+    assert detail.origin == "internal"

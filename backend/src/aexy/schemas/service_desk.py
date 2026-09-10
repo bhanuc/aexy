@@ -833,6 +833,13 @@ class ServiceDeskTicketDetail(ServiceDeskTicketResponse):
     # so "assignment is not following our master data" could not be answered from
     # the ticket that prompted it. None when nothing had to be explained.
     assignment_note: str | None = None
+    # Who logged this ticket, for one taken by phone or WhatsApp. Stamped by the
+    # manual path and read by the visibility rules; it was never shown, so a
+    # ticket somebody had raised on a call looked identical to one that arrived
+    # by itself, and "who took this call?" could only be answered by asking
+    # around. Null for anything the desk received rather than logged.
+    logged_by_id: str | None = None
+    logged_by_name: str | None = None
     # Set once this ticket's answer has been published to the public community
     # forum, so the next person to open it can link to the public thread instead
     # of writing the same answer again. None until somebody publishes.

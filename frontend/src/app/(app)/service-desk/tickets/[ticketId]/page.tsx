@@ -259,6 +259,17 @@ export default function ServiceDeskTicketDetailPage() {
   // Same guard as `detected_issues` above: a payload cached from before this
   // field shipped has no `notes`, and reading `.length` off it blanks the page.
   const notes = ticket.notes ?? [];
+  // A ticket logged by phone has no requester address, only the sentinel
+  // standing in for one. The backend already refuses to send mail to it and
+  // refuses to prefill it in the compose box; showing it as the requester was
+  // the last place it leaked, and "manual@local" reads to a KAM as a real
+  // address they could write to.
+  const requesterLabel =
+    ticket.requester_name ||
+    (ticket.requester_email && ticket.requester_email !== "manual@local"
+      ? ticket.requester_email
+      : null) ||
+    t("detail.noRequester");
   const splitDoneIndexes = new Set(ticket.split_done_indexes ?? []);
 
   const apply = async () => {
@@ -665,11 +676,22 @@ export default function ServiceDeskTicketDetailPage() {
           <Card className="space-y-4 p-4">
             <div className="text-sm font-semibold">{t("detail.details")}</div>
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-1">
-              <Field label={t("detail.requester")} value={ticket.requester_name || ticket.requester_email || "—"} />
+              <Field label={t("detail.requester")} value={requesterLabel} />
               <Field
                 label={t("detail.pendingWith")}
                 value={<span className={`inline-flex rounded px-1.5 py-0.5 text-xs ${pc?.bg} ${pc?.text}`}>{stakeholderLabel(ticket.pending_with)}</span>}
               />
+              {/* How this ticket got here. `origin` has been on the API all
+                  along and was never rendered, so a call somebody logged and an
+                  email that arrived by itself looked identical — which matters,
+                  because only one of them has a requester you can reply to. */}
+              <Field label={t("detail.source")} value={t(`origin.${ticket.origin}`)} />
+              {/* Who logged it. Only manual tickets have one: an email ticket
+                  has a requester, not a creator. Rendered only when there is
+                  one, rather than as a dash on every emailed ticket. */}
+              {ticket.logged_by_name && (
+                <Field label={t("detail.loggedBy")} value={ticket.logged_by_name} />
+              )}
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1">

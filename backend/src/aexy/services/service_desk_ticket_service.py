@@ -2323,6 +2323,18 @@ class ServiceDeskTicketService:
             )
         ).all()
 
+        # Who logged it, resolved to a name. Only manual tickets carry this —
+        # the id is stamped by `create_manual_ticket` — so an email ticket
+        # answers "nobody here logged it, it arrived", which is what a null
+        # says.
+        logged_by_id = (fv or {}).get("logged_by_id")
+        logged_by_name = None
+        if logged_by_id:
+            logger_row = await self.db.get(Developer, str(logged_by_id))
+            if logger_row is not None:
+                logged_by_name = logger_row.name or logger_row.email
+            logged_by_id = str(logged_by_id)
+
         # Internal notes, as their own stream. Filtered out of the detail
         # entirely until now, which hid both a colleague's note and the desk's
         # own account of what it did — every stage transition, split, routing
@@ -2406,6 +2418,8 @@ class ServiceDeskTicketService:
             reply_all=self._reply_all(ticket, desk_address),
             attachments=self._detail_attachments(ticket),
             assignment_note=await self._assignment_note(ticket),
+            logged_by_id=logged_by_id,
+            logged_by_name=logged_by_name,
             community_topic=self._community_topic(ticket),
             tat=tat,
             can_edit=can_edit,
