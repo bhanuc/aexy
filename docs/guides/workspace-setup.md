@@ -47,8 +47,10 @@ and place afterwards; nothing is lost.
 ## 2. Switch on the apps you will use
 
 Aexy ships a lot of modules. A workspace that turns on all of them gets a
-sidebar nobody can navigate, so **Settings → Organization → App Settings** is
-where you decide which exist at all.
+sidebar nobody can navigate, so **Settings → Access Control → Apps** is where
+you decide which exist at all. It sits alongside the department profiles and
+the member matrix because it overrules both: the three tabs read left to right
+in the order access actually resolves.
 
 Two things to know:
 

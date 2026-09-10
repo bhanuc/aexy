@@ -67,16 +67,15 @@ async def test_editing_one_surface_leaves_the_other_alone(client: AsyncClient, d
 
 @pytest.mark.asyncio
 async def test_sidebar_state_is_shared_across_surfaces(client: AsyncClient, dev):
-    """Pinned items and persona belong to the person, not to a dashboard."""
+    """Pinned items belong to the person, not to a dashboard."""
     await client.put(
         URL,
         params={"surface": "my_work"},
-        json={"sidebar_pinned_items": ["/crm"], "sidebar_persona": "manager"},
+        json={"sidebar_pinned_items": ["/crm"]},
     )
 
     overview = (await client.get(URL)).json()
     assert overview["sidebar_pinned_items"] == ["/crm"]
-    assert overview["sidebar_persona"] == "manager"
 
 
 @pytest.mark.asyncio

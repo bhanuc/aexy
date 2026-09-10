@@ -5,6 +5,256 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.0] - 2026-09-11
+
+Access is decided in one place and shown in one order. The sidebar presets are
+gone — what you can open is what you can see — the workspace app switch moved
+next to the department and member settings it overrules, and departments get
+default access profiles of their own. The settings tree is translated (972
+strings), its dialogs are real dialogs, and its icon-only buttons have names.
+
+### Removed: the preset sidebar roles
+
+A member's navigation used to be filtered twice: once by app access, and again
+by a "sidebar view" — developer, sales, support, hr, manager, product, admin —
+derived from their department or picked by hand. Two gates answering one
+question, and they disagreed. Someone could hold access to an app and still not
+find it, because their view filtered the entry out; the page was reachable, only
+the door was missing. That is how an alert queue took 430 alerts into three
+tickets over two months with nobody looking at it.
+
+Access now decides the sidebar on its own. The 22 `personas` declarations are
+out of the navigation config, the view picker is gone from Appearance, and
+`Department.default_persona`, `dashboard_preferences.sidebar_persona` and the
+API's `suggested_persona` no longer carry a value anywhere. The two columns
+remain in the database, unread, to be dropped in a follow-up.
+
+Nothing about **dashboard widget presets** changed. They share some of the same
+words and are a different feature — which is part of how the two got conflated
+in the first place.
+
+If you relied on a persona to keep a section out of somebody's way, the
+replacement is a department access profile, below.
+
+### Added: default access profiles per department
+
+A department can now carry a named bundle of apps — Engineering, People,
+Business, Full access — or a hand-picked set for the case a bundle cannot
+express ("Business, but not the Inbox"). Everybody in the department resolves to
+it, including people added next month, which is the reason to prefer it over
+per-person overrides. Managed on **Settings → Access Control → Departments**,
+which also says how many people in each department have pinned themselves off
+their department's profile, since editing it does not reach them.
+
+A department with no profile is called out rather than left blank: its members
+are still being decided by their legacy workspace role.
+
+### Changed: the workspace app switch moved into Access Control
+
+It was on **Settings → Organization**, three layers away from the settings it
+overrules. That is not cosmetic: an app switched off for the workspace cannot be
+granted back by any department profile or personal override, so an admin could
+grant a department an app, watch nothing happen for anyone in it, and have no
+reason to look at another page for the cause.
+
+It is now the **Apps** tab of **Settings → Access Control**, and the tabs read
+in the order access actually resolves — Apps, Departments, Access Matrix,
+Requests. The page still opens on the matrix, so existing bookmarks land where
+they always did. Organization keeps a link to the new location. Still
+owner-only: an admin who can edit departments cannot switch an app off for the
+whole workspace.
+
+### Fixed: developers could raise a ticket and not read the queue it landed in
+
+`can_view_tickets` defaulted to admins, support and managers; `can_create_tickets`
+included developers. The asymmetry was accidental and its effect was five hidden
+dashboard widgets — ticket stats, SLA overview, recent tickets, tickets by
+priority, ticket trends — for the role the tickets app is filed under.
+
+Existing workspaces are covered by
+`scripts/migrate_developer_can_view_tickets.sql`, which rewrites only role rows
+that still match the old template exactly. A permission an admin removed
+deliberately is not handed back by a deploy; "reset to template" is there for
+anyone who wants the new default.
+
+### Fixed: Drive and Reports were on for workspaces but in no bundle
+
+Both were switchable at the workspace level and absent from all four access
+bundles, so no department resolved to either one. Turning an app on only makes
+it grantable — a use case that enables an app has to seed a department whose
+profile grants it, which is now checked by a test rather than trusted.
+
+### Fixed: one bad response could blank a whole settings page
+
+The team review card read `data.snapshots.find(...)` behind only a null check,
+so any truthy response without that array threw during render — and because the
+card sits inside a page-level boundary, the entire page became "Settings
+encountered an error" over one card's data.
+
+### Added: the settings tree in Hindi
+
+972 strings across 30-odd settings areas: organization, access control, org
+roles, projects and project statuses, permissions, task configuration,
+integrations, CRM integrations, email marketing, email delivery, billing, SSO,
+ticket forms, alerting, escalation, insights, webhooks, notifications, admin
+invoices, repositories, plan overrides, workflow secrets and access templates.
+Technical terms stay in English, as elsewhere.
+
+### Fixed: settings dialogs, and buttons with no name
+
+Seventeen hand-rolled modals across settings were `<div>`s with a dark
+backdrop. They had no dialog role, did not trap focus, did not close on Escape
+and did not stop the page behind them scrolling. Settings had never adopted
+`components/ui/dialog`, the Radix wrapper 30 other files use — two files in the
+whole tree did. All seventeen are on it now, keeping their own layout, and the
+one that animates composes the primitive rather than replacing it.
+
+Twenty-seven icon-only buttons — row menus, deletes, removes, drag handles,
+add-to-list, a copy-URL — announced as just "button" to a screen reader. They
+have accessible names. Both are held by a test that walks the settings tree, and
+that test had to be rewritten before it was worth anything: its first version
+used a regex that could not cross the `>` inside `onClick={() => …}`, so it
+skipped almost every button in the codebase and reported 10 offenders where
+there were 27.
+
+### Fixed: four settings pages with no way out, and two headers
+
+Access logs, Gmail exclusions, access templates and the identity admin page had
+no breadcrumb and no sibling navigation — arriving at one, the only way back was
+the browser button. They share a header with their area now, as do the five
+project settings tabs and the nine Service Desk settings pages, and the project
+row menu offers every destination it has rather than three of them.
+
+### Fixed: a category label in Hindi produced an empty slug
+
+The frontend and backend `slugify` disagreed, and both dropped Devanagari vowel
+signs: filtering on the `Mn` Unicode category alone is not enough, because those
+marks are `Mc`. A label of only marks and spaces yielded an empty slug, which
+the API accepted. The two implementations now agree, marks survive, and a label
+that still yields nothing is refused with a message rather than saved.
+
+## [0.37.6] - 2026-09-10
+
+"Embed Module Data" can see module data, and edits made from a table view are
+recorded.
+
+### Fixed: the module picker was empty however much module data existed
+
+Inserting an inline database into a document offers three routes — create a
+table, link an existing one, or embed module data. The third always said "No
+module data available. Create CRM objects or project tables first," and
+creating a CRM object did not change that.
+
+The picker splits the workspace's tables into linkable ones
+(`standalone`/`document`) and module data (`crm`/`project`), but the hook that
+fetched them pinned its query to `scope=standalone`. So the module bucket
+filtered a list that could not contain a match — empty by construction, and the
+empty state's advice was unfollowable. The same pinning meant a document
+already embedding a CRM object could not resolve its name and showed
+"Database".
+
+The scope is now a parameter. The /tables module still asks for standalone
+tables only, as it should; the document embed asks for every scope and does its
+own splitting, which is what it was written to do.
+
+**Projects still will not appear there, and that is not a filter to widen.**
+Nothing in the product creates a table with `scope='project'` — a project is
+not a table, and the embed renders through table fields and records while
+project work lives in its own schema. Making projects embeddable means exposing
+project tasks through the table engine, which is a feature rather than a fix.
+The empty state no longer promises "project tables".
+
+### Fixed: nothing was recorded when a table's data changed
+
+A table could be edited from the table view, from a document embed, or over the
+API, and none of it was written down. Every part of an audit trail was already
+built: the `table_audit_log` table, a service that honours a per-table switch
+and retention period, a read endpoint, a log viewer on the table page, a toggle
+in table settings — and a field-level diff that record updates computed and
+handed back specifically so it could be recorded.
+
+Nothing called the writer. The only reference to the audit service outside its
+own module was the reader, so the log always came back empty. That is worse
+than having no audit log: an operator who switched auditing on, waited, and
+then opened the log would read "nothing happened" rather than "this is not
+recorded".
+
+Creating, updating and deleting records now record, as do adding, changing and
+deleting a column, changing a table's settings, and adding or removing a
+collaborator. Updates carry the field-level diff — which field, from what, to
+what — and deletions carry the values that were removed, since afterwards the
+row cannot say. Each entry names the actor and the calling address.
+
+Auditing remains off by default and per table, so nothing changes for a
+workspace that has not asked for it, and switching it on is itself the first
+entry in the log. Bulk deletion records one entry per record rather than one
+for the batch, because a trail has to say which rows went; that made entries
+sharing a timestamp the common case rather than an edge one, so the reader now
+orders on a stable tiebreak instead of letting a paged query show the same
+entry twice and skip another.
+
+Access control was already right and is unchanged: workspace membership, then
+per-table permission, then field-level validation of the specific values being
+written, then a check that the record belongs to the table named in the URL.
+What was missing was only the record of who used it.
+
+## [0.37.5] - 2026-09-10
+
+Three loose ends from the 0.37.3 review: a subtask's board is now compared on
+project identity rather than on two columns that disagree, the database
+recovery instructions are correct and runnable, and removing one inline
+database out of several is finally testable.
+
+### Fixed: a project with a second team could split its own board
+
+`SprintTask.team_id` has no single meaning. The three creation paths write it
+from three different sources — the `/teams/{id}` path parameter, a real team id
+resolved through `project_teams`, and a project id on a cross-project move —
+while `Sprint.team_id` is always a team id. The subtask guard compared those
+two columns directly, which works only because every project happens to be
+created with one team sharing its id.
+
+Give a project a second team, which the workspace create path explicitly
+allows, and a parent recorded against that team looks like it lives on another
+board: adding a subtask to it fails with "parent task is on another project"
+even though both are on the same project. Both sides are now mapped to the
+owning project before being compared, so sibling teams of one project count as
+one board. An id in neither column is treated as its own board, which leaves
+rows predating the link table exactly as they were.
+
+### Fixed: the database recovery instructions could not be followed
+
+When the postgres image refuses to start on a volume holding an older cluster,
+it prints the steps to migrate. Two things were wrong with them.
+
+They named a stock `postgres:<old>-alpine` image for the dump. This database
+has `vector` columns, and dumping their rows calls the extension's output
+function, so a stock image fails at exactly the step you least want to fail —
+and only on a deployment that has embeddings, which is to say only where there
+is data worth rescuing. The image build now takes the base as an argument, and
+the instructions build a pgvector-enabled image for the old major, on the same
+alpine base so the postgres UID and libc collations still match the volume.
+Verified end to end: the printed command builds, the server starts, and
+`pg_dumpall` emits the vector rows.
+
+They also treated a same-major cluster as an upgrade. The guard fires on any
+cluster at the volume root, PostgreSQL 18 included — which is reachable for
+anyone who worked around the pre-0.37.3 startup failure by setting `PGDATA`
+there themselves and has since picked up a compose file that puts it one level
+down. Nothing needs upgrading in that case; the server is pointed at the wrong
+directory inside the right volume. That case now gets its own message, saying
+so and offering the two one-step fixes instead of a dump and restore.
+
+### Fixed: the inline-database remove control could not be tested in numbers
+
+All three states of the node — placeholder, collapsed, expanded — carry the
+same test id, so any document holding two inline databases produced two
+matches and an ambiguous selector. The tests could only ever cover the
+single-database case, which is not the one where removing the wrong embed
+matters. Selections are now scoped through the node, and a new test puts two
+databases in a document, removes the first, and checks the second is still
+there.
+
 ## [0.37.4] - 2026-09-10
 
 Escape now hands the keyboard back to the document, a subtask's parent is

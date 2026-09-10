@@ -1,6 +1,12 @@
 {
   "settingsUsage": {
     "title": "Usage & limits",
-    "description": "Monitor AI token consumption, plan limits, and cost projections."
+    "description": "Monitor AI token consumption, plan limits, and cost projections.",
+    "byProvider": "Usage by Provider",
+    "noData": "No usage data yet. Start using AI features to see provider breakdown.",
+    "planLimits": "Plan Limits",
+    "features": "Features",
+    "comparePlans": "Compare Plans",
+    "free": "Free"
   }
 }

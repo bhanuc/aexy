@@ -21,29 +21,40 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { useWorkspace } from "@/hooks/useWorkspace";
+import { useWorkspace, useIsWorkspaceOwner } from "@/hooks/useWorkspace";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useMemberAppAccess, useAppAccessTemplates } from "@/hooks/useAppAccess";
 import { useAdminAccessRequests } from "@/hooks/useAccessRequests";
 import { MemberAppAccessModal } from "@/components/members/MemberAppAccessModal";
 import { getAllApps } from "@/config/appDefinitions";
 import { useTranslations } from "next-intl";
-import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import { SettingsGroupPage } from "@/components/settings/SettingsGroupPage";
 import { DepartmentProfilesPanel } from "@/components/access/DepartmentProfilesPanel";
+import { WorkspaceAppsPanel } from "@/components/access/WorkspaceAppsPanel";
 
-/** Departments first in the URL contract, since that is where access is decided. */
-type Tab = "matrix" | "requests" | "departments";
+/**
+ * The tabs are ordered by how access actually resolves — the workspace switch,
+ * then department defaults, then the per-member matrix — so reading the page
+ * left to right reads the layers broadest-first. The landing tab stays the
+ * matrix: it is what admins come here to do, and moving it would change what
+ * every existing bookmark opens on.
+ */
+type Tab = "apps" | "departments" | "matrix" | "requests";
 
 export default function AccessControlPage() {
   const t = useTranslations("settingsAccess");
+  const tc = useTranslations("common");
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab");
   const initialTab: Tab =
-    tabParam === "requests" || tabParam === "departments" ? tabParam : "matrix";
+    tabParam === "requests" || tabParam === "departments" || tabParam === "apps"
+      ? tabParam
+      : "matrix";
 
   const { currentWorkspaceId } = useWorkspace();
   const workspaceId = currentWorkspaceId || "";
   const { isEnterprise } = useSubscription(currentWorkspaceId);
+  const { isWorkspaceOwner } = useIsWorkspaceOwner(currentWorkspaceId);
 
   const {
     members,
@@ -112,10 +123,10 @@ export default function AccessControlPage() {
       });
       setSelectedMembers([]);
       setSelectedTemplateId("");
-      toast.success("Template applied to selected members");
+      toast.success(t("templateApplied"));
     } catch (error) {
       console.error("Bulk apply failed:", error);
-      toast.error("Failed to apply template");
+      toast.error(t("templateFailed"));
     }
   };
 
@@ -127,10 +138,10 @@ export default function AccessControlPage() {
       });
       setReviewingRequest(null);
       setReviewNotes("");
-      toast.success("Request approved");
+      toast.success(t("approved"));
     } catch (error) {
       console.error("Approve failed:", error);
-      toast.error("Failed to approve request");
+      toast.error(t("approveFailed"));
     }
   };
 
@@ -142,10 +153,10 @@ export default function AccessControlPage() {
       });
       setReviewingRequest(null);
       setReviewNotes("");
-      toast.success("Request rejected");
+      toast.success(t("rejected"));
     } catch (error) {
       console.error("Reject failed:", error);
-      toast.error("Failed to reject request");
+      toast.error(t("rejectFailed"));
     }
   };
 
@@ -166,27 +177,27 @@ export default function AccessControlPage() {
         return (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/10 text-amber-500">
             <Clock className="h-3 w-3" />
-            Pending
+            {t("statusPending")}
           </span>
         );
       case "approved":
         return (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/10 text-green-500">
             <CheckCircle className="h-3 w-3" />
-            Approved
+            {t("statusApproved")}
           </span>
         );
       case "rejected":
         return (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-400">
             <XCircle className="h-3 w-3" />
-            Rejected
+            {t("statusRejected")}
           </span>
         );
       case "withdrawn":
         return (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground">
-            Withdrawn
+            {t("statusWithdrawn")}
           </span>
         );
       default:
@@ -200,7 +211,8 @@ export default function AccessControlPage() {
   const reviewedRequests = requests.filter((r) => r.status !== "pending");
 
   return (
-    <SettingsPage
+    <SettingsGroupPage
+      group="access"
       title={t("title")}
       description={t("description")}
       width="wide"
@@ -209,7 +221,7 @@ export default function AccessControlPage() {
           <Link href="/settings/access/gmail-exclusions">
             <Button variant="outline" size="sm" className="gap-2">
               <Ban className="h-4 w-4" aria-hidden />
-              Gmail exclusions
+              {t("gmailExclusions")}
             </Button>
           </Link>
           <Link href="/settings/access/logs">
@@ -231,14 +243,14 @@ export default function AccessControlPage() {
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-border">
         <button
-          onClick={() => setActiveTab("matrix")}
+          onClick={() => setActiveTab("apps")}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === "matrix"
+            activeTab === "apps"
               ? "border-primary text-foreground"
               : "border-transparent text-muted-foreground hover:text-foreground"
           }`}
         >
-          Access Matrix
+          {t("workspaceApps.tab")}
         </button>
         <button
           onClick={() => setActiveTab("departments")}
@@ -248,7 +260,17 @@ export default function AccessControlPage() {
               : "border-transparent text-muted-foreground hover:text-foreground"
           }`}
         >
-          Departments
+          {t("departments")}
+        </button>
+        <button
+          onClick={() => setActiveTab("matrix")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === "matrix"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {t("matrixHeading")}
         </button>
         <button
           onClick={() => setActiveTab("requests")}
@@ -267,7 +289,11 @@ export default function AccessControlPage() {
         </button>
       </div>
 
-      {activeTab === "matrix" ? (
+      {activeTab === "apps" ? (
+        <div className="mt-4">
+          <WorkspaceAppsPanel workspaceId={workspaceId} isOwner={isWorkspaceOwner} />
+        </div>
+      ) : activeTab === "matrix" ? (
         <div>
           {/* A narrowed matrix has to say so and offer the way out — otherwise it
               reads as "this workspace has three members". */}
@@ -281,7 +307,7 @@ export default function AccessControlPage() {
                 onClick={() => setOverrideFilter(null)}
                 className="whitespace-nowrap text-primary hover:underline"
               >
-                Show everyone
+                {t("showEveryone")}
               </button>
             </div>
           )}
@@ -298,7 +324,7 @@ export default function AccessControlPage() {
                   onChange={(e) => setSelectedTemplateId(e.target.value)}
                   className="rounded-md border border-border bg-muted px-3 py-1.5 text-sm text-foreground"
                 >
-                  <option value="">Select template...</option>
+                  <option value="">{t("selectTemplate")}</option>
                   {templates.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.name}
@@ -320,7 +346,7 @@ export default function AccessControlPage() {
                   size="sm"
                   onClick={() => setSelectedMembers([])}
                 >
-                  Clear
+                  {t("clear")}
                 </Button>
               </div>
             </div>
@@ -372,7 +398,7 @@ export default function AccessControlPage() {
             </div>
           ) : matrixError ? (
             <div className="text-center py-20 text-red-400">
-              Failed to load access matrix. Please try again.
+              {t("matrixFailed")}
             </div>
           ) : (
             <div className="bg-card border border-border rounded-lg overflow-hidden">
@@ -392,7 +418,7 @@ export default function AccessControlPage() {
                             className="h-4 w-4 rounded border-border"
                           />
                           <span className="text-sm font-medium text-foreground">
-                            Member
+                            {t("colMember")}
                           </span>
                         </div>
                       </th>
@@ -414,7 +440,7 @@ export default function AccessControlPage() {
                       })}
                       <th className="px-4 py-3 text-center">
                         <span className="text-xs font-medium text-muted-foreground">
-                          Actions
+                          {t("colActions")}
                         </span>
                       </th>
                     </tr>
@@ -459,9 +485,9 @@ export default function AccessControlPage() {
                                 ) : (
                                   <span
                                     className="text-amber-600 dark:text-amber-400"
-                                    title="No department profile applies, so this person's access comes from their workspace role"
+                                    title={t("roleFallbackTitle")}
                                   >
-                                    Role defaults
+                                    {t("roleDefaults")}
                                   </span>
                                 )}
                                 {member.has_custom_overrides && (
@@ -500,7 +526,7 @@ export default function AccessControlPage() {
                             className="gap-1"
                           >
                             <Settings2 className="h-3 w-3" />
-                            Edit
+                            {tc("edit")}
                           </Button>
                         </td>
                       </tr>
@@ -512,7 +538,7 @@ export default function AccessControlPage() {
               {members.length === 0 && (
                 <div className="text-center py-12 text-muted-foreground">
                   <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  <p>No members found in this workspace</p>
+                  <p>{t("noMembers")}</p>
                 </div>
               )}
             </div>
@@ -522,15 +548,15 @@ export default function AccessControlPage() {
           <div className="mt-4 flex items-center gap-6 text-xs text-muted-foreground">
             <div className="flex items-center gap-2">
               <Check className="h-3 w-3 text-green-500" />
-              Full Access
+              {t("fullAccess")}
             </div>
             <div className="flex items-center gap-2">
               <Minus className="h-3 w-3 text-amber-500" />
-              Partial Access
+              {t("partialAccess")}
             </div>
             <div className="flex items-center gap-2">
               <X className="h-3 w-3 text-muted-foreground" />
-              No Access
+              {t("noAccess")}
             </div>
           </div>
         </div>
@@ -601,7 +627,7 @@ export default function AccessControlPage() {
                                   type="text"
                                   value={reviewNotes}
                                   onChange={(e) => setReviewNotes(e.target.value)}
-                                  placeholder="Add a note (optional)"
+                                  placeholder={t("notePlaceholder")}
                                   className="rounded-md border border-border bg-muted px-2.5 py-1 text-sm text-foreground w-48"
                                 />
                                 <Button
@@ -615,7 +641,7 @@ export default function AccessControlPage() {
                                   ) : (
                                     <Check className="h-3 w-3" />
                                   )}
-                                  Approve
+                                  {t("approve")}
                                 </Button>
                                 <Button
                                   size="sm"
@@ -629,7 +655,7 @@ export default function AccessControlPage() {
                                   ) : (
                                     <X className="h-3 w-3" />
                                   )}
-                                  Reject
+                                  {t("reject")}
                                 </Button>
                                 <Button
                                   size="sm"
@@ -639,7 +665,7 @@ export default function AccessControlPage() {
                                     setReviewNotes("");
                                   }}
                                 >
-                                  Cancel
+                                  {tc("cancel")}
                                 </Button>
                               </div>
                             ) : (
@@ -650,7 +676,7 @@ export default function AccessControlPage() {
                                   className="gap-1"
                                 >
                                   <Check className="h-3 w-3" />
-                                  Approve
+                                  {t("approve")}
                                 </Button>
                                 <Button
                                   size="sm"
@@ -659,7 +685,7 @@ export default function AccessControlPage() {
                                   className="gap-1"
                                 >
                                   <X className="h-3 w-3" />
-                                  Reject
+                                  {t("reject")}
                                 </Button>
                               </>
                             )}
@@ -675,7 +701,7 @@ export default function AccessControlPage() {
               {reviewedRequests.length > 0 && (
                 <div>
                   <h2 className="text-sm font-medium text-muted-foreground mb-3">
-                    Previous Requests
+                    {t("previousRequests")}
                   </h2>
                   <div className="space-y-2">
                     {reviewedRequests.map((req) => (
@@ -721,9 +747,9 @@ export default function AccessControlPage() {
               {requests.length === 0 && (
                 <div className="text-center py-20 text-muted-foreground">
                   <Send className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  <p>No access requests yet</p>
+                  <p>{t("noRequests")}</p>
                   <p className="text-sm mt-1">
-                    When members request access to apps, they&apos;ll appear here.
+                    {t("noRequestsHint")}
                   </p>
                 </div>
               )}
@@ -742,6 +768,6 @@ export default function AccessControlPage() {
           developerName={editingMember.developerName}
         />
       )}
-    </SettingsPage>
+    </SettingsGroupPage>
   );
 }

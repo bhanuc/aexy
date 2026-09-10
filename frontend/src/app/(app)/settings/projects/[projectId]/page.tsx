@@ -6,12 +6,9 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
-  FolderGit2,
   FolderKanban,
-  Activity,
   Save,
   RefreshCw,
-  Shield,
   Globe,
   Lock,
   Check,
@@ -25,7 +22,6 @@ import {
   ExternalLink,
   Calendar,
   Vote,
-  Workflow,
 } from "lucide-react";
 import { HelpTooltip } from "@/components/ui/tooltip";
 import { useWorkspace, useWorkspaceMembers } from "@/hooks/useWorkspace";
@@ -33,7 +29,7 @@ import { useProject } from "@/hooks/useProjects";
 import { useAuth } from "@/hooks/useAuth";
 import { ProjectStatus, projectTabsApi } from "@/lib/api";
 import { useTranslations } from "next-intl";
-import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import { ProjectSettingsPage } from "@/components/settings/ProjectSettingsPage";
 
 const STATUS_OPTIONS = [
   { value: "active", label: "Active", color: "bg-green-500" },
@@ -67,8 +63,9 @@ const PUBLIC_TABS = [
   { id: "sprints", label: "Sprints", icon: Map, description: "Sprint list and progress" },
 ];
 
-export default function ProjectSettingsPage() {
+export default function ProjectGeneralSettingsPage() {
   const t = useTranslations("settingsProjects");
+  const tc = useTranslations("common");
   const params = useParams();
   const router = useRouter();
   const projectId = params.projectId as string;
@@ -198,7 +195,7 @@ export default function ProjectSettingsPage() {
       <div className="flex items-center justify-center py-20">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500 mx-auto mb-4"></div>
-          <p className="text-foreground">Loading project...</p>
+          <p className="text-foreground">{t("general.loading")}</p>
         </div>
       </div>
     );
@@ -209,16 +206,18 @@ export default function ProjectSettingsPage() {
       <div className="flex items-center justify-center py-20">
         <div className="text-center">
           <FolderKanban className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-xl font-medium text-foreground mb-2">Project Not Found</h3>
+          <h3 className="text-xl font-medium text-foreground mb-2">
+            {t("notFoundTitle")}
+          </h3>
           <p className="text-muted-foreground mb-6">
-            The project you&apos;re looking for doesn&apos;t exist.
+            {t("permissions.notFoundDescription")}
           </p>
           <Link
             href="/settings/projects"
             className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition font-medium"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to Projects
+            {t("notFoundCta")}
           </Link>
         </div>
       </div>
@@ -226,62 +225,16 @@ export default function ProjectSettingsPage() {
   }
 
   return (
-    <SettingsPage
-      title={project.name}
-      description={t("general.subtitle")}
-      width="wide"
-      breadcrumbs={[
-        { label: "Settings", href: "/settings" },
-        { label: "Projects", href: "/settings/projects" },
-        { label: project.name },
-      ]}
-    >
+    <ProjectSettingsPage projectId={projectId} description={t("general.subtitle")}>
 
       <div>
-        {/* Navigation Tabs */}
-        <div className="flex gap-2 mb-8">
-          <Link
-            href={`/settings/projects/${projectId}`}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium"
-          >
-            General
-          </Link>
-          <Link
-            href={`/settings/projects/${projectId}/permissions`}
-            className="px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg text-sm font-medium transition flex items-center gap-2"
-          >
-            <Shield className="h-4 w-4" />
-            Permissions
-          </Link>
-          <Link
-            href={`/settings/projects/${projectId}/repositories`}
-            className="px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg text-sm font-medium transition flex items-center gap-2"
-          >
-            <FolderGit2 className="h-4 w-4" />
-            Repositories
-          </Link>
-          <Link
-            href={`/settings/projects/${projectId}/statuses`}
-            className="px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg text-sm font-medium transition flex items-center gap-2"
-          >
-            <Workflow className="h-4 w-4" />
-            Statuses
-          </Link>
-          <Link
-            href={`/settings/projects/${projectId}/tracker`}
-            className="px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg text-sm font-medium transition flex items-center gap-2"
-          >
-            <Activity className="h-4 w-4" />
-            Tracker
-          </Link>
-        </div>
 
         {/* Settings Form */}
         <div className="bg-card rounded-xl p-6 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <h2 className="text-lg font-medium text-foreground flex items-center gap-2">
               <FolderKanban className="h-5 w-5 text-muted-foreground" />
-              General Settings
+              {t("general.heading")}
             </h2>
             {isAdmin && (
               <button
@@ -300,14 +253,14 @@ export default function ProjectSettingsPage() {
                 ) : (
                   <Lock className="h-4 w-4" />
                 )}
-                {project.is_public ? "Public" : "Private"}
+                {project.is_public ? tc("public") : tc("private")}
               </button>
             )}
           </div>
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm text-muted-foreground mb-1">Project Name</label>
+              <label className="block text-sm text-muted-foreground mb-1">{t("general.name")}</label>
               <input
                 type="text"
                 value={name}
@@ -318,19 +271,19 @@ export default function ProjectSettingsPage() {
             </div>
 
             <div>
-              <label className="block text-sm text-muted-foreground mb-1">Description</label>
+              <label className="block text-sm text-muted-foreground mb-1">{t("general.descriptionLabel")}</label>
               <textarea
                 value={description}
                 onChange={(e) => handleChange("description", e.target.value)}
                 disabled={!isAdmin}
                 rows={3}
                 className="w-full px-4 py-2 bg-muted border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary-500 disabled:opacity-50"
-                placeholder="What is this project about?"
+                placeholder={t("general.descriptionPlaceholder")}
               />
             </div>
 
             <div>
-              <label className="block text-sm text-muted-foreground mb-2">Color</label>
+              <label className="block text-sm text-muted-foreground mb-2">{t("general.color")}</label>
               <div className="flex gap-2 flex-wrap">
                 {COLORS.map((c) => (
                   <button
@@ -349,7 +302,7 @@ export default function ProjectSettingsPage() {
 
             <div>
               <div className="flex items-center gap-1.5 mb-2">
-                <label className="block text-sm text-muted-foreground">Status</label>
+                <label className="block text-sm text-muted-foreground">{t("general.status")}</label>
                 <HelpTooltip content="Controls the project lifecycle. Active projects are in progress, On Hold pauses work, Completed marks finished projects, and Archived hides them from default views" />
               </div>
               <div className="flex gap-2 flex-wrap">
@@ -378,7 +331,7 @@ export default function ProjectSettingsPage() {
           )}
 
           {success && (
-            <p className="text-green-400 text-sm">Project updated successfully!</p>
+            <p className="text-green-400 text-sm">{t("general.updated")}</p>
           )}
 
           {isAdmin && (
@@ -391,12 +344,12 @@ export default function ProjectSettingsPage() {
                 {isUpdating ? (
                   <>
                     <RefreshCw className="h-4 w-4 animate-spin" />
-                    Saving...
+                    {t("general.saving")}
                   </>
                 ) : (
                   <>
                     <Save className="h-4 w-4" />
-                    Save Changes
+                    {t("general.saveChanges")}
                   </>
                 )}
               </button>
@@ -404,7 +357,7 @@ export default function ProjectSettingsPage() {
           )}
         </div>
 
-        {/* Public Page Configuration - Only shown when project is public */}
+        {/* {t("general.publicHeading")} - Only shown when project is public */}
         {project.is_public && isAdmin && (
           <div className="bg-card rounded-xl p-6 mt-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
@@ -412,12 +365,12 @@ export default function ProjectSettingsPage() {
                 <div className="flex items-center gap-2">
                   <h2 className="text-lg font-medium text-foreground flex items-center gap-2">
                     <Globe className="h-5 w-5 text-green-400" />
-                    Public Page Configuration
+                    {t("general.publicHeading")}
                   </h2>
                   <HelpTooltip content="Configure which sections are visible on your project's public page. Anyone with the link can view enabled tabs" />
                 </div>
                 <p className="text-muted-foreground text-sm mt-1">
-                  Choose which tabs to show on your public project page
+                  {t("general.publicSubtitle")}
                 </p>
               </div>
               {project.public_slug && (
@@ -427,7 +380,7 @@ export default function ProjectSettingsPage() {
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-muted hover:bg-accent text-foreground rounded-lg text-sm transition"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
-                  View Public Page
+                  {t("general.viewPublicPage")}
                 </Link>
               )}
             </div>
@@ -493,7 +446,7 @@ export default function ProjectSettingsPage() {
                 </div>
 
                 {tabsSuccess && (
-                  <p className="text-green-400 text-sm mt-4">Public tabs updated successfully!</p>
+                  <p className="text-green-400 text-sm mt-4">{t("general.publicUpdated")}</p>
                 )}
 
                 <div className="flex justify-end pt-4 mt-4 border-t border-border">
@@ -505,12 +458,12 @@ export default function ProjectSettingsPage() {
                     {isSavingTabs ? (
                       <>
                         <RefreshCw className="h-4 w-4 animate-spin" />
-                        Saving...
+                        {t("general.saving")}
                       </>
                     ) : (
                       <>
                         <Save className="h-4 w-4" />
-                        Save Tab Settings
+                        {t("general.saveTabs")}
                       </>
                     )}
                   </button>
@@ -520,41 +473,41 @@ export default function ProjectSettingsPage() {
           </div>
         )}
 
-        {/* Project Info */}
+        {/* {t("general.infoHeading")} */}
         <div className="bg-card rounded-xl p-6 mt-6">
-          <h2 className="text-lg font-medium text-foreground mb-4">Project Info</h2>
+          <h2 className="text-lg font-medium text-foreground mb-4">{t("general.infoHeading")}</h2>
           <dl className="space-y-3 text-sm">
             <div className="flex justify-between">
-              <dt className="text-muted-foreground">Project ID</dt>
+              <dt className="text-muted-foreground">{t("general.projectId")}</dt>
               <dd className="text-foreground font-mono">{project.id}</dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-muted-foreground">Slug</dt>
+              <dt className="text-muted-foreground">{t("general.slug")}</dt>
               <dd className="text-foreground">{project.slug}</dd>
             </div>
             {project.public_slug && (
               <div className="flex justify-between">
-                <dt className="text-muted-foreground">Public Slug</dt>
+                <dt className="text-muted-foreground">{t("general.publicSlug")}</dt>
                 <dd className="text-foreground font-mono">{project.public_slug}</dd>
               </div>
             )}
             <div className="flex justify-between">
-              <dt className="text-muted-foreground flex items-center gap-1.5">Visibility <HelpTooltip content="Controls who can see this project. Public = all workspace members, Private = invited members only" /></dt>
+              <dt className="text-muted-foreground flex items-center gap-1.5">{t("general.visibility")} <HelpTooltip content="Controls who can see this project. Public = all workspace members, Private = invited members only" /></dt>
               <dd className={`flex items-center gap-1.5 ${project.is_public ? "text-green-400" : "text-foreground"}`}>
                 {project.is_public ? <Globe className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-                {project.is_public ? "Public" : "Private"}
+                {project.is_public ? tc("public") : tc("private")}
               </dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-muted-foreground">Members</dt>
+              <dt className="text-muted-foreground">{t("general.members")}</dt>
               <dd className="text-foreground">{project.member_count}</dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-muted-foreground">Teams</dt>
+              <dt className="text-muted-foreground">{t("general.teams")}</dt>
               <dd className="text-foreground">{project.team_count}</dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-muted-foreground">Created</dt>
+              <dt className="text-muted-foreground">{t("general.created")}</dt>
               <dd className="text-foreground">
                 {new Date(project.created_at).toLocaleDateString()}
               </dd>
@@ -562,6 +515,6 @@ export default function ProjectSettingsPage() {
           </dl>
         </div>
       </div>
-    </SettingsPage>
+    </ProjectSettingsPage>
   );
 }

@@ -1168,6 +1168,57 @@ class SprintTaskService:
         row = (await self.db.execute(stmt)).first()
         return row[0] if row else "done"
 
+    async def board_project_id(self, board_id: str | None) -> str | None:
+        """Map any board-ish id onto the project it belongs to.
+
+        `SprintTask.team_id` has no single meaning. Three creation paths write
+        it from three different sources:
+
+          * `create_project_task` — the `/teams/{team_id}` path parameter
+          * `add_workspace_task`  — `ProjectTeam.team_id`, a real team id
+          * `move_to_project`     — `target_project_id`, a project id
+
+        while `Sprint.team_id` is always a team id. Comparing those two columns
+        directly only works because every project in practice has one team
+        sharing its id, which is a coincidence of how projects are created
+        rather than anything the schema promises — and `add_workspace_task`
+        itself notes that a project may have several teams, picking the oldest.
+        The moment a project gains a second team, a parent created through that
+        path carries the second team's id while a sprint on the first carries
+        the project id, and a valid parent looks like it belongs elsewhere.
+
+        So both sides are normalised through `project_teams` before comparison.
+        An id that matches nothing there is returned unchanged: legacy rows
+        predate the link table, and treating them as their own board keeps the
+        comparison no worse than it was.
+        """
+        if not board_id:
+            return None
+
+        from aexy.models.project import ProjectTeam
+
+        # Already a project?
+        stmt = (
+            select(ProjectTeam.project_id)
+            .where(ProjectTeam.project_id == board_id)
+            .limit(1)
+        )
+        row = (await self.db.execute(stmt)).first()
+        if row:
+            return str(row[0])
+
+        # Otherwise a team — return the project that owns it.
+        stmt = (
+            select(ProjectTeam.project_id)
+            .where(ProjectTeam.team_id == board_id)
+            .limit(1)
+        )
+        row = (await self.db.execute(stmt)).first()
+        if row:
+            return str(row[0])
+
+        return str(board_id)
+
     async def resolve_parent_task(
         self,
         *,
@@ -1198,6 +1249,9 @@ class SprintTaskService:
         board check to contradict. Rejecting them would break the ordinary
         case of a subtask added to a sprint task.
 
+        The board comparison is made on project identity rather than on the raw
+        `team_id` columns, which are not in the same id space.
+
         `workspace_id` and `team_id` are optional for the same reason from the
         other side: a caller that cannot say which board the new task lands on
         should still not be allowed to attach it to a task that does not exist,
@@ -1215,12 +1269,13 @@ class SprintTaskService:
             raise TaskValidationError("parent_task_not_found")
         if workspace_id is not None and str(parent.workspace_id) != str(workspace_id):
             raise TaskValidationError("parent_task_other_workspace")
-        if (
-            team_id is not None
-            and parent.team_id is not None
-            and str(parent.team_id) != str(team_id)
-        ):
-            raise TaskValidationError("parent_task_other_project")
+        if team_id is not None and parent.team_id is not None:
+            # Both sides go through `board_project_id` because the two columns
+            # are not in the same id space — see that method for why.
+            parent_board = await self.board_project_id(str(parent.team_id))
+            target_board = await self.board_project_id(str(team_id))
+            if parent_board != target_board:
+                raise TaskValidationError("parent_task_other_project")
         if parent.parent_task_id:
             raise TaskValidationError("parent_task_is_subtask")
         return str(parent.id)

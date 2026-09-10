@@ -3,21 +3,26 @@
 import { getApiErrorMessage } from "@/lib/utils";
 import { useState } from "react";
 import { AlertCircle, Check, RefreshCw } from "lucide-react";
+import { useTranslations } from "next-intl";
+
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 import {
   CategorySemantics,
   WorkspaceStatusCategory,
 } from "@/lib/api";
 
-const SEMANTICS_OPTIONS: {
-  value: CategorySemantics;
-  label: string;
-  hint: string;
-}[] = [
-  { value: "open", label: "Open", hint: "Queued — remaining work" },
-  { value: "active", label: "Active", hint: "In flight — counts toward WIP" },
-  { value: "done", label: "Done", hint: "Completed — counts toward velocity" },
-  { value: "cancelled", label: "Cancelled", hint: "Closed without completing" },
+// Each value is also its key under `statusCategories.semantics`.
+const SEMANTICS_VALUES: CategorySemantics[] = [
+  "open",
+  "active",
+  "done",
+  "cancelled",
 ];
 
 const PRESET_COLORS = [
@@ -25,10 +30,21 @@ const PRESET_COLORS = [
   "#8B5CF6", "#EC4899", "#14B8A6", "#F97316", "#6366F1",
 ];
 
+/**
+ * Mirror of the backend's `slugify` (task_config_service.py).
+ *
+ * JavaScript's `\w` is ASCII-only, so the previous version reduced any
+ * non-Latin label to an empty slug — a Hindi category simply could not be
+ * created. `\p{L}\p{N}\p{M}` with the `u` flag matches what the backend
+ * keeps, marks included, so the two agree on every script.
+ *
+ * Still returns "" for a label with no letters or digits at all (emoji only);
+ * the caller refuses that with an explanation rather than posting it.
+ */
 function slugify(text: string): string {
   return text
     .toLowerCase()
-    .replace(/[^\w\s-]/g, "")
+    .replace(/[^\p{L}\p{N}\p{M}_\s-]/gu, "")
     .replace(/[-\s]+/g, "_")
     .replace(/^_|_$/g, "");
 }
@@ -51,6 +67,8 @@ export interface CategoryModalProps {
  * Label, color, and semantics stay editable for the lifetime of the row.
  */
 export function CategoryModal({ category, onClose, onSave, isSaving }: CategoryModalProps) {
+  const t = useTranslations("statusCategories");
+  const tc = useTranslations("common");
   const isEdit = category !== null;
   const [label, setLabel] = useState(category?.label ?? "");
   const [color, setColor] = useState(category?.color ?? "#6B7280");
@@ -63,7 +81,15 @@ export function CategoryModal({ category, onClose, onSave, isSaving }: CategoryM
     e.preventDefault();
     setError(null);
     if (!label.trim()) {
-      setError("Label is required");
+      setError(t("modal.errors.labelRequired"));
+      return;
+    }
+    // A label with no letters or digits at all — emoji only — slugifies to
+    // nothing, which the API rejects on `min_length`. Caught here with the
+    // reason rather than posting it and surfacing a validation error nobody
+    // can act on. Only on create: an existing category already has its slug.
+    if (!isEdit && !slugify(label)) {
+      setError(t("modal.errors.slugEmpty"));
       return;
     }
     try {
@@ -75,79 +101,128 @@ export function CategoryModal({ category, onClose, onSave, isSaving }: CategoryM
       });
       onClose();
     } catch (err) {
-      const msg = getApiErrorMessage(err, "Failed to save category");
+      const msg = getApiErrorMessage(err, t("modal.errors.saveFailed"));
       // Surface category_slug_exists distinctly so the operator picks a new label.
       if (/category_slug_exists/i.test(msg)) {
-        setError("A category with that slug already exists.");
+        setError(t("modal.errors.slugExists"));
       } else {
         setError(msg);
       }
     }
   };
 
+  // Mounted only while open (`{showCategoryModal && <CategoryModal …>}`), so
+  // `open` is constant and closing is delegated to the caller — which keeps
+  // Radix's Escape handling and backdrop click going through the same path as
+  // the Cancel button.
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-card rounded-xl w-full max-w-md p-6">
-        <h3 className="text-xl font-semibold text-foreground mb-4">
-          {isEdit ? "Edit Category" : "Create Category"}
-        </h3>
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      {/* No descriptive paragraph in this dialog, so opt out explicitly —
+          Radix warns otherwise, and a wrong `aria-describedby` is worse
+          than none. */}
+      <DialogContent className="max-w-md" aria-describedby={undefined}>
+        <DialogHeader>
+          <DialogTitle className="text-xl">
+            {isEdit ? t("modal.editTitle") : t("modal.createTitle")}
+          </DialogTitle>
+        </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm text-muted-foreground mb-1">Label</label>
+              <label
+                htmlFor="category-label"
+                className="block text-sm text-muted-foreground mb-1"
+              >
+                {t("modal.labelField")}
+              </label>
+              {/* The placeholder is Latin in every locale on purpose: the
+                  slug below keeps only Latin letters and digits, so a
+                  translated example would promise something the derivation
+                  can't deliver. */}
               <input
+                id="category-label"
                 type="text"
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
-                placeholder="Design Review"
+                placeholder={t("modal.labelPlaceholder")}
                 autoFocus
                 className="w-full px-4 py-2 bg-muted border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary-500"
               />
-              {!isEdit && label.trim() && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  slug: <span className="font-mono">{slugify(label)}</span>
-                </p>
-              )}
-              {isEdit && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  slug: <span className="font-mono">{category!.slug}</span>
-                  {" "}
-                  (locked — statuses reference it)
-                </p>
-              )}
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t("modal.labelHint")}
+              </p>
             </div>
 
+            {/* The slug as its own read-only field rather than a caption under
+                the label. Both are one word for buckets like `needs_revision`,
+                so a caption left people unsure which of the two they had just
+                typed — a field they cannot type into answers that by itself.
+                Read-only rather than disabled: still focusable, announced, and
+                copyable, which matters because a status's category is stored
+                as this string. */}
             <div>
-              <label className="block text-sm text-muted-foreground mb-1">
-                Semantics
+              <label
+                htmlFor="category-slug"
+                className="block text-sm text-muted-foreground mb-1"
+              >
+                {t("modal.slugField")}
               </label>
-              <div className="grid grid-cols-2 gap-2">
-                {SEMANTICS_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setSemantics(opt.value)}
-                    title={opt.hint}
-                    className={`p-2 rounded-lg border text-left transition ${
-                      semantics === opt.value
-                        ? "border-primary-500 bg-primary-900/20"
-                        : "border-border hover:border-foreground/30"
-                    }`}
-                  >
-                    <div className="text-foreground text-sm font-medium">{opt.label}</div>
-                    <div className="text-[10px] text-muted-foreground mt-0.5">
-                      {opt.hint}
-                    </div>
-                  </button>
-                ))}
-              </div>
-              <p className="text-muted-foreground text-xs mt-1">
-                Burndown and velocity branch on semantics — slugs are user-facing.
+              <input
+                id="category-slug"
+                type="text"
+                readOnly
+                aria-readonly="true"
+                aria-describedby="category-slug-hint"
+                value={isEdit ? category!.slug : slugify(label)}
+                placeholder={t("modal.slugPlaceholder")}
+                className="w-full px-4 py-2 bg-muted/50 border border-dashed border-border rounded-lg font-mono text-sm text-muted-foreground placeholder-muted-foreground/60 focus:outline-none cursor-default"
+              />
+              <p id="category-slug-hint" className="mt-1 text-xs text-muted-foreground">
+                {isEdit
+                  ? t("modal.slugHintExisting")
+                  : t("modal.slugHintNew")}
               </p>
             </div>
 
             <div>
-              <label className="block text-sm text-muted-foreground mb-1">Color</label>
+              <label className="block text-sm text-muted-foreground mb-1">
+                {t("modal.semanticsField")}
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {SEMANTICS_VALUES.map((value) => {
+                  const hint = t(`semantics.${value}.hint`);
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setSemantics(value)}
+                      title={hint}
+                      aria-pressed={semantics === value}
+                      className={`p-2 rounded-lg border text-left transition ${
+                        semantics === value
+                          ? "border-primary-500 bg-primary-900/20"
+                          : "border-border hover:border-foreground/30"
+                      }`}
+                    >
+                      <div className="text-foreground text-sm font-medium">
+                        {t(`semantics.${value}.label`)}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground mt-0.5">
+                        {hint}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-muted-foreground text-xs mt-1">
+                {t("modal.semanticsHint")}
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm text-muted-foreground mb-1">
+                {t("modal.colorField")}
+              </label>
               <div className="flex flex-wrap gap-2">
                 {PRESET_COLORS.map((c) => (
                   <button
@@ -183,7 +258,7 @@ export function CategoryModal({ category, onClose, onSave, isSaving }: CategoryM
               onClick={onClose}
               className="flex-1 px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg transition"
             >
-              Cancel
+              {tc("cancel")}
             </button>
             <button
               type="submit"
@@ -193,18 +268,18 @@ export function CategoryModal({ category, onClose, onSave, isSaving }: CategoryM
               {isSaving ? (
                 <>
                   <RefreshCw className="h-4 w-4 animate-spin" />
-                  Saving...
+                  {t("modal.saving")}
                 </>
               ) : (
                 <>
                   <Check className="h-4 w-4" />
-                  Save
+                  {tc("save")}
                 </>
               )}
             </button>
           </div>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

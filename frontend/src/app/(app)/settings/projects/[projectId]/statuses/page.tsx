@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { AlertCircle, ArrowLeft, Clock, FolderKanban, Layers, Plus, RefreshCw, Shield, Workflow } from "lucide-react";
+import { AlertCircle, ArrowLeft, Clock, FolderKanban, Layers, Plus, RefreshCw } from "lucide-react";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
 
@@ -20,10 +20,13 @@ import { DeleteStatusModal } from "@/components/settings/DeleteStatusModal";
 import { CategoryModal } from "@/components/settings/CategoryModal";
 import { SortableCategoryItem } from "@/components/settings/SortableCategoryItem";
 import { useTranslations } from "next-intl";
-import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import { ProjectSettingsPage } from "@/components/settings/ProjectSettingsPage";
 
 export default function ProjectStatusesPage() {
   const t = useTranslations("settingsProjects");
+  // The status and category sections are the same concepts workspace task
+  // settings defines, so they read those messages rather than a second copy.
+  const tt = useTranslations("settingsTaskConfig");
   const params = useParams();
   const projectId = params.projectId as string;
 
@@ -91,10 +94,10 @@ export default function ProjectStatusesPage() {
   }) => {
     if (editingStatus) {
       await updateStatus({ statusId: editingStatus.id, data });
-      toast.success("Status updated");
+      toast.success(tt("statuses.updated"));
     } else {
       await createStatus(data);
-      toast.success("Status created");
+      toast.success(tt("statuses.created"));
     }
     setEditingStatus(null);
   };
@@ -114,7 +117,7 @@ export default function ProjectStatusesPage() {
           semantics: data.semantics,
         },
       });
-      toast.success("Category updated");
+      toast.success(tt("categories.updated"));
     } else {
       await createCategory({
         slug: data.slug!,
@@ -122,7 +125,7 @@ export default function ProjectStatusesPage() {
         color: data.color,
         semantics: data.semantics,
       });
-      toast.success("Category created");
+      toast.success(tt("categories.created"));
     }
     setEditingCategory(null);
   };
@@ -131,18 +134,18 @@ export default function ProjectStatusesPage() {
     const inUse = statuses.some((s) => s.category === cat.slug);
     if (inUse) {
       toast.error(
-        `Can't delete "${cat.label}" — statuses still use it. Reassign them first.`,
+        tt("categories.inUse", { label: cat.label }),
       );
       return;
     }
-    if (!confirm(`Delete category "${cat.label}"?`)) return;
+    if (!confirm(tt("categories.confirmDelete", { label: cat.label }))) return;
     try {
       await deleteCategory(cat.id);
-      toast.success("Category deleted");
+      toast.success(tt("categories.deleted"));
     } catch (err) {
       const msg = getApiErrorMessage(err, "Failed to delete");
       toast.error(/category_in_use/i.test(msg)
-        ? "This category is still in use by one or more statuses."
+        ? tt("categories.inUseServer")
         : msg);
     }
   };
@@ -154,7 +157,7 @@ export default function ProjectStatusesPage() {
         statusId: deletingStatus.id,
         migrateTo: migrateTo ?? undefined,
       });
-      toast.success("Status deleted");
+      toast.success(tt("statuses.deleted"));
       setDeletingStatus(null);
     } catch (err) {
       const message = getApiErrorMessage(err, "Failed to delete status");
@@ -177,13 +180,15 @@ export default function ProjectStatusesPage() {
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <FolderKanban className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-xl font-medium text-foreground mb-2">Project Not Found</h3>
+          <h3 className="text-xl font-medium text-foreground mb-2">
+            {t("notFoundTitle")}
+          </h3>
           <Link
             href="/settings/projects"
             className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition font-medium"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to Projects
+            {t("notFoundCta")}
           </Link>
         </div>
       </div>
@@ -191,41 +196,9 @@ export default function ProjectStatusesPage() {
   }
 
   return (
-    <SettingsPage
-      title={project.name}
-      description={t("statuses.subtitle")}
-      width="wide"
-      breadcrumbs={[
-        { label: "Settings", href: "/settings" },
-        { label: "Projects", href: "/settings/projects" },
-        { label: project.name, href: `/settings/projects/${projectId}` },
-        { label: "Statuses" },
-      ]}
-    >
+    <ProjectSettingsPage projectId={projectId} description={t("statuses.subtitle")}>
 
       <div>
-        <div className="flex gap-2 mb-8">
-          <Link
-            href={`/settings/projects/${projectId}`}
-            className="px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg text-sm font-medium transition"
-          >
-            General
-          </Link>
-          <Link
-            href={`/settings/projects/${projectId}/permissions`}
-            className="px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg text-sm font-medium transition flex items-center gap-2"
-          >
-            <Shield className="h-4 w-4" />
-            Permissions
-          </Link>
-          <Link
-            href={`/settings/projects/${projectId}/statuses`}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium flex items-center gap-2"
-          >
-            <Workflow className="h-4 w-4" />
-            Statuses
-          </Link>
-        </div>
 
         {/* Categories section — the buckets statuses can belong to. Ships
             with six canonical buckets (backlog, todo, in_progress,
@@ -237,7 +210,9 @@ export default function ProjectStatusesPage() {
             <div className="flex items-start gap-3">
               <Layers className="h-5 w-5 text-muted-foreground mt-0.5" />
               <div>
-                <h2 className="text-lg font-medium text-foreground">Categories</h2>
+                <h2 className="text-lg font-medium text-foreground">
+                  {t("categoriesHeading")}
+                </h2>
                 <p className="text-muted-foreground text-sm">
                   Buckets that statuses belong to. Each carries a semantics
                   flag (Open / Active / Done / Cancelled) used for burndown.
@@ -253,7 +228,7 @@ export default function ProjectStatusesPage() {
                 className="flex items-center gap-2 px-3 py-1.5 bg-muted hover:bg-accent text-foreground rounded-lg transition text-sm"
               >
                 <Plus className="h-4 w-4" />
-                Add Category
+                {tt("categories.add")}
               </button>
             )}
           </div>
@@ -313,11 +288,13 @@ export default function ProjectStatusesPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
           <div>
-            <h2 className="text-lg font-medium text-foreground">Task Statuses</h2>
+            <h2 className="text-lg font-medium text-foreground">
+              {tt("statuses.heading")}
+            </h2>
             <p className="text-muted-foreground text-sm">
               {readOnly
-                ? "This project uses the workspace defaults. Customize to give the project its own workflow."
-                : "Define this project's workflow columns. Drag to reorder."}
+                ? t("statusesSubtitleInherited")
+                : t("statusesSubtitleOwn")}
             </p>
           </div>
           {isAdmin && !readOnly && (
@@ -329,7 +306,7 @@ export default function ProjectStatusesPage() {
               className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition text-sm"
             >
               <Plus className="h-4 w-4" />
-              Add Status
+              {tt("statuses.add")}
             </button>
           )}
         </div>
@@ -340,7 +317,7 @@ export default function ProjectStatusesPage() {
             <AlertCircle className="h-5 w-5 text-primary-400 mt-0.5" />
             <div className="flex-1">
               <h4 className="text-sm font-medium text-foreground">
-                Using workspace defaults
+                {t("usingWorkspaceDefaults")}
               </h4>
               <p className="mt-1 text-sm text-muted-foreground">
                 Customizing here forks the workspace statuses into a
@@ -352,10 +329,10 @@ export default function ProjectStatusesPage() {
               onClick={async () => {
                 try {
                   await cloneFromWorkspace();
-                  toast.success("Statuses copied to project");
+                  toast.success(tt("statuses.copied"));
                 } catch (err) {
                   console.error(err);
-                  toast.error("Failed to copy statuses");
+                  toast.error(tt("statuses.copyFailed"));
                 }
               }}
               disabled={isCloning}
@@ -364,7 +341,7 @@ export default function ProjectStatusesPage() {
               {isCloning ? (
                 <>
                   <RefreshCw className="h-4 w-4 animate-spin" />
-                  Copying…
+                  {tt("statuses.forkCopying")}
                 </>
               ) : (
                 "Customize for this project"
@@ -413,9 +390,11 @@ export default function ProjectStatusesPage() {
         ) : (
           <div className="bg-card rounded-xl p-12 text-center">
             <Clock className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-foreground mb-2">No Statuses</h3>
+            <h3 className="text-lg font-medium text-foreground mb-2">
+              {t("statusesEmptyTitle")}
+            </h3>
             <p className="text-muted-foreground">
-              Add the project&apos;s first status to define its workflow.
+              {t("statusesEmptyDescription")}
             </p>
           </div>
         )}
@@ -456,6 +435,6 @@ export default function ProjectStatusesPage() {
           isDeleting={isDeleting}
         />
       )}
-    </SettingsPage>
+    </ProjectSettingsPage>
   );
 }

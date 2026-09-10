@@ -1,0 +1,37 @@
+{
+  "settingsGroups": {
+    "access": {
+      "title": "Access control",
+      "navLabel": "Access control",
+      "tabs": {
+        "overview": "Overview",
+        "templates": "Templates",
+        "logs": "Access logs",
+        "gmailExclusions": "Gmail exclusions"
+      }
+    },
+    "identity": {
+      "title": "Identity",
+      "navLabel": "Identity",
+      "tabs": {
+        "overview": "Commit ownership",
+        "ghosts": "Ghost developers"
+      }
+    },
+    "serviceDesk": {
+      "title": "Service Desk",
+      "navLabel": "Service Desk settings",
+      "tabs": {
+        "identity": "Desk identity",
+        "intake": "Ticket intake",
+        "mailboxes": "Mailboxes",
+        "stakeholders": "Pending-with buckets",
+        "masterData": "Master data",
+        "hours": "Working hours",
+        "scorecard": "Scorecard",
+        "digest": "Digest",
+        "ai": "AI categorisation"
+      }
+    }
+  }
+}

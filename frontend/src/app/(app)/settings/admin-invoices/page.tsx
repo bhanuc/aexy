@@ -91,34 +91,38 @@ function formatDate(dateStr: string | null) {
   });
 }
 
-function getStatusBadge(status: string) {
+type Translator = (key: string) => string;
+
+// Module-level helpers, so they take the translator rather than
+// calling the hook — hooks only run inside components.
+function getStatusBadge(status: string, t: Translator) {
   switch (status) {
     case "paid":
       return (
         <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-500/10 text-green-400 text-xs font-medium rounded-full">
           <CheckCircle className="h-3 w-3" />
-          Paid
+          {t("statusPaid")}
         </span>
       );
     case "open":
       return (
         <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-500/10 text-amber-400 text-xs font-medium rounded-full">
           <Clock className="h-3 w-3" />
-          Open
+          {t("statusOpen")}
         </span>
       );
     case "void":
       return (
         <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-500/10 text-red-400 text-xs font-medium rounded-full">
           <XCircle className="h-3 w-3" />
-          Void
+          {t("statusVoid")}
         </span>
       );
     case "draft":
       return (
         <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-zinc-500/10 text-zinc-400 text-xs font-medium rounded-full">
           <FileText className="h-3 w-3" />
-          Draft
+          {t("statusDraft")}
         </span>
       );
     default:
@@ -130,24 +134,24 @@ function getStatusBadge(status: string) {
   }
 }
 
-function getPaymentMethodBadge(method: string) {
+function getPaymentMethodBadge(method: string, t: Translator) {
   switch (method) {
     case "stripe":
       return (
         <span className="inline-flex items-center px-2 py-0.5 bg-blue-500/10 text-blue-400 text-xs font-medium rounded-full">
-          Stripe
+          {t("methodStripe")}
         </span>
       );
     case "bank_transfer":
       return (
         <span className="inline-flex items-center px-2 py-0.5 bg-emerald-500/10 text-emerald-400 text-xs font-medium rounded-full">
-          Bank Transfer
+          {t("methodBank")}
         </span>
       );
     case "manual":
       return (
         <span className="inline-flex items-center px-2 py-0.5 bg-zinc-500/10 text-zinc-400 text-xs font-medium rounded-full">
-          Manual
+          {t("methodManual")}
         </span>
       );
     default:
@@ -161,6 +165,7 @@ function getPaymentMethodBadge(method: string) {
 
 export default function AdminInvoicesPage() {
   const t = useTranslations("settingsInvoices");
+  const tc = useTranslations("common");
   const queryClient = useQueryClient();
 
   // Create invoice form state
@@ -196,7 +201,7 @@ export default function AdminInvoicesPage() {
   const createMutation = useMutation({
     mutationFn: (data: any) => adminInvoiceApi.create(data),
     onSuccess: () => {
-      toast.success("Invoice created successfully");
+      toast.success(t("created"));
       queryClient.invalidateQueries({ queryKey: ["admin-invoices"] });
       setCreateForm({
         workspace_id: "",
@@ -217,7 +222,7 @@ export default function AdminInvoicesPage() {
     mutationFn: ({ id, data }: { id: string; data: any }) =>
       adminInvoiceApi.markPaid(id, data),
     onSuccess: () => {
-      toast.success("Invoice marked as paid");
+      toast.success(t("markedPaid"));
       queryClient.invalidateQueries({ queryKey: ["admin-invoices"] });
       setMarkingPaidId(null);
       setMarkPaidForm({ bank_transfer_reference: "", note: "" });
@@ -232,7 +237,7 @@ export default function AdminInvoicesPage() {
   const voidMutation = useMutation({
     mutationFn: (id: string) => adminInvoiceApi.void(id),
     onSuccess: () => {
-      toast.success("Invoice voided");
+      toast.success(t("voided"));
       queryClient.invalidateQueries({ queryKey: ["admin-invoices"] });
     },
     onError: (err) => {
@@ -246,7 +251,7 @@ export default function AdminInvoicesPage() {
     mutationFn: (workspaceId: string) =>
       adminInvoiceApi.generateFromUsage(workspaceId),
     onSuccess: () => {
-      toast.success("Invoice generated from usage");
+      toast.success(t("generated"));
       queryClient.invalidateQueries({ queryKey: ["admin-invoices"] });
       setGenerateWorkspaceId("");
     },
@@ -254,7 +259,7 @@ export default function AdminInvoicesPage() {
       toast.error(
         err instanceof Error
           ? err.message
-          : "Failed to generate invoice from usage"
+          : t("generateFailed")
       );
     },
   });
@@ -263,7 +268,7 @@ export default function AdminInvoicesPage() {
     if (!createForm.workspace_id || !createForm.amount_dollars) return;
     const amountCents = Math.round(parseFloat(createForm.amount_dollars) * 100);
     if (isNaN(amountCents) || amountCents <= 0) {
-      toast.error("Please enter a valid amount");
+      toast.error(t("invalidAmount"));
       return;
     }
     createMutation.mutate({
@@ -298,17 +303,17 @@ export default function AdminInvoicesPage() {
       width="wide"
     >
 
-      {/* Create Invoice */}
+      {/* {t("createTitle")} */}
       <div className="bg-card border border-border rounded-xl p-5">
         <h2 className="text-sm font-medium text-foreground mb-4 flex items-center gap-2">
           <Plus className="h-4 w-4" />
-          Create Invoice
+          {t("createTitle")}
         </h2>
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">
-                Workspace ID
+                {t("workspaceId")}
               </label>
               <input
                 type="text"
@@ -319,13 +324,13 @@ export default function AdminInvoicesPage() {
                     workspace_id: e.target.value,
                   }))
                 }
-                placeholder="Enter workspace UUID"
+                placeholder={t("workspacePlaceholder")}
                 className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground"
               />
             </div>
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">
-                Amount (USD)
+                {t("amountUsd")}
               </label>
               <input
                 type="number"
@@ -346,7 +351,7 @@ export default function AdminInvoicesPage() {
 
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">
-              Description
+              {t("description")}
             </label>
             <textarea
               value={createForm.description}
@@ -356,7 +361,7 @@ export default function AdminInvoicesPage() {
                   description: e.target.value,
                 }))
               }
-              placeholder="Invoice description (optional)"
+              placeholder={t("descriptionPlaceholder")}
               rows={2}
               className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground resize-none"
             />
@@ -365,7 +370,7 @@ export default function AdminInvoicesPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">
-                Due Date
+                {t("dueDate")}
               </label>
               <input
                 type="date"
@@ -381,7 +386,7 @@ export default function AdminInvoicesPage() {
             </div>
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">
-                Payment Method
+                {t("paymentMethod")}
               </label>
               <select
                 value={createForm.payment_method}
@@ -393,9 +398,9 @@ export default function AdminInvoicesPage() {
                 }
                 className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground"
               >
-                <option value="stripe">Stripe</option>
-                <option value="bank_transfer">Bank Transfer</option>
-                <option value="manual">Manual</option>
+                <option value="stripe">{t("methodStripe")}</option>
+                <option value="bank_transfer">{t("methodBank")}</option>
+                <option value="manual">{t("methodManual")}</option>
               </select>
             </div>
           </div>
@@ -414,7 +419,7 @@ export default function AdminInvoicesPage() {
             ) : (
               <Plus className="h-4 w-4" />
             )}
-            Create Invoice
+            {t("createTitle")}
           </button>
         </div>
       </div>
@@ -423,18 +428,18 @@ export default function AdminInvoicesPage() {
       <div className="bg-card border border-border rounded-xl p-5">
         <h2 className="text-sm font-medium text-foreground mb-4 flex items-center gap-2">
           <Zap className="h-4 w-4" />
-          Generate Invoice from Usage
+          {t("generateTitle")}
         </h2>
         <div className="flex items-end gap-3">
           <div className="flex-1">
             <label className="text-xs text-muted-foreground mb-1 block">
-              Workspace ID
+              {t("workspaceId")}
             </label>
             <input
               type="text"
               value={generateWorkspaceId}
               onChange={(e) => setGenerateWorkspaceId(e.target.value)}
-              placeholder="Enter workspace UUID"
+              placeholder={t("workspacePlaceholder")}
               className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground"
             />
           </div>
@@ -457,16 +462,16 @@ export default function AdminInvoicesPage() {
       <div className="bg-card border border-border rounded-xl p-5">
         <h2 className="text-sm font-medium text-foreground mb-4 flex items-center gap-2">
           <Receipt className="h-4 w-4" />
-          All Invoices
+          {t("allInvoices")}
         </h2>
 
         {isLoading ? (
           <div className="flex items-center gap-2 text-muted-foreground text-sm">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Loading invoices...
+            {t("loading")}
           </div>
         ) : !invoices?.length ? (
-          <p className="text-sm text-muted-foreground">No invoices found.</p>
+          <p className="text-sm text-muted-foreground">{t("none")}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -476,22 +481,22 @@ export default function AdminInvoicesPage() {
                     ID
                   </th>
                   <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Workspace
+                    {t("colWorkspace")}
                   </th>
                   <th className="text-right px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Amount
+                    {t("colAmount")}
                   </th>
                   <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Status
+                    {t("colStatus")}
                   </th>
                   <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Payment
+                    {t("colPayment")}
                   </th>
                   <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Due Date
+                    {t("colDueDate")}
                   </th>
                   <th className="text-right px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Actions
+                    {t("colActions")}
                   </th>
                 </tr>
               </thead>
@@ -528,10 +533,10 @@ export default function AdminInvoicesPage() {
                       </span>
                     </td>
                     <td className="px-3 py-3">
-                      {getStatusBadge(invoice.status)}
+                      {getStatusBadge(invoice.status, t)}
                     </td>
                     <td className="px-3 py-3">
-                      {getPaymentMethodBadge(invoice.payment_method)}
+                      {getPaymentMethodBadge(invoice.payment_method, t)}
                       {invoice.status === "paid" &&
                         invoice.payment_method === "bank_transfer" &&
                         invoice.bank_transfer_reference && (
@@ -562,7 +567,7 @@ export default function AdminInvoicesPage() {
                               className="px-2.5 py-1 text-xs font-medium text-green-400 bg-green-500/10 hover:bg-green-500/20 rounded-lg transition"
                             >
                               <CheckCircle className="h-3.5 w-3.5 inline mr-1" />
-                              Mark Paid
+                              {t("markPaid")}
                             </button>
                             <button
                               onClick={() => voidMutation.mutate(invoice.id)}
@@ -570,18 +575,18 @@ export default function AdminInvoicesPage() {
                               className="px-2.5 py-1 text-xs font-medium text-red-400 bg-red-500/10 hover:bg-red-500/20 rounded-lg transition"
                             >
                               <Ban className="h-3.5 w-3.5 inline mr-1" />
-                              Void
+                              {t("void")}
                             </button>
                           </>
                         )}
                       </div>
 
-                      {/* Mark Paid Inline Form */}
+                      {/* {t("markPaid")} Inline Form */}
                       {markingPaidId === invoice.id && (
                         <div className="mt-2 p-3 bg-background border border-border rounded-lg space-y-2">
                           <div>
                             <label className="text-xs text-muted-foreground mb-1 block">
-                              Bank Transfer Reference
+                              {t("bankReference")}
                             </label>
                             <input
                               type="text"
@@ -598,7 +603,7 @@ export default function AdminInvoicesPage() {
                           </div>
                           <div>
                             <label className="text-xs text-muted-foreground mb-1 block">
-                              Note
+                              {t("note")}
                             </label>
                             <input
                               type="text"
@@ -609,7 +614,7 @@ export default function AdminInvoicesPage() {
                                   note: e.target.value,
                                 }))
                               }
-                              placeholder="Optional note"
+                              placeholder={t("notePlaceholder")}
                               className="w-full px-2 py-1.5 bg-background border border-border rounded text-xs text-foreground placeholder:text-muted-foreground"
                             />
                           </div>
@@ -630,7 +635,7 @@ export default function AdminInvoicesPage() {
                               onClick={() => setMarkingPaidId(null)}
                               className="px-3 py-1.5 bg-muted hover:bg-muted/80 text-foreground text-xs rounded transition"
                             >
-                              Cancel
+                              {tc("cancel")}
                             </button>
                           </div>
                         </div>

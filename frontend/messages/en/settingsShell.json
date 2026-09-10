@@ -1,0 +1,13 @@
+{
+  "settingsShell": {
+    "filter": "Filter settings",
+    "clearFilter": "Clear filter",
+    "backToSettings": "Back to settings",
+    "autosave": "Changes are saved automatically.",
+    "noResults": "No settings found",
+    "search": "Search settings…",
+    "allSettings": "All settings",
+    "settings": "Settings",
+    "scoringCurve": "Scoring curve"
+  }
+}

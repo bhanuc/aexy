@@ -124,30 +124,41 @@ def test_picking_the_same_use_case_twice_seeds_once():
     assert len(departments_for_use_cases(["sales", "sales"])) == 1
 
 
-def test_every_seeded_department_has_a_persona():
-    """Without one there is nothing to derive a new joiner's sidebar from."""
-    for use_case, config in USE_CASES.items():
-        for department in config["departments"]:
-            assert department["persona"], f"{use_case}/{department['name']}"
+# Turned on for the workspace but deliberately not in any bundle, so no
+# department resolves to them. `insights` is `enabled: False` everywhere and
+# `learning` is sold rather than switched on; both are decisions, and the
+# coverage check below would otherwise read them as gaps.
+UNGRANTED_BY_DESIGN = {"insights", "learning"}
 
 
-def test_persona_gated_apps_come_with_a_department_to_imply_the_persona():
-    """Turning an app on is half the job; the sidebar still has to show it.
+def test_a_seeded_departments_profile_grants_what_the_pick_turned_on():
+    """Turning an app on is half the job; somebody has to resolve to it.
 
-    `suggested_persona` reads the primary department's `default_persona`, and
-    with no department the sidebar falls back to "developer" — which filters out
-    the Business section that Service Desk and CRM live in. A use case whose
-    apps sit behind a persona has to seed a department carrying it, or the pick
-    turns the app on somewhere the person who chose it cannot see.
+    Workspace settings only make an app grantable. What a member actually
+    gets comes from their department's access profile, so a use case that
+    seeds a department whose bundle omits the apps it just enabled leaves
+    the picker's promise unmet — the app is on, and the person who asked
+    for it has no access to it.
     """
-    persona_gated = {"service_desk", "crm", "booking", "email_marketing"}
     for use_case, config in USE_CASES.items():
-        if not persona_gated.intersection(config["apps"]):
+        if not config["departments"]:
             continue
-        personas = [d["persona"] for d in config["departments"]]
-        assert personas, f"{use_case} turns on {persona_gated.intersection(config['apps'])} but seeds no department"
-        assert all(p in {"sales", "support", "admin"} for p in personas), (
-            f"{use_case} seeds {personas}, none of which can see the Business section"
+        granted = set()
+        for department in config["departments"]:
+            bundle = SYSTEM_APP_BUNDLES[department["profile_slug"]]["apps"]
+            granted |= {
+                app_id for app_id, cfg in bundle.items() if cfg.get("enabled")
+            }
+        missing = [
+            app
+            for app in config["apps"]
+            if app not in granted
+            and app not in ALWAYS_ENABLED_APPS
+            and app not in UNGRANTED_BY_DESIGN
+        ]
+        assert not missing, (
+            f"{use_case} turns on {missing}, which none of its seeded "
+            f"profiles {[d['profile_slug'] for d in config['departments']]} grant"
         )
 
 
@@ -158,18 +169,18 @@ def test_capability_use_cases_seed_no_department():
 
 
 @pytest.mark.parametrize(
-    "use_case,expected_department,expected_persona",
+    "use_case,expected_department,expected_profile",
     [
-        ("engineering", "Engineering", "developer"),
-        ("sales", "Sales", "sales"),
-        ("people", "People", "hr"),
-        ("gtm", "Marketing", "sales"),
-        ("operations", "Operations", "support"),
+        ("engineering", "Engineering", "engineering"),
+        ("sales", "Sales", "business"),
+        ("people", "People", "people"),
+        ("gtm", "Marketing", "business"),
+        ("operations", "Operations", "business"),
     ],
 )
 def test_use_case_seeds_the_expected_department(
-    use_case, expected_department, expected_persona
+    use_case, expected_department, expected_profile
 ):
     departments = departments_for_use_cases([use_case])
     assert [d["name"] for d in departments] == [expected_department]
-    assert departments[0]["persona"] == expected_persona
+    assert departments[0]["profile_slug"] == expected_profile

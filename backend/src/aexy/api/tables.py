@@ -1,6 +1,6 @@
 """Standalone Tables API endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -58,6 +58,24 @@ async def check_workspace_permission(
 # =============================================================================
 # TABLE CRUD
 # =============================================================================
+
+def _client_ip(request: Request | None) -> str | None:
+    """Caller IP for the audit trail.
+
+    Prefers the left-most `X-Forwarded-For` entry, since this runs behind a
+    proxy in every deployment that has one; falls back to the socket peer.
+    Returns None rather than a placeholder when neither is available, so an
+    entry never claims an address it does not have.
+    """
+    if request is None:
+        return None
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        first = forwarded.split(",")[0].strip()
+        if first:
+            return first
+    return request.client.host if request.client else None
+
 
 @router.get("", response_model=list[CRMObjectWithAttributesResponse])
 async def list_tables(
@@ -282,6 +300,7 @@ async def update_table(
     workspace_id: str,
     table_id: str,
     data: TableUpdate,
+    request: Request,
     current_user: Developer = Depends(get_current_developer),
     db: AsyncSession = Depends(get_db),
 ):
@@ -291,9 +310,20 @@ async def update_table(
     service = DataTableService(db)
     await service.auth.check_access(table_id, str(current_user.id), "manage", workspace_id)
 
-    table = await service.update_table(table_id, **data.model_dump(exclude_unset=True))
+    changed = data.model_dump(exclude_unset=True)
+    table = await service.update_table(table_id, **changed)
     if not table:
         raise HTTPException(status_code=404, detail="Table not found")
+
+    # Logged after the update so that switching auditing ON records the change
+    # that switched it on — `log` reads the table's current config.
+    await TableAuditService(db).log(
+        table_id=table_id,
+        actor_id=str(current_user.id),
+        action="settings_changed",
+        changes={"fields": sorted(changed.keys())},
+        ip_address=_client_ip(request),
+    )
 
     await db.commit()
     return table
@@ -368,6 +398,7 @@ async def list_fields(
 async def add_field(
     workspace_id: str,
     table_id: str,
+    request: Request,
     data: CRMAttributeCreate,
     current_user: Developer = Depends(get_current_developer),
     db: AsyncSession = Depends(get_db),
@@ -395,6 +426,15 @@ async def add_field(
         column_width=data.column_width,
     )
 
+    await TableAuditService(db).log(
+        table_id=table_id,
+        actor_id=str(current_user.id),
+        action="field_added",
+        changes={"field_id": str(field.id), "name": data.name,
+                 "type": data.attribute_type},
+        ip_address=_client_ip(request),
+    )
+
     await db.commit()
     return field
 
@@ -404,6 +444,7 @@ async def update_field(
     workspace_id: str,
     table_id: str,
     field_id: str,
+    request: Request,
     data: CRMAttributeUpdate,
     current_user: Developer = Depends(get_current_developer),
     db: AsyncSession = Depends(get_db),
@@ -422,6 +463,14 @@ async def update_field(
     if not field:
         raise HTTPException(status_code=404, detail="Field not found")
 
+    await TableAuditService(db).log(
+        table_id=table_id,
+        actor_id=str(current_user.id),
+        action="field_updated",
+        changes={"field_id": field_id, "fields": sorted(update_data.keys())},
+        ip_address=_client_ip(request),
+    )
+
     await db.commit()
     return field
 
@@ -431,6 +480,7 @@ async def delete_field(
     workspace_id: str,
     table_id: str,
     field_id: str,
+    request: Request,
     current_user: Developer = Depends(get_current_developer),
     db: AsyncSession = Depends(get_db),
 ):
@@ -442,6 +492,17 @@ async def delete_field(
 
     if not await service.delete_field(field_id):
         raise HTTPException(status_code=404, detail="Field not found")
+
+    # Dropping a column takes every value in it. Recorded even though the
+    # action is outside the vocabulary the audit UI decorates, which renders
+    # the raw name rather than hiding the entry.
+    await TableAuditService(db).log(
+        table_id=table_id,
+        actor_id=str(current_user.id),
+        action="field_deleted",
+        changes={"field_id": field_id},
+        ip_address=_client_ip(request),
+    )
 
     await db.commit()
 
@@ -505,6 +566,7 @@ async def list_records(
 async def create_record(
     workspace_id: str,
     table_id: str,
+    request: Request,
     data: CRMRecordCreate,
     current_user: Developer = Depends(get_current_developer),
     db: AsyncSession = Depends(get_db),
@@ -524,6 +586,15 @@ async def create_record(
         values=data.values,
         owner_id=data.owner_id or str(current_user.id),
         created_by_id=str(current_user.id),
+    )
+
+    await TableAuditService(db).log(
+        table_id=table_id,
+        actor_id=str(current_user.id),
+        action="record_created",
+        record_id=str(record.id),
+        changes={"values": data.values},
+        ip_address=_client_ip(request),
     )
 
     await db.commit()
@@ -548,6 +619,7 @@ async def update_record(
     table_id: str,
     record_id: str,
     data: CRMRecordUpdate,
+    request: Request,
     current_user: Developer = Depends(get_current_developer),
     db: AsyncSession = Depends(get_db),
 ):
@@ -574,6 +646,19 @@ async def update_record(
     if not record:
         raise HTTPException(status_code=404, detail="Record not found")
 
+    # `update_record` computes the field-level diff and hands it back on
+    # `_changes` precisely so it can be recorded here. Nothing read it until
+    # now, so a table's audit log was always empty however many edits it had
+    # taken — including edits made inline from a document embed.
+    await TableAuditService(db).log(
+        table_id=table_id,
+        actor_id=str(current_user.id),
+        action="record_updated",
+        record_id=record_id,
+        changes={"fields": getattr(record, "_changes", [])},
+        ip_address=_client_ip(request),
+    )
+
     await db.commit()
     return CRMRecordResponse(
         id=str(record.id),
@@ -595,6 +680,7 @@ async def delete_record(
     workspace_id: str,
     table_id: str,
     record_id: str,
+    request: Request,
     permanent: bool = False,
     current_user: Developer = Depends(get_current_developer),
     db: AsyncSession = Depends(get_db),
@@ -612,8 +698,21 @@ async def delete_record(
     if not existing or str(existing.object_id) != table_id:
         raise HTTPException(status_code=404, detail="Record not found in this table")
 
+    # Snapshot before deleting: after the call the row is archived or gone, and
+    # an audit entry that cannot say what was removed is of little use.
+    removed_values = dict(existing.values or {})
+
     if not await service.delete_record(record_id, permanent):
         raise HTTPException(status_code=404, detail="Record not found")
+
+    await TableAuditService(db).log(
+        table_id=table_id,
+        actor_id=str(current_user.id),
+        action="record_deleted",
+        record_id=record_id,
+        changes={"permanent": permanent, "values": removed_values},
+        ip_address=_client_ip(request),
+    )
 
     await db.commit()
 
@@ -623,6 +722,7 @@ async def bulk_delete_records(
     workspace_id: str,
     table_id: str,
     data: CRMRecordBulkDelete,
+    request: Request,
     current_user: Developer = Depends(get_current_developer),
     db: AsyncSession = Depends(get_db),
 ):
@@ -635,6 +735,21 @@ async def bulk_delete_records(
     )
 
     deleted = await service.bulk_delete_records(data.record_ids, data.permanent, table_id=table_id)
+
+    # One entry per record, not one for the batch: an audit trail has to say
+    # which rows went, and a bulk delete from the table view is the fastest
+    # way to lose a lot of them.
+    audit = TableAuditService(db)
+    for rid in data.record_ids:
+        await audit.log(
+            table_id=table_id,
+            actor_id=str(current_user.id),
+            action="record_deleted",
+            record_id=rid,
+            changes={"permanent": data.permanent, "via": "bulk"},
+            ip_address=_client_ip(request),
+        )
+
     await db.commit()
     return {"deleted": deleted}
 
@@ -712,6 +827,7 @@ async def list_collaborators(
 async def add_collaborator(
     workspace_id: str,
     table_id: str,
+    request: Request,
     data: TableCollaboratorCreate,
     current_user: Developer = Depends(get_current_developer),
     db: AsyncSession = Depends(get_db),
@@ -734,6 +850,20 @@ async def add_collaborator(
         readonly_columns=data.readonly_columns,
         row_filter=data.row_filter,
         created_by_id=str(current_user.id),
+    )
+
+    await TableAuditService(db).log(
+        table_id=table_id,
+        actor_id=str(current_user.id),
+        action="collaborator_added",
+        changes={
+            "collaborator_id": str(collab.id),
+            "permission": data.permission,
+            "developer_id": data.developer_id,
+            "role_id": data.role_id,
+            "team_id": data.team_id,
+        },
+        ip_address=_client_ip(request),
     )
 
     await db.commit()
@@ -800,6 +930,7 @@ async def remove_collaborator(
     workspace_id: str,
     table_id: str,
     collaborator_id: str,
+    request: Request,
     current_user: Developer = Depends(get_current_developer),
     db: AsyncSession = Depends(get_db),
 ):
@@ -813,6 +944,14 @@ async def remove_collaborator(
 
     if not await service.remove_collaborator(collaborator_id):
         raise HTTPException(status_code=404, detail="Collaborator not found")
+
+    await TableAuditService(db).log(
+        table_id=table_id,
+        actor_id=str(current_user.id),
+        action="collaborator_removed",
+        changes={"collaborator_id": collaborator_id},
+        ip_address=_client_ip(request),
+    )
 
     await db.commit()
 

@@ -1,0 +1,10 @@
+{
+  "settingsGmailExclusionsAdmin": {
+    "standingRules": "स्थायी नियम",
+    "noneExcluded": "किसी ने कोई पता या डोमेन बाहर नहीं रखा।",
+    "individuallyHidden": "व्यक्तिगत रूप से छिपाए गए",
+    "trail": "ट्रेल",
+    "nothingRecorded": "अभी कुछ दर्ज नहीं।",
+    "title": "Gmail अपवाद"
+  }
+}

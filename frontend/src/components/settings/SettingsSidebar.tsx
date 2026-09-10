@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown, Crown, ExternalLink, Search, Shield, X } from "lucide-react";
@@ -45,6 +46,7 @@ export function SettingsSidebar({
   isEnterprise,
   onItemClick,
 }: SettingsSidebarProps) {
+  const t = useTranslations("settingsShell");
   const pathname = usePathname();
   const [filter, setFilter] = useState("");
   const [collapsed, setCollapsed] = useState<string[]>([]);
@@ -110,15 +112,15 @@ export function SettingsSidebar({
           type="text"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          placeholder="Filter settings"
-          aria-label="Filter settings"
+          placeholder={t("filter")}
+          aria-label={t("filter")}
           className="w-full rounded-md border border-border bg-background/60 py-1.5 pl-8 pr-8 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
         />
         {filter && (
           <button
             type="button"
             onClick={() => setFilter("")}
-            aria-label="Clear filter"
+            aria-label={t("clearFilter")}
             className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground"
           >
             <X className="h-3.5 w-3.5" />

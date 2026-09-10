@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 
-import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import { SettingsGroupPage } from "@/components/settings/SettingsGroupPage";
 import {
   DigestSections,
   ReadOnlyNotice,
@@ -12,7 +12,8 @@ export default function ServiceDeskDigestSettingsPage() {
   const t = useTranslations("serviceDesk");
 
   return (
-    <SettingsPage
+    <SettingsGroupPage
+      group="serviceDesk"
       title={t("digest.title")}
       description={t("digest.description")}
     >
@@ -20,6 +21,6 @@ export default function ServiceDeskDigestSettingsPage() {
         <ReadOnlyNotice />
         <DigestSections />
       </div>
-    </SettingsPage>
+    </SettingsGroupPage>
   );
 }

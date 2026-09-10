@@ -84,7 +84,6 @@ export interface SidebarItemConfig {
     label: string;
     icon: LucideIcon;
     items?: SidebarItemConfig[];
-    personas?: string[]; // e.g. ["developer","manager"] — omit for all personas
     /** Name of a count to show beside the label. Resolved by
      *  `useSidebarBadges` — the config says what to show, not where the
      *  number comes from, so navigation stays free of data fetching. */
@@ -108,7 +107,6 @@ export interface SidebarSectionConfig {
     id: string;
     label: string;
     items: SidebarItemConfig[];
-    personas?: string[]; // section-level persona filter — omit for all personas
 }
 
 export interface SidebarLayoutConfig {
@@ -327,21 +325,18 @@ export const GROUPED_LAYOUT: SidebarLayoutConfig = {
         {
             id: "engineering",
             label: "Engineering",
-            personas: ["developer", "manager", "product", "admin"],
             items: [
                 {
                     href: "/tracking",
                     label: "Tracking",
                     icon: Target,
                     items: trackingItems,
-                    personas: ["developer", "manager", "product", "admin"],
                 },
                 {
                     href: "/sprints",
                     label: "Sprints",
                     icon: Calendar,
                     items: planningItems,
-                    personas: ["developer", "manager", "product", "admin"],
                 },
                 // The "My Work" item that sat here is gone, not moved: the page
                 // it pointed at is now Home, at the top of this sidebar. Two
@@ -352,7 +347,6 @@ export const GROUPED_LAYOUT: SidebarLayoutConfig = {
                     label: "Uptime",
                     icon: MonitorCheck,
                     items: uptimeItems,
-                    personas: ["developer", "manager", "admin"],
                 },
                 // Not called "Incidents": Uptime already has an item by that
                 // name for a different entity, and one name for two things is
@@ -362,21 +356,18 @@ export const GROUPED_LAYOUT: SidebarLayoutConfig = {
                     label: "Tickets",
                     icon: Ticket,
                     items: ticketsItems,
-                    personas: ["developer", "manager", "product", "admin"],
                 },
                 {
                     href: "/insights",
                     label: "Insights",
                     icon: TrendingUp,
                     items: insightsItems,
-                    personas: ["manager", "admin"],
                 },
             ],
         },
         {
             id: "compliance",
             label: "Compliance",
-            personas: ["hr", "manager", "admin"],
             items: [
                 {
                     href: "/compliance",
@@ -407,7 +398,6 @@ export const GROUPED_LAYOUT: SidebarLayoutConfig = {
                     label: "Hiring",
                     icon: Users,
                     items: hiringItems,
-                    personas: ["hr", "manager", "admin"],
                 },
                 {
                     href: "/leave",
@@ -426,7 +416,6 @@ export const GROUPED_LAYOUT: SidebarLayoutConfig = {
         {
             id: "business",
             label: "Business",
-            personas: ["sales", "support", "admin"],
             items: [
                 {
                     href: "/crm",
@@ -507,14 +496,12 @@ export const FLAT_LAYOUT: SidebarLayoutConfig = {
                     label: "Tracking",
                     icon: Target,
                     items: trackingItems,
-                    personas: ["developer", "manager", "product", "admin"],
                 },
                 {
                     href: "/sprints",
                     label: "Sprints",
                     icon: Calendar,
                     items: planningItems,
-                    personas: ["developer", "manager", "product", "admin"],
                 },
                 // The "My Work" item that sat here is gone, not moved: the page
                 // it pointed at is now Home, at the top of this sidebar. Two
@@ -525,7 +512,6 @@ export const FLAT_LAYOUT: SidebarLayoutConfig = {
                     label: "Uptime",
                     icon: MonitorCheck,
                     items: uptimeItems,
-                    personas: ["developer", "manager", "admin"],
                 },
                 // Same item as in GROUPED. Flat has no sections to carry a
                 // persona filter, so it repeats on the item.
@@ -534,14 +520,12 @@ export const FLAT_LAYOUT: SidebarLayoutConfig = {
                     label: "Tickets",
                     icon: Ticket,
                     items: ticketsItems,
-                    personas: ["developer", "manager", "product", "admin"],
                 },
                 {
                     href: "/compliance",
                     label: "Compliance",
                     icon: ShieldCheck,
                     items: complianceItems,
-                    personas: ["hr", "manager", "admin"],
                 },
                 {
                     href: "/organization",
@@ -560,28 +544,24 @@ export const FLAT_LAYOUT: SidebarLayoutConfig = {
                     label: "Hiring",
                     icon: Users,
                     items: hiringItems,
-                    personas: ["hr", "manager", "admin"],
                 },
                 {
                     href: "/crm",
                     label: "CRM",
                     icon: Building2,
                     items: crmItems,
-                    personas: ["sales", "support", "admin"],
                 },
                 {
                     href: "/service-desk",
                     label: "Service Desk",
                     icon: Headset,
                     items: serviceDeskItems,
-                    personas: ["sales", "support", "admin"],
                 },
                 {
                     href: "/booking",
                     label: "Booking",
                     icon: CalendarCheck,
                     items: bookingItems,
-                    personas: ["sales", "support", "admin"],
                 },
                 {
                     href: "/operations",
@@ -595,7 +575,6 @@ export const FLAT_LAYOUT: SidebarLayoutConfig = {
                     label: "Insights",
                     icon: TrendingUp,
                     items: insightsItems,
-                    personas: ["manager", "admin"],
                 },
                 {
                     href: "/learning",
@@ -620,7 +599,6 @@ export const FLAT_LAYOUT: SidebarLayoutConfig = {
                     label: "Email",
                     icon: Mail,
                     items: emailItems,
-                    personas: ["sales", "support", "admin"],
                 },
                 {
                     href: "/gtm",

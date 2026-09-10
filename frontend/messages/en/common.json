@@ -29,7 +29,25 @@
       "high": "High",
       "medium": "Medium",
       "low": "Low"
-    }
+    },
+    "settings": "Settings",
+    "saving": "Saving…",
+    "enabling": "Enabling…",
+    "disabling": "Disabling…",
+    "connecting": "Connecting…",
+    "enable": "Enable",
+    "disable": "Disable",
+    "public": "Public",
+    "private": "Private",
+    "verified": "Verified",
+    "inactive": "Inactive",
+    "pending": "Pending",
+    "testConnection": "Test connection",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "manage": "Manage",
+    "optional": "(optional)",
+    "copy": "Copy"
   },
   "saved": "Saved",
   "deleted": "Deleted"

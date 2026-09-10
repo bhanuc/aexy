@@ -648,11 +648,26 @@ export const settingsNavigation: SettingsNavCategory[] = [
         label: "Access Control",
         href: "/settings/access",
         icon: Shield,
-        description: "Manage which apps and modules each member can access",
+        description:
+          "Turn apps on for the workspace, set department defaults, and override per member",
         // Same reasoning as Organization Roles: this grants access to other people.
         permission: PERMISSIONS.CAN_MANAGE_ROLES,
         ownerOnly: true,
-        keywords: ["access", "control", "permission", "app", "module", "matrix"],
+        // "enable"/"disable"/"turn off" are here because the workspace app
+        // switch used to live on the Organization page; somebody searching for
+        // it by what it does has to land on where it went.
+        keywords: [
+          "access",
+          "control",
+          "permission",
+          "app",
+          "module",
+          "matrix",
+          "enable",
+          "disable",
+          "turn off",
+          "department",
+        ],
       },
       {
         id: "plan-overrides",

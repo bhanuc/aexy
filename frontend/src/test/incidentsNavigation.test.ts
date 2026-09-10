@@ -45,20 +45,19 @@ describe("the ticket queue is in the navigation", () => {
     expect(section!.items.some((item) => item.href === PARENT_HREF)).toBe(true);
   });
 
-  it("is gated to personas the Engineering section also admits", () => {
-    // An item persona list containing a persona the *section* excludes is
-    // silently unreachable — the section filter runs first.
-    const section = GROUPED_LAYOUT.sections.find((s) => s.id === "engineering")!;
-    const item = ticketsItem(GROUPED_LAYOUT)!;
-    for (const persona of item.personas ?? []) {
-      expect(section.personas ?? [persona]).toContain(persona);
+  it("is not gated by anything but access", () => {
+    // These two cases used to assert that the item's persona list agreed with
+    // the Engineering section's. Sidebar presets are gone: access decides who
+    // sees an item, so a stale persona list can no longer make an entry
+    // silently unreachable. What has to hold now is that nothing in the layout
+    // gates it at all.
+    for (const layout of [GROUPED_LAYOUT, FLAT_LAYOUT]) {
+      const item = ticketsItem(layout)!;
+      expect(Object.keys(item)).not.toContain("personas");
     }
-    expect(item.personas).toContain("developer");
-  });
-
-  it("repeats its personas on the item in the flat layout", () => {
-    // Nothing else gates it there.
-    expect(ticketsItem(FLAT_LAYOUT)!.personas).toContain("developer");
+    for (const section of GROUPED_LAYOUT.sections) {
+      expect(Object.keys(section)).not.toContain("personas");
+    }
   });
 
   it("stays clickable as a group", () => {

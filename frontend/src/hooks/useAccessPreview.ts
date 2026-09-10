@@ -56,7 +56,6 @@ export function useAccessPreview(
     /** "department" | "role_fallback" | "member_template" */
     baseline: data?.baseline ?? null,
     baselineDetail: data?.baseline_detail ?? null,
-    suggestedPersona: data?.suggested_persona ?? null,
     isLoading,
     error,
   };

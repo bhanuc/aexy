@@ -3,6 +3,26 @@
     "title": "On-call",
     "description": "Who responds to incidents for {team}, and when. People are notified before their shift begins.",
     "fallbackTeam": "this team",
-    "configure": "Configure"
+    "configure": "Configure",
+    "loading": "Loading…",
+    "noWorkspace": "No workspace selected",
+    "orgSettingsCta": "Go to Organization Settings",
+    "notEnabled": "On-Call Not Enabled",
+    "timezonePrefix": "Timezone:",
+    "currentStatus": "Current Status",
+    "googleCalendar": "Google Calendar",
+    "configuration": "Configuration",
+    "timezone": "Timezone",
+    "notifyBefore": "Notify before shift (minutes)",
+    "syncToCalendar": "Sync to Calendar",
+    "selectCalendar": "Select a calendar…",
+    "pendingSwaps": "Pending Swap Requests",
+    "schedule": "Schedule",
+    "syncNow": "Sync now",
+    "disconnect": "Disconnect",
+    "confirmDisable": "Are you sure you want to disable on-call for this team? All schedules will be preserved.",
+    "enableOnCall": "Enable On-Call",
+    "disableOnCall": "Disable On-Call",
+    "connectGoogleCalendar": "Connect Google Calendar"
   }
 }

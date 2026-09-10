@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 
-import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import { SettingsGroupPage } from "@/components/settings/SettingsGroupPage";
 import {
   MasterDataSections,
   ReadOnlyNotice,
@@ -12,7 +12,8 @@ export default function ServiceDeskMasterDataSettingsPage() {
   const t = useTranslations("serviceDesk");
 
   return (
-    <SettingsPage
+    <SettingsGroupPage
+      group="serviceDesk"
       title={t("tabs.settings")}
       // Not t("subtitle") — that describes the Service Desk app as a whole
       // ("email-intake ticketing with stakeholder turnaround tracking"), which
@@ -24,6 +25,6 @@ export default function ServiceDeskMasterDataSettingsPage() {
         <ReadOnlyNotice />
         <MasterDataSections />
       </div>
-    </SettingsPage>
+    </SettingsGroupPage>
   );
 }

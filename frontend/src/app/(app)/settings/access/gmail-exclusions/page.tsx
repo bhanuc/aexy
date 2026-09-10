@@ -14,12 +14,13 @@
  */
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Ban, EyeOff, Loader2, ScrollText } from "lucide-react";
 
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { googleIntegrationApi, WorkspaceExclusions } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/utils";
-import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import { SettingsGroupPage } from "@/components/settings/SettingsGroupPage";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -31,6 +32,7 @@ const ACTION_LABELS: Record<string, string> = {
 };
 
 export default function GmailExclusionsAdminPage() {
+  const t = useTranslations("settingsGmailExclusionsAdmin");
   const { currentWorkspace } = useWorkspace();
   const workspaceId = currentWorkspace?.id ?? null;
   const [data, setData] = useState<WorkspaceExclusions | null>(null);
@@ -58,8 +60,9 @@ export default function GmailExclusionsAdminPage() {
   }, [workspaceId]);
 
   return (
-    <SettingsPage
-      title="Gmail exclusions"
+    <SettingsGroupPage
+      group="access"
+      title={t("title")}
       description="Addresses and domains people have kept out of Gmail sync. Opening this page is recorded."
       width="wide"
     >
@@ -74,11 +77,11 @@ export default function GmailExclusionsAdminPage() {
           <Card className="space-y-3 p-4" data-testid="admin-rules">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
               <Ban className="h-4 w-4" aria-hidden />
-              Standing rules
+              {t("standingRules")}
             </h2>
             {data.rules.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Nobody has excluded an address or domain.
+                {t("noneExcluded")}
               </p>
             ) : (
               <ul className="flex flex-wrap gap-2">
@@ -100,7 +103,7 @@ export default function GmailExclusionsAdminPage() {
           <Card className="space-y-2 p-4" data-testid="admin-hidden-count">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
               <EyeOff className="h-4 w-4" aria-hidden />
-              Individually hidden
+              {t("individuallyHidden")}
             </h2>
             <p className="text-sm text-muted-foreground">
               {/* A count, not the messages. An admin is entitled to know that mail
@@ -114,10 +117,10 @@ export default function GmailExclusionsAdminPage() {
           <Card className="space-y-3 p-4" data-testid="admin-audit">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
               <ScrollText className="h-4 w-4" aria-hidden />
-              Trail
+              {t("trail")}
             </h2>
             {data.audit.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nothing recorded yet.</p>
+              <p className="text-sm text-muted-foreground">{t("nothingRecorded")}</p>
             ) : (
               <ul className="space-y-1.5">
                 {data.audit.map((entry) => (
@@ -137,6 +140,6 @@ export default function GmailExclusionsAdminPage() {
           </Card>
         </div>
       )}
-    </SettingsPage>
+    </SettingsGroupPage>
   );
 }

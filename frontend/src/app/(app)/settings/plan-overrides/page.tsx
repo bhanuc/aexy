@@ -113,7 +113,7 @@ export default function PlanOverridesPage() {
       data: PlanOverrideDraft;
     }) => adminApi.createOrUpdateOverride(workspaceId, data),
     onSuccess: () => {
-      toast.success("Plan override saved");
+      toast.success(t("saved"));
       queryClient.invalidateQueries({ queryKey: ["plan-overrides"] });
       setEditingOverride(null);
       setSelectedWorkspaceId("");
@@ -128,7 +128,7 @@ export default function PlanOverridesPage() {
   const deleteMutation = useMutation({
     mutationFn: (workspaceId: string) => adminApi.deleteOverride(workspaceId),
     onSuccess: () => {
-      toast.success("Override removed");
+      toast.success(t("removed"));
       queryClient.invalidateQueries({ queryKey: ["plan-overrides"] });
     },
     onError: (err) => {
@@ -166,18 +166,18 @@ export default function PlanOverridesPage() {
       <div className="bg-card border border-border rounded-xl p-5">
         <h2 className="text-sm font-medium text-foreground mb-4 flex items-center gap-2">
           <Plus className="h-4 w-4" />
-          Create or Update Override
+          {t("createTitle")}
         </h2>
         <div className="space-y-4">
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">
-              Workspace ID
+              {t("workspaceId")}
             </label>
             <input
               type="text"
               value={selectedWorkspaceId}
               onChange={(e) => setSelectedWorkspaceId(e.target.value)}
-              placeholder="Enter workspace UUID"
+              placeholder={t("workspacePlaceholder")}
               className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground"
             />
           </div>
@@ -185,7 +185,7 @@ export default function PlanOverridesPage() {
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">
-                Billing Model
+                {t("billingModel")}
               </label>
               <select
                 value={editingOverride?.billing_model || ""}
@@ -197,16 +197,16 @@ export default function PlanOverridesPage() {
                 }
                 className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground"
               >
-                <option value="">Default (no override)</option>
-                <option value="free">Free</option>
-                <option value="per_seat">Per Seat</option>
-                <option value="flat_plus_usage">Flat + Usage</option>
-                <option value="postpaid">Postpaid</option>
+                <option value="">{t("modelDefault")}</option>
+                <option value="free">{t("modelFree")}</option>
+                <option value="per_seat">{t("modelPerSeat")}</option>
+                <option value="flat_plus_usage">{t("modelFlatUsage")}</option>
+                <option value="postpaid">{t("modelPostpaid")}</option>
               </select>
             </div>
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">
-                Per Seat Price (cents)
+                {t("perSeatPrice")}
               </label>
               <input
                 type="number"
@@ -225,7 +225,7 @@ export default function PlanOverridesPage() {
             </div>
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">
-                Base Fee (cents)
+                {t("baseFee")}
               </label>
               <input
                 type="number"
@@ -244,7 +244,7 @@ export default function PlanOverridesPage() {
             </div>
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">
-                Max Repos
+                {t("maxRepos")}
               </label>
               <input
                 type="number"
@@ -263,7 +263,7 @@ export default function PlanOverridesPage() {
             </div>
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">
-                Max Storage (GB)
+                {t("maxStorage")}
               </label>
               <input
                 type="number"
@@ -283,7 +283,7 @@ export default function PlanOverridesPage() {
             </div>
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">
-                LLM Req/Day
+                {t("llmPerDay")}
               </label>
               <input
                 type="number"
@@ -302,7 +302,7 @@ export default function PlanOverridesPage() {
             </div>
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">
-                Discount %
+                {t("discount")}
               </label>
               <input
                 type="number"
@@ -323,7 +323,7 @@ export default function PlanOverridesPage() {
 
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">
-              Notes
+              {t("notes")}
             </label>
             <input
               type="text"
@@ -334,7 +334,7 @@ export default function PlanOverridesPage() {
                   notes: e.target.value || null,
                 }))
               }
-              placeholder="Internal notes about this override"
+              placeholder={t("notesPlaceholder")}
               className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground"
             />
           </div>
@@ -362,19 +362,19 @@ export default function PlanOverridesPage() {
                 className="px-4 py-2 bg-muted hover:bg-muted/80 text-foreground text-sm rounded-lg transition flex items-center gap-2"
               >
                 <Eye className="h-4 w-4" />
-                Preview Effective Plan
+                {t("previewButton")}
               </button>
             )}
           </div>
         </div>
       </div>
 
-      {/* Effective Plan Preview */}
+      {/* {t("previewHeading")} */}
       {previewWorkspaceId && effectivePlan && (
         <div className="bg-card border border-border rounded-xl p-5">
           <h2 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
             <Eye className="h-4 w-4" />
-            Effective Plan Preview
+            {t("previewHeading")}
           </h2>
           {previewLoading ? (
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -390,17 +390,17 @@ export default function PlanOverridesPage() {
       <div className="bg-card border border-border rounded-xl p-5">
         <h2 className="text-sm font-medium text-foreground mb-4 flex items-center gap-2">
           <Settings2 className="h-4 w-4" />
-          Active Overrides
+          {t("activeOverrides")}
         </h2>
 
         {isLoading ? (
           <div className="flex items-center gap-2 text-muted-foreground text-sm">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Loading overrides...
+            {t("loading")}
           </div>
         ) : !overrides?.length ? (
           <p className="text-sm text-muted-foreground">
-            No custom plan overrides configured yet.
+            {t("none")}
           </p>
         ) : (
           <div className="space-y-3">
@@ -441,7 +441,7 @@ export default function PlanOverridesPage() {
                       setPreviewWorkspaceId(override.workspace_id)
                     }
                     className="p-1.5 text-muted-foreground hover:text-foreground transition"
-                    title="Preview effective plan"
+                    title={t("previewTitle")}
                   >
                     <Eye className="h-4 w-4" />
                   </button>
@@ -450,7 +450,7 @@ export default function PlanOverridesPage() {
                       deleteMutation.mutate(override.workspace_id)
                     }
                     className="p-1.5 text-muted-foreground hover:text-red-400 transition"
-                    title="Remove override"
+                    title={t("removeTitle")}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>

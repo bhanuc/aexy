@@ -1,0 +1,9 @@
+{
+  "deleteStatusModal": {
+    "title": "स्थिति हटाएँ",
+    "targetStatus": "लक्ष्य स्थिति",
+    "noOthers": "कोई अन्य स्थिति उपलब्ध नहीं",
+    "close": "बंद करें",
+    "deleting": "हटाई जा रही है…"
+  }
+}

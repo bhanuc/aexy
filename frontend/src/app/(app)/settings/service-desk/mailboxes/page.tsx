@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 
-import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import { SettingsGroupPage } from "@/components/settings/SettingsGroupPage";
 import {
   MailboxesSection,
   ReadOnlyNotice,
@@ -12,7 +12,8 @@ export default function ServiceDeskMailboxesSettingsPage() {
   const t = useTranslations("serviceDesk");
 
   return (
-    <SettingsPage
+    <SettingsGroupPage
+      group="serviceDesk"
       title={t("settings.mailboxes")}
       description={t("settings.mailboxesHint")}
     >
@@ -20,6 +21,6 @@ export default function ServiceDeskMailboxesSettingsPage() {
         <ReadOnlyNotice />
         <MailboxesSection />
       </div>
-    </SettingsPage>
+    </SettingsGroupPage>
   );
 }

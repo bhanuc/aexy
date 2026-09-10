@@ -1,6 +1,7 @@
 """Task Configuration Service for managing custom statuses and fields."""
 
 import re
+import unicodedata
 from uuid import uuid4
 
 from sqlalchemy import or_, select, func, update
@@ -16,9 +17,34 @@ from aexy.services.sprint_task_service import TaskValidationError
 
 
 def slugify(text: str) -> str:
-    """Convert text to a URL-friendly slug."""
+    r"""Convert text to a URL-friendly slug.
+
+    Unicode-aware, and specifically mark-aware. The old ``[^\w\s-]`` filter
+    dropped combining marks, because Python's ``\w`` covers no mark category —
+    so a Devanagari name did not fail, it silently *corrupted*: "समीक्षा में"
+    became "समकष_म", every vowel sign stripped. Scripts that carry their vowels
+    as marks (Devanagari, Arabic, Thai, Hebrew) were all affected; CJK was
+    fine, since those are word characters.
+
+    Every mark category is kept, not just Mn: Devanagari's vowel signs are Mc
+    (spacing marks), so filtering on Mn alone still lost "ी" and "ा" and turned
+    the example above into "समक्ष_में". Matching on the category's first letter
+    keeps Mn, Mc and Me together, and generalises to scripts nobody here
+    thought about. ASCII input is unchanged.
+
+    Returns "" for input with no letters or digits at all (an emoji-only name).
+    Callers that need a slug must supply their own fallback — see
+    ``_unique_slug``.
+    """
     text = text.lower()
-    text = re.sub(r'[^\w\s-]', '', text)
+    text = "".join(
+        c
+        for c in text
+        if c.isalnum()
+        or c in "_-"
+        or c.isspace()
+        or unicodedata.category(c).startswith("M")
+    )
     text = re.sub(r'[-\s]+', '_', text)
     return text.strip('_')
 
@@ -202,8 +228,12 @@ class TaskConfigService:
 
         await self._assert_name_unique(workspace_id, project_id, name)
 
-        # Generate unique slug within the (workspace, project) scope.
-        base_slug = slugify(name)
+        # Generate unique slug within the (workspace, project) scope. A name
+        # with no letters or digits at all ("🎉") slugifies to nothing, and an
+        # empty slug fails the column's NOT NULL intent and matches nothing —
+        # so fall back to a generic stem and let the dedup loop number it. The
+        # display name is what anyone actually sees.
+        base_slug = slugify(name) or "status"
         slug = base_slug
         counter = 1
 
@@ -353,7 +383,7 @@ class TaskConfigService:
             )
             status.name = name
             # Update slug if name changes
-            status.slug = slugify(name)
+            status.slug = slugify(name) or status.slug
         if category is not None:
             if not await self._resolve_category_slug(
                 str(status.workspace_id),
@@ -826,8 +856,9 @@ class TaskConfigService:
         default_value: str | None = None,
     ) -> WorkspaceCustomField:
         """Create a new custom field."""
-        # Generate unique slug
-        base_slug = slugify(name)
+        # Generate unique slug. See `create_status` for why an empty slug gets
+        # a generic stem rather than being written as "".
+        base_slug = slugify(name) or "field"
         slug = base_slug
         counter = 1
 
@@ -875,7 +906,7 @@ class TaskConfigService:
 
         if name is not None:
             field.name = name
-            field.slug = slugify(name)
+            field.slug = slugify(name) or field.slug
         if options is not None:
             field.options = options
         if is_required is not None:

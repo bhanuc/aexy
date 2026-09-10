@@ -39,7 +39,6 @@ class UseCaseDepartment(TypedDict):
     # meant the spelling you got depended on which code path ran first.
     function_key: str | None
     profile_slug: str
-    persona: str
 
 
 class UseCaseConfig(TypedDict):
@@ -68,7 +67,6 @@ USE_CASES: dict[str, UseCaseConfig] = {
                 "name": "Engineering",
                 "function_key": "engineering",
                 "profile_slug": "engineering",
-                "persona": "developer",
             },
         ],
     },
@@ -80,7 +78,6 @@ USE_CASES: dict[str, UseCaseConfig] = {
                 "name": "Marketing",
                 "function_key": "marketing",
                 "profile_slug": "business",
-                "persona": "sales",
             },
         ],
     },
@@ -92,7 +89,6 @@ USE_CASES: dict[str, UseCaseConfig] = {
                 "name": "Sales",
                 "function_key": "sales",
                 "profile_slug": "business",
-                "persona": "sales",
             },
         ],
     },
@@ -111,7 +107,6 @@ USE_CASES: dict[str, UseCaseConfig] = {
                 "name": "People",
                 "function_key": "hr",
                 "profile_slug": "people",
-                "persona": "hr",
             },
         ],
     },
@@ -126,14 +121,14 @@ USE_CASES: dict[str, UseCaseConfig] = {
         "label": "Operations & Support",
         "apps": ["service_desk", "tickets", "organization", "drive"],
         "departments": [
-            # This has to seed a department, and the reason is the persona
-            # rather than the apps. `suggested_persona` reads the primary
-            # department's `default_persona`, and with no department the sidebar
-            # falls back to "developer" — under which the whole Business
-            # section, Service Desk included, is filtered out of the navigation.
-            # Picking "Operations & Support" and being shown a developer sidebar
-            # with the desk listed as "available in another view" is the exact
-            # hollow outcome this module exists to prevent.
+            # This has to seed a department, and the reason is the access
+            # profile rather than the apps. Turning an app on for the workspace
+            # only makes it grantable; what a member actually resolves to comes
+            # from their department's profile, and a member with no department
+            # falls through to the bare role fallback. Picking "Operations &
+            # Support" and then finding Service Desk absent from their own
+            # navigation is the exact hollow outcome this module exists to
+            # prevent.
             {
                 "name": "Operations",
                 # Same key the Service Desk industry templates seed, which is
@@ -146,7 +141,6 @@ USE_CASES: dict[str, UseCaseConfig] = {
                 "function_key": "operations",
                 # Business grants service_desk, as every bundle does.
                 "profile_slug": "business",
-                "persona": "support",
             },
         ],
     },

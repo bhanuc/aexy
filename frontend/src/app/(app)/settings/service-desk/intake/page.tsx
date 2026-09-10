@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 
-import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import { SettingsGroupPage } from "@/components/settings/SettingsGroupPage";
 import {
   IntakeSection,
   ReadOnlyNotice,
@@ -12,7 +12,8 @@ export default function ServiceDeskIntakeSettingsPage() {
   const t = useTranslations("serviceDesk");
 
   return (
-    <SettingsPage
+    <SettingsGroupPage
+      group="serviceDesk"
       title={t("deskDepartment.title")}
       description={t("deskDepartment.description")}
     >
@@ -20,6 +21,6 @@ export default function ServiceDeskIntakeSettingsPage() {
         <ReadOnlyNotice />
         <IntakeSection />
       </div>
-    </SettingsPage>
+    </SettingsGroupPage>
   );
 }

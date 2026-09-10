@@ -128,7 +128,7 @@ export default function InsightsSettingsPage() {
         });
       }
     } catch {
-      toast.error("Failed to load settings. Using defaults.");
+      toast.error(t("loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -179,7 +179,7 @@ export default function InsightsSettingsPage() {
       });
       setSaved(true);
     } catch {
-      toast.error("Failed to save settings. Please try again.");
+      toast.error(t("saveFailed"));
     } finally {
       setIsSaving(false);
     }
@@ -206,7 +206,7 @@ export default function InsightsSettingsPage() {
             }`}
           >
             <Building2 className="h-4 w-4" />
-            Organization Defaults
+            {t("orgDefaults")}
           </button>
           <button
             onClick={() => setActiveTab("team")}
@@ -217,7 +217,7 @@ export default function InsightsSettingsPage() {
             }`}
           >
             <Users className="h-4 w-4" />
-            Team Overrides
+            {t("teamOverrides")}
           </button>
         </div>
 
@@ -225,14 +225,14 @@ export default function InsightsSettingsPage() {
         {activeTab === "team" && (
           <div className="bg-card rounded-xl p-4 border border-border">
             <label className="text-sm text-muted-foreground block mb-2">
-              Select Team
+              {t("selectTeam")}
             </label>
             <select
               value={selectedTeamId}
               onChange={(e) => setSelectedTeamId(e.target.value)}
               className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
-              <option value="">Choose a team...</option>
+              <option value="">{t("chooseTeam")}</option>
               {(teams || []).map((team: any) => (
                 <option key={team.id} value={team.id}>
                   {team.name}
@@ -241,24 +241,24 @@ export default function InsightsSettingsPage() {
             </select>
             {selectedTeamId && (
               <p className="text-xs text-muted-foreground mt-2">
-                Team overrides take precedence over organization defaults
+                {t("overridesHint")}
               </p>
             )}
           </div>
         )}
 
-        {/* Working Hours */}
+        {/* {t("workingHours")} */}
         <section className="bg-card rounded-xl border border-border overflow-hidden">
           <div className="px-6 py-4 border-b border-border flex items-center gap-2">
             <Clock className="h-5 w-5 text-amber-400" />
-            <h2 className="text-lg font-semibold text-foreground">Working Hours</h2>
+            <h2 className="text-lg font-semibold text-foreground">{t("workingHours")}</h2>
           </div>
           <div className="p-6 space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm text-muted-foreground block mb-1">
                   <Sun className="h-3.5 w-3.5 inline mr-1" />
-                  Start Hour
+                  {t("startHour")}
                 </label>
                 <select
                   value={settings.working_hours.start_hour}
@@ -277,7 +277,7 @@ export default function InsightsSettingsPage() {
               <div>
                 <label className="text-sm text-muted-foreground block mb-1">
                   <Moon className="h-3.5 w-3.5 inline mr-1" />
-                  End Hour
+                  {t("endHour")}
                 </label>
                 <select
                   value={settings.working_hours.end_hour}
@@ -296,7 +296,7 @@ export default function InsightsSettingsPage() {
             </div>
             <div>
               <label className="text-sm text-muted-foreground block mb-1">
-                Timezone
+                {t("timezone")}
               </label>
               <select
                 value={settings.working_hours.timezone}
@@ -315,7 +315,7 @@ export default function InsightsSettingsPage() {
             <div>
               <label className="text-sm text-muted-foreground block mb-1">
                 <Moon className="h-3.5 w-3.5 inline mr-1" />
-                Late Night Threshold
+                {t("lateNight")}
               </label>
               <div className="flex items-center gap-2">
                 <select
@@ -336,20 +336,20 @@ export default function InsightsSettingsPage() {
                   ))}
                 </select>
                 <span className="text-xs text-muted-foreground">
-                  Commits after this hour are flagged as late-night
+                  {t("lateNightHint")}
                 </span>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Health Score Weights */}
+        {/* {t("healthWeights")} */}
         <section className="bg-card rounded-xl border border-border overflow-hidden">
           <div className="px-6 py-4 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <Shield className="h-5 w-5 text-blue-400" />
               <h2 className="text-lg font-semibold text-foreground">
-                Health Score Weights
+                {t("healthWeights")}
               </h2>
             </div>
             {totalWeight !== 100 && (
@@ -390,18 +390,18 @@ export default function InsightsSettingsPage() {
           </div>
         </section>
 
-        {/* Bottleneck Detection */}
+        {/* {t("bottleneck")} */}
         <section className="bg-card rounded-xl border border-border overflow-hidden">
           <div className="px-6 py-4 border-b border-border flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-orange-400" />
             <h2 className="text-lg font-semibold text-foreground">
-              Bottleneck Detection
+              {t("bottleneck")}
             </h2>
           </div>
           <div className="p-6 space-y-4">
             <div>
               <label className="text-sm text-muted-foreground block mb-1">
-                Bottleneck Multiplier
+                {t("bottleneckMultiplier")}
               </label>
               <div className="flex items-center gap-2">
                 <input
@@ -428,20 +428,20 @@ export default function InsightsSettingsPage() {
           </div>
         </section>
 
-        {/* Snapshot Generation */}
+        {/* {t("snapshots")} */}
         <section className="bg-card rounded-xl border border-border overflow-hidden">
           <div className="px-6 py-4 border-b border-border flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-green-400" />
             <h2 className="text-lg font-semibold text-foreground">
-              Snapshot Generation
+              {t("snapshots")}
             </h2>
           </div>
           <div className="p-6 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <p className="text-sm text-foreground">Auto-generate snapshots</p>
+                <p className="text-sm text-foreground">{t("autoSnapshots")}</p>
                 <p className="text-xs text-muted-foreground">
-                  Automatically compute metrics on a schedule
+                  {t("autoSnapshotsHint")}
                 </p>
               </div>
               <button
@@ -470,7 +470,7 @@ export default function InsightsSettingsPage() {
             {settings.snapshot_auto_generate && (
               <div>
                 <label className="text-sm text-muted-foreground block mb-1">
-                  Frequency
+                  {t("frequency")}
                 </label>
                 <div className="flex gap-2">
                   {(["daily", "weekly"] as const).map((freq) => (
@@ -520,11 +520,11 @@ export default function InsightsSettingsPage() {
             className="flex items-center gap-2 px-4 py-2 text-muted-foreground hover:text-foreground transition text-sm"
           >
             <RotateCcw className="h-4 w-4" />
-            Reset to Defaults
+            {t("resetDefaults")}
           </button>
           <div className="flex items-center gap-3">
             {saved && (
-              <span className="text-sm text-green-400">Settings saved</span>
+              <span className="text-sm text-green-400">{t("saved")}</span>
             )}
             <button
               onClick={handleSave}
@@ -532,7 +532,7 @@ export default function InsightsSettingsPage() {
               className="flex items-center gap-2 px-6 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg transition text-sm font-medium"
             >
               <Save className="h-4 w-4" />
-              {isSaving ? "Saving..." : "Save Settings"}
+              {isSaving ? t("saving") : t("saveSettings")}
             </button>
           </div>
         </div>

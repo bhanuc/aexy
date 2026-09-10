@@ -36,6 +36,7 @@ import { useTicketForms, useTicketFormTemplates } from "@/hooks/useTicketing";
 import { TicketFormTemplateType, FormTemplate } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 // Maps the icon *name* returned by the templates API to a lucide component.
 // The picker is data-driven off the API, so any new backend template renders
@@ -79,6 +80,8 @@ interface FormRowProps {
 }
 
 function FormRow({ form, onDuplicate, onDelete, isDuplicating, isDeleting, templateMeta }: FormRowProps) {
+  const t = useTranslations("settingsTicketForms");
+  const tc = useTranslations("common");
   const RowIcon = templateIcon(templateMeta?.icon);
   const router = useRouter();
   const [showMenu, setShowMenu] = useState(false);
@@ -118,12 +121,12 @@ function FormRow({ form, onDuplicate, onDelete, isDuplicating, isDeleting, templ
             {form.is_active ? (
               <span className="flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400 rounded-full text-xs">
                 <CheckCircle className="h-3 w-3" />
-                Active
+                {tc("status.active")}
               </span>
             ) : (
               <span className="flex items-center gap-1 px-2 py-0.5 bg-muted text-muted-foreground rounded-full text-xs">
                 <XCircle className="h-3 w-3" />
-                Inactive
+                {tc("inactive")}
               </span>
             )}
           </div>
@@ -142,19 +145,20 @@ function FormRow({ form, onDuplicate, onDelete, isDuplicating, isDeleting, templ
             target="_blank"
             rel="noopener noreferrer"
             className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition"
-            title="Preview form"
+            title={t("previewForm")}
           >
             <Eye className="h-4 w-4" />
           </a>
           <button
             onClick={() => router.push(`/settings/ticket-forms/${form.id}`)}
             className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition"
-            title="Edit form"
+            title={t("editForm")}
           >
             <Edit3 className="h-4 w-4" />
           </button>
           <div className="relative">
             <button
+              aria-label={`Manage form ${form.name}`}
               onClick={() => setShowMenu(!showMenu)}
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition"
             >
@@ -169,7 +173,7 @@ function FormRow({ form, onDuplicate, onDelete, isDuplicating, isDeleting, templ
                     className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-accent flex items-center gap-2"
                   >
                     <Copy className="h-4 w-4" />
-                    Copy Public URL
+                    {t("copyPublicUrl")}
                   </button>
                   <a
                     href={publicUrl}
@@ -178,7 +182,7 @@ function FormRow({ form, onDuplicate, onDelete, isDuplicating, isDeleting, templ
                     className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-accent flex items-center gap-2"
                   >
                     <ExternalLink className="h-4 w-4" />
-                    Open Form
+                    {t("openForm")}
                   </a>
                   <button
                     onClick={() => {
@@ -188,7 +192,7 @@ function FormRow({ form, onDuplicate, onDelete, isDuplicating, isDeleting, templ
                     className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-accent flex items-center gap-2"
                   >
                     <Copy className="h-4 w-4" />
-                    Duplicate
+                    {t("duplicate")}
                   </button>
                   <button
                     onClick={handleDelete}
@@ -211,11 +215,16 @@ function FormRow({ form, onDuplicate, onDelete, isDuplicating, isDeleting, templ
 
       {/* Duplicate Modal */}
       {showDuplicateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-card rounded-xl p-6 w-full max-w-md">
-            <h3 className="text-foreground font-medium mb-4">Duplicate Form</h3>
+        <Dialog
+          open
+          onOpenChange={(next) => {
+            if (!next) setShowDuplicateModal(false);
+          }}
+        >
+          <DialogContent className="max-w-md" aria-describedby={undefined}>
+            <DialogTitle className="text-foreground font-medium mb-4">{t("duplicateForm")}</DialogTitle>
             <div>
-              <label className="block text-sm text-muted-foreground mb-1">New Form Name</label>
+              <label className="block text-sm text-muted-foreground mb-1">{t("newFormName")}</label>
               <input
                 type="text"
                 value={duplicateName}
@@ -229,7 +238,7 @@ function FormRow({ form, onDuplicate, onDelete, isDuplicating, isDeleting, templ
                 onClick={() => setShowDuplicateModal(false)}
                 className="px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg transition text-sm"
               >
-                Cancel
+                {tc("cancel")}
               </button>
               <button
                 onClick={handleDuplicate}
@@ -241,11 +250,11 @@ function FormRow({ form, onDuplicate, onDelete, isDuplicating, isDeleting, templ
                 ) : (
                   <Copy className="h-4 w-4" />
                 )}
-                Duplicate
+                {t("duplicate")}
               </button>
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
     </>
   );
@@ -253,6 +262,7 @@ function FormRow({ form, onDuplicate, onDelete, isDuplicating, isDeleting, templ
 
 export default function TicketFormsPage() {
   const t = useTranslations("settingsTicketForms");
+  const tc = useTranslations("common");
   const router = useRouter();
   const { user } = useAuth();
   const { currentWorkspace, currentWorkspaceId } = useWorkspace();
@@ -359,10 +369,10 @@ export default function TicketFormsPage() {
         {forms.length === 0 ? (
           <EmptyState
             icon={FormInput}
-            title="No ticket forms yet"
-            description="Create custom forms to collect structured information when tickets are submitted."
+            title={t("noFormsYet")}
+            description={t("emptyDescription")}
             actions={[
-              { label: "Create Form", onClick: () => setShowCreateModal(true) },
+              { label: t("createForm"), onClick: () => setShowCreateModal(true) },
             ]}
           />
         ) : (
@@ -384,9 +394,14 @@ export default function TicketFormsPage() {
 
       {/* Create Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-card rounded-xl p-6 w-full max-w-lg">
-            <h3 className="text-lg font-medium text-foreground mb-4">Create Ticket Form</h3>
+        <Dialog
+          open
+          onOpenChange={(next) => {
+            if (!next) setShowCreateModal(false);
+          }}
+        >
+          <DialogContent className="max-w-lg" aria-describedby={undefined}>
+            <DialogTitle className="text-lg font-medium text-foreground mb-4">{t("createTitle")}</DialogTitle>
 
             {/* Mode Toggle */}
             <div className="flex gap-1 bg-muted p-1 rounded-lg mb-6">
@@ -398,7 +413,7 @@ export default function TicketFormsPage() {
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                From Template
+                {t("fromTemplate")}
               </button>
               <button
                 onClick={() => setCreateMode("blank")}
@@ -408,14 +423,14 @@ export default function TicketFormsPage() {
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                Blank Form
+                {t("blankForm")}
               </button>
             </div>
 
             {createMode === "template" ? (
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm text-muted-foreground mb-2">Select Template</label>
+                  <label className="block text-sm text-muted-foreground mb-2">{t("selectTemplate")}</label>
                   <div className="space-y-2 max-h-[22rem] overflow-y-auto pr-1">
                     {Object.entries(templates).map(([type, meta]) => {
                       const Icon = templateIcon(meta.icon);
@@ -447,25 +462,25 @@ export default function TicketFormsPage() {
                 </div>
                 <div>
                   <label className="block text-sm text-muted-foreground mb-1">
-                    Form Name <span className="text-muted-foreground">(optional)</span>
+                    {t("formName")} <span className="text-muted-foreground">(optional)</span>
                   </label>
                   <input
                     type="text"
                     value={newFormName}
                     onChange={(e) => setNewFormName(e.target.value)}
-                    placeholder={templates[selectedTemplate]?.name || "Leave blank to use template name"}
+                    placeholder={templates[selectedTemplate]?.name || t("templateNameHint")}
                     className="w-full px-4 py-2 bg-muted border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:border-purple-500"
                   />
                 </div>
               </div>
             ) : (
               <div>
-                <label className="block text-sm text-muted-foreground mb-1">Form Name</label>
+                <label className="block text-sm text-muted-foreground mb-1">{t("formName")}</label>
                 <input
                   type="text"
                   value={newFormName}
                   onChange={(e) => setNewFormName(e.target.value)}
-                  placeholder="Enter form name..."
+                  placeholder={t("namePlaceholder")}
                   className="w-full px-4 py-2 bg-muted border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:border-purple-500"
                   autoFocus
                 />
@@ -480,7 +495,7 @@ export default function TicketFormsPage() {
                 }}
                 className="px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg transition text-sm"
               >
-                Cancel
+                {tc("cancel")}
               </button>
               <button
                 onClick={handleCreateForm}
@@ -490,18 +505,18 @@ export default function TicketFormsPage() {
                 {isCreating ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Creating...
+                    {t("creating")}
                   </>
                 ) : (
                   <>
                     <Plus className="h-4 w-4" />
-                    Create Form
+                    {t("createForm")}
                   </>
                 )}
               </button>
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
     </SettingsPage>
   );

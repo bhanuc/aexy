@@ -47,6 +47,7 @@ const TIMEZONES = [
 
 export default function OnCallSettingsPage() {
   const t = useTranslations("settingsOncall");
+  const tc = useTranslations("common");
   const params = useParams();
   const router = useRouter();
   const teamId = params.projectId as string;
@@ -119,7 +120,7 @@ export default function OnCallSettingsPage() {
   };
 
   const handleDisableOnCall = async () => {
-    if (confirm("Are you sure you want to disable on-call for this team? All schedules will be preserved.")) {
+    if (confirm(t("confirmDisable"))) {
       try {
         await disableOnCall();
       } catch (error) {
@@ -162,7 +163,7 @@ export default function OnCallSettingsPage() {
       <div className="flex items-center justify-center py-20">
         <div className="flex items-center gap-3 text-muted-foreground">
           <RefreshCw className="h-5 w-5 animate-spin" />
-          <span>Loading...</span>
+          <span>{t("loading")}</span>
         </div>
       </div>
     );
@@ -173,9 +174,9 @@ export default function OnCallSettingsPage() {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="text-center text-muted-foreground">
-          <p>No workspace selected</p>
+          <p>{t("noWorkspace")}</p>
           <Link href="/settings/organization" className="text-blue-400 hover:underline mt-2 block">
-            Go to Organization Settings
+            {t("orgSettingsCta")}
           </Link>
         </div>
       </div>
@@ -213,14 +214,14 @@ export default function OnCallSettingsPage() {
         {!config?.is_enabled && (
           <div className="bg-card rounded-xl p-8 text-center">
             <Phone className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-foreground mb-2">On-Call Not Enabled</h2>
+            <h2 className="text-xl font-semibold text-foreground mb-2">{t("notEnabled")}</h2>
             <p className="text-muted-foreground mb-6 max-w-md mx-auto">
               Enable on-call scheduling for this team to manage who&apos;s on-call and when.
               Team members will receive notifications before their shifts.
             </p>
             <div className="flex flex-col items-center gap-4">
               <div className="flex items-center gap-3">
-                <label className="text-sm text-muted-foreground">Timezone:</label>
+                <label className="text-sm text-muted-foreground">{t("timezonePrefix")}</label>
                 <select
                   value={timezone}
                   onChange={(e) => setTimezone(e.target.value)}
@@ -238,7 +239,7 @@ export default function OnCallSettingsPage() {
                 disabled={isEnabling}
                 className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
               >
-                {isEnabling ? "Enabling..." : "Enable On-Call"}
+                {isEnabling ? tc("enabling") : t("enableOnCall")}
               </button>
             </div>
           </div>
@@ -250,7 +251,7 @@ export default function OnCallSettingsPage() {
             {/* Current On-Call Status */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <h3 className="text-sm font-medium text-muted-foreground mb-2">Current Status</h3>
+                <h3 className="text-sm font-medium text-muted-foreground mb-2">{t("currentStatus")}</h3>
                 <CurrentOnCallBadge
                   currentSchedule={currentSchedule}
                   nextSchedule={nextSchedule}
@@ -258,7 +259,7 @@ export default function OnCallSettingsPage() {
                 />
               </div>
               <div>
-                <h3 className="text-sm font-medium text-muted-foreground mb-2">Google Calendar</h3>
+                <h3 className="text-sm font-medium text-muted-foreground mb-2">{t("googleCalendar")}</h3>
                 <div className="bg-card rounded-lg p-3 border border-border">
                   {isCalendarConnected ? (
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -271,7 +272,7 @@ export default function OnCallSettingsPage() {
                           onClick={handleSyncCalendar}
                           disabled={isSyncing}
                           className="p-1.5 text-muted-foreground hover:text-foreground transition"
-                          title="Sync now"
+                          title={t("syncNow")}
                         >
                           <RefreshCw className={`h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
                         </button>
@@ -279,7 +280,7 @@ export default function OnCallSettingsPage() {
                           onClick={() => disconnect()}
                           disabled={isDisconnecting}
                           className="p-1.5 text-red-400 hover:text-red-300 transition"
-                          title="Disconnect"
+                          title={t("disconnect")}
                         >
                           <Unlink className="h-4 w-4" />
                         </button>
@@ -292,7 +293,7 @@ export default function OnCallSettingsPage() {
                       className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 transition"
                     >
                       <LinkIcon className="h-4 w-4" />
-                      {isGettingUrl ? "Connecting..." : "Connect Google Calendar"}
+                      {isGettingUrl ? tc("connecting") : t("connectGoogleCalendar")}
                     </button>
                   )}
                 </div>
@@ -302,10 +303,10 @@ export default function OnCallSettingsPage() {
             {/* Settings Panel (collapsible) */}
             {showSettings && (
               <div className="bg-card rounded-xl p-6 border border-border">
-                <h3 className="text-lg font-semibold text-foreground mb-4">Configuration</h3>
+                <h3 className="text-lg font-semibold text-foreground mb-4">{t("configuration")}</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm text-muted-foreground mb-1">Timezone</label>
+                    <label className="block text-sm text-muted-foreground mb-1">{t("timezone")}</label>
                     <select
                       value={config.timezone}
                       onChange={(e) => updateConfig({ timezone: e.target.value })}
@@ -322,7 +323,7 @@ export default function OnCallSettingsPage() {
                   <div>
                     <div className="flex items-center gap-1.5 mb-1">
                       <label className="block text-sm text-muted-foreground">
-                        Notify before shift (minutes)
+                        {t("notifyBefore")}
                       </label>
                       <HelpTooltip content="How many minutes before a shift starts the on-call person receives a reminder notification" />
                     </div>
@@ -342,7 +343,7 @@ export default function OnCallSettingsPage() {
                     <div className="md:col-span-2">
                       <div className="flex items-center gap-1.5 mb-1">
                         <label className="block text-sm text-muted-foreground">
-                          Sync to Calendar
+                          {t("syncToCalendar")}
                         </label>
                         <HelpTooltip content="Automatically sync on-call schedules to a Google Calendar so shifts appear as calendar events" />
                       </div>
@@ -352,7 +353,7 @@ export default function OnCallSettingsPage() {
                           onChange={(e) => setSelectedCalendarId(e.target.value)}
                           className="flex-1 px-3 py-2 bg-muted border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
-                          <option value="">Select a calendar...</option>
+                          <option value="">{t("selectCalendar")}</option>
                           {calendars.map((cal) => (
                             <option key={cal.id} value={cal.id}>
                               {cal.summary} {cal.primary ? "(Primary)" : ""}
@@ -364,7 +365,7 @@ export default function OnCallSettingsPage() {
                           disabled={!selectedCalendarId || isSelecting}
                           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
                         >
-                          {isSelecting ? "Saving..." : "Save"}
+                          {isSelecting ? tc("saving") : tc("save")}
                         </button>
                       </div>
                     </div>
@@ -376,7 +377,7 @@ export default function OnCallSettingsPage() {
                     disabled={isDisabling}
                     className="text-sm text-red-400 hover:text-red-300 transition"
                   >
-                    {isDisabling ? "Disabling..." : "Disable On-Call"}
+                    {isDisabling ? tc("disabling") : t("disableOnCall")}
                   </button>
                 </div>
               </div>
@@ -385,7 +386,7 @@ export default function OnCallSettingsPage() {
             {/* Swap Requests */}
             {swapRequests.filter((r) => r.status === "pending").length > 0 && (
               <div>
-                <h3 className="text-lg font-semibold text-foreground mb-3">Pending Swap Requests</h3>
+                <h3 className="text-lg font-semibold text-foreground mb-3">{t("pendingSwaps")}</h3>
                 <SwapRequestsList
                   swapRequests={swapRequests}
                   currentUserId={currentUserId}
@@ -400,7 +401,7 @@ export default function OnCallSettingsPage() {
             {/* Schedule Editor */}
             <div>
               <div className="flex items-center gap-1.5 mb-3">
-                <h3 className="text-lg font-semibold text-foreground">Schedule</h3>
+                <h3 className="text-lg font-semibold text-foreground">{t("schedule")}</h3>
                 <HelpTooltip content="Create and manage on-call rotation slots. Each slot assigns a team member to a specific time period" />
               </div>
               <OnCallScheduleEditor

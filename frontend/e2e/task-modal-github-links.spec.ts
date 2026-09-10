@@ -1,4 +1,5 @@
 import { test, expect, Page } from "@playwright/test";
+import { setupMockAuth } from "./fixtures/env";
 
 const API_BASE = "**/api/v1";
 const WORKSPACE_ID = "ws-1";
@@ -191,10 +192,10 @@ async function setupTaskModalMocks(page: Page) {
   let githubLinks: Array<Record<string, unknown>> = [existingLink, existingIssueLink];
   const calls = { link: 0, issueLink: 0, externalIssueLink: 0, unlink: 0, issueUnlink: 0 };
 
-  await page.addInitScript(() => {
-    localStorage.setItem("token", "fake-test-token");
-    localStorage.setItem("current_workspace_id", "ws-1");
-  });
+  // Cookie + localStorage. The cookie is what matters: the middleware gates
+  // protected routes at the edge, so priming localStorage alone let the
+  // navigation get bounced to the landing page before any page code ran.
+  await setupMockAuth(page, { workspaceId: "ws-1" });
 
   await page.route(`${API_BASE}/**`, (route) => {
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
@@ -255,6 +256,21 @@ async function setupTaskModalMocks(page: Page) {
   await page.route(`${API_BASE}/teams/${PROJECT_ID}/tasks**`, (route) => {
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
   });
+
+  // The board's `?task=` deep link falls back to fetching the task by id when
+  // it is not in the loaded list — and the list above is deliberately empty.
+  // That request matches the `tasks**` glob too, so without this it received
+  // an array where a single task was expected and the modal never opened.
+  await page.route(
+    `${API_BASE}/teams/${PROJECT_ID}/tasks/${TASK_ID}`,
+    (route) => {
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(mockTask),
+      });
+    },
+  );
 
   await page.route(`${API_BASE}/workspaces/${WORKSPACE_ID}/projects/${PROJECT_ID}`, (route) => {
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(mockProject) });

@@ -8,6 +8,12 @@
       "title": "Enterprise feature",
       "body": "Access logs are available on the Enterprise plan. Upgrade to track every access-control change and security event.",
       "cta": "View plans"
-    }
+    },
+    "totalEvents": "Total Events (30 days)",
+    "accessUpdates": "Access Updates",
+    "templateChanges": "Template Changes",
+    "accessDenials": "Access Denials",
+    "allActions": "All Actions",
+    "loadFailed": "Failed to load access logs"
   }
 }

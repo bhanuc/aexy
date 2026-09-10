@@ -1,0 +1,9 @@
+{
+  "deleteStatusModal": {
+    "title": "Delete status",
+    "targetStatus": "Target status",
+    "noOthers": "No other statuses available",
+    "close": "Close",
+    "deleting": "Deleting…"
+  }
+}

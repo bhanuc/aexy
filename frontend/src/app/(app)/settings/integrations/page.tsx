@@ -37,21 +37,23 @@ import { StatusMapping, slackApi, authApi } from "@/lib/api";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 type TabType = "github" | "jira" | "linear" | "slack";
 
 function ConnectionStatusBadge({ connected }: { connected: boolean }) {
+  const t = useTranslations("settingsIntegrations");
   if (connected) {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400">
         <CheckCircle className="h-3 w-3" />
-        Connected
+        {t("status.connected")}
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-muted text-muted-foreground">
-      Not Connected
+      {t("status.notConnected")}
     </span>
   );
 }
@@ -65,6 +67,7 @@ interface JiraConnectFormProps {
 }
 
 function JiraConnectForm({ onConnect, onTest, isConnecting, isTesting }: JiraConnectFormProps) {
+  const t = useTranslations("settingsIntegrations");
   const [siteUrl, setSiteUrl] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [apiToken, setApiToken] = useState("");
@@ -106,7 +109,7 @@ function JiraConnectForm({ onConnect, onTest, isConnecting, isTesting }: JiraCon
   return (
     <div className="space-y-4">
       <div>
-        <label className="block text-sm text-muted-foreground mb-1">Jira Site URL</label>
+        <label className="block text-sm text-muted-foreground mb-1">{t("jira.siteUrl")}</label>
         <input
           type="url"
           value={siteUrl}
@@ -116,7 +119,7 @@ function JiraConnectForm({ onConnect, onTest, isConnecting, isTesting }: JiraCon
         />
       </div>
       <div>
-        <label className="block text-sm text-muted-foreground mb-1">Email</label>
+        <label className="block text-sm text-muted-foreground mb-1">{t("jira.email")}</label>
         <input
           type="email"
           value={userEmail}
@@ -127,21 +130,21 @@ function JiraConnectForm({ onConnect, onTest, isConnecting, isTesting }: JiraCon
       </div>
       <div>
         <label className="block text-sm text-muted-foreground mb-1">
-          API Token
+          {t("jira.apiToken")}
           <a
             href="https://id.atlassian.com/manage-profile/security/api-tokens"
             target="_blank"
             rel="noopener noreferrer"
             className="ml-2 text-primary-400 hover:text-primary-300"
           >
-            Get token <ExternalLink className="inline h-3 w-3" />
+            {t("jira.getToken")} <ExternalLink className="inline h-3 w-3" />
           </a>
         </label>
         <input
           type="password"
           value={apiToken}
           onChange={(e) => setApiToken(e.target.value)}
-          placeholder="Your Jira API token"
+          placeholder={t("jira.tokenPlaceholder")}
           className="w-full px-4 py-2 bg-muted border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary-500"
         />
       </div>
@@ -156,7 +159,7 @@ function JiraConnectForm({ onConnect, onTest, isConnecting, isTesting }: JiraCon
       {testSuccess && (
         <div className="flex items-center gap-2 text-green-400 text-sm">
           <CheckCircle className="h-4 w-4" />
-          Connection successful! You can now connect.
+          {t("connect.testOk")}
         </div>
       )}
 
@@ -169,12 +172,12 @@ function JiraConnectForm({ onConnect, onTest, isConnecting, isTesting }: JiraCon
           {isTesting ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Testing...
+              {t("connect.testing")}
             </>
           ) : (
             <>
               <Zap className="h-4 w-4" />
-              Test Connection
+              {t("connect.test")}
             </>
           )}
         </button>
@@ -186,12 +189,12 @@ function JiraConnectForm({ onConnect, onTest, isConnecting, isTesting }: JiraCon
           {isConnecting ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Connecting...
+              {t("connect.connecting")}
             </>
           ) : (
             <>
               <Link2 className="h-4 w-4" />
-              Connect
+              {t("connect.connect")}
             </>
           )}
         </button>
@@ -209,6 +212,7 @@ interface LinearConnectFormProps {
 }
 
 function LinearConnectForm({ onConnect, onTest, isConnecting, isTesting }: LinearConnectFormProps) {
+  const t = useTranslations("settingsIntegrations");
   const [apiKey, setApiKey] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [testSuccess, setTestSuccess] = useState(false);
@@ -249,14 +253,14 @@ function LinearConnectForm({ onConnect, onTest, isConnecting, isTesting }: Linea
     <div className="space-y-4">
       <div>
         <label className="block text-sm text-muted-foreground mb-1">
-          Linear API Key
+          {t("linear.apiKey")}
           <a
             href="https://linear.app/settings/api"
             target="_blank"
             rel="noopener noreferrer"
             className="ml-2 text-primary-400 hover:text-primary-300"
           >
-            Get key <ExternalLink className="inline h-3 w-3" />
+            {t("linear.getKey")} <ExternalLink className="inline h-3 w-3" />
           </a>
         </label>
         <input
@@ -267,7 +271,7 @@ function LinearConnectForm({ onConnect, onTest, isConnecting, isTesting }: Linea
           className="w-full px-4 py-2 bg-muted border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary-500"
         />
         <p className="text-muted-foreground text-xs mt-1">
-          Create a personal API key in Linear Settings &gt; API
+          {t("linear.keyHint")}
         </p>
       </div>
 
@@ -281,7 +285,7 @@ function LinearConnectForm({ onConnect, onTest, isConnecting, isTesting }: Linea
       {testSuccess && (
         <div className="flex items-center gap-2 text-green-400 text-sm">
           <CheckCircle className="h-4 w-4" />
-          Connection successful! You can now connect.
+          {t("connect.testOk")}
         </div>
       )}
 
@@ -294,12 +298,12 @@ function LinearConnectForm({ onConnect, onTest, isConnecting, isTesting }: Linea
           {isTesting ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Testing...
+              {t("connect.testing")}
             </>
           ) : (
             <>
               <Zap className="h-4 w-4" />
-              Test Connection
+              {t("connect.test")}
             </>
           )}
         </button>
@@ -311,12 +315,12 @@ function LinearConnectForm({ onConnect, onTest, isConnecting, isTesting }: Linea
           {isConnecting ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Connecting...
+              {t("connect.connecting")}
             </>
           ) : (
             <>
               <Link2 className="h-4 w-4" />
-              Connect
+              {t("connect.connect")}
             </>
           )}
         </button>
@@ -342,6 +346,7 @@ function StatusMappingUI({
   isUpdating,
   remoteName,
 }: StatusMappingUIProps) {
+  const t = useTranslations("settingsIntegrations");
   const [mappings, setMappings] = useState<Record<string, string>>(currentMappings);
   const [hasChanges, setHasChanges] = useState(false);
 
@@ -363,7 +368,7 @@ function StatusMappingUI({
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <h4 className="text-sm font-medium text-foreground">Status Mapping</h4>
+        <h4 className="text-sm font-medium text-foreground">{t("mapping.heading")}</h4>
         {hasChanges && (
           <button
             onClick={handleSave}
@@ -394,7 +399,7 @@ function StatusMappingUI({
               onChange={(e) => handleMappingChange(remote.name, e.target.value)}
               className="flex-1 px-3 py-2 bg-muted border border-border rounded text-foreground text-sm focus:outline-none focus:border-primary-500"
             >
-              <option value="">Select status...</option>
+              <option value="">{t("mapping.selectStatus")}</option>
               {workspaceStatuses.map((ws) => (
                 <option key={ws.id} value={ws.slug}>
                   {ws.name}
@@ -441,10 +446,17 @@ function ConnectedIntegration({
   isUpdating,
   type,
 }: ConnectedIntegrationProps) {
+  const t = useTranslations("settingsIntegrations");
   const [showMenu, setShowMenu] = useState(false);
 
   const handleDisconnect = async () => {
-    if (confirm(`Are you sure you want to disconnect ${type === "jira" ? "Jira" : "Linear"}?`)) {
+    if (
+      confirm(
+        t("confirmDisconnect", {
+          name: type === "jira" ? t("jira.name") : t("linear.name"),
+        }),
+      )
+    ) {
       await onDisconnect();
     }
     setShowMenu(false);
@@ -478,6 +490,9 @@ function ConnectedIntegration({
           <ConnectionStatusBadge connected />
           <div className="relative">
             <button
+              aria-label={t("manageIntegration", {
+                name: type === "jira" ? t("jira.name") : t("github.name"),
+              })}
               onClick={() => setShowMenu(!showMenu)}
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition"
             >
@@ -516,7 +531,7 @@ function ConnectedIntegration({
               disabled={isUpdating}
               className="w-4 h-4 rounded border-border bg-muted text-primary-500 focus:ring-primary-500"
             />
-            <span className="text-foreground text-sm">Auto-sync enabled</span>
+            <span className="text-foreground text-sm">{t("sync.autoEnabled")}</span>
           </label>
           {integration.last_sync_at && (
             <span className="text-muted-foreground text-xs">
@@ -532,12 +547,12 @@ function ConnectedIntegration({
           {isSyncing ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Syncing...
+              {t("sync.syncing")}
             </>
           ) : (
             <>
               <RefreshCw className="h-4 w-4" />
-              Sync Now
+              {t("sync.now")}
             </>
           )}
         </button>
@@ -548,6 +563,7 @@ function ConnectedIntegration({
 
 function IntegrationsPageContent() {
   const t = useTranslations("settingsIntegrations");
+  const tc = useTranslations("common");
   const { user } = useAuth();
   const {
     currentWorkspace,
@@ -718,15 +734,15 @@ function IntegrationsPageContent() {
         {!hasWorkspaces ? (
           <div className="bg-card rounded-xl p-12 text-center">
             <Link2 className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-xl font-medium text-foreground mb-2">No Workspace</h3>
+            <h3 className="text-xl font-medium text-foreground mb-2">{t("noWorkspace.title")}</h3>
             <p className="text-muted-foreground mb-6">
-              Create a workspace first to configure integrations.
+              {t("noWorkspace.description")}
             </p>
             <Link
               href="/settings/organization"
               className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition font-medium"
             >
-              Go to Organization Settings
+              {t("noWorkspace.cta")}
             </Link>
           </div>
         ) : (
@@ -742,7 +758,7 @@ function IntegrationsPageContent() {
                 }`}
               >
                 <GitBranch className="h-4 w-4" />
-                GitHub
+                {t("github.name")}
                 {user?.github_connection?.auth_status === "error" && (
                   <span className="w-2 h-2 bg-red-500 rounded-full"></span>
                 )}
@@ -758,7 +774,7 @@ function IntegrationsPageContent() {
                 <svg className="h-4 w-4" viewBox="0 0 32 32" fill="currentColor">
                   <path d="M15.967 0.5c-0.6 0-1.167 0.233-1.617 0.683l-12.35 12.35c-0.9 0.9-0.9 2.35 0 3.25l12.35 12.35c0.45 0.45 1.017 0.683 1.617 0.683s1.167-0.233 1.617-0.683l12.35-12.35c0.9-0.9 0.9-2.35 0-3.25l-12.35-12.35c-0.45-0.45-1.017-0.683-1.617-0.683z"/>
                 </svg>
-                Jira
+                {t("jira.name")}
                 {jiraConnected && <CheckCircle className="h-3 w-3 text-green-400" />}
               </button>
               <button
@@ -772,7 +788,7 @@ function IntegrationsPageContent() {
                 <svg className="h-4 w-4" viewBox="0 0 100 100" fill="currentColor">
                   <path d="M50 0C22.4 0 0 22.4 0 50s22.4 50 50 50 50-22.4 50-50S77.6 0 50 0zm24.9 74.9H25.1V25.1h49.8v49.8z"/>
                 </svg>
-                Linear
+                {t("linear.name")}
                 {linearConnected && <CheckCircle className="h-3 w-3 text-green-400" />}
               </button>
               <button
@@ -784,7 +800,7 @@ function IntegrationsPageContent() {
                 }`}
               >
                 <Slack className="h-4 w-4" />
-                Slack
+                {t("slack.name")}
                 {slackConnected && <CheckCircle className="h-3 w-3 text-green-400" />}
               </button>
             </div>
@@ -797,9 +813,9 @@ function IntegrationsPageContent() {
                     <GitBranch className="h-6 w-6 text-foreground" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-medium text-foreground">GitHub</h2>
+                    <h2 className="text-lg font-medium text-foreground">{t("github.name")}</h2>
                     <p className="text-muted-foreground text-sm">
-                      GitHub is connected via your account login
+                      {t("github.connectedVia")}
                     </p>
                   </div>
                 </div>
@@ -811,7 +827,7 @@ function IntegrationsPageContent() {
                         <AlertCircle className="h-5 w-5 text-red-400 shrink-0" />
                         <div>
                           <p className="text-red-400 font-medium text-sm">
-                            GitHub connection needs re-authentication
+                            {t("github.needsReauth")}
                           </p>
                           <p className="text-muted-foreground text-xs mt-0.5">
                             {user.github_connection.auth_error || "Your GitHub token has expired or been revoked."}
@@ -823,7 +839,7 @@ function IntegrationsPageContent() {
                         className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition text-sm font-medium w-fit"
                       >
                         <RefreshCw className="h-4 w-4" />
-                        Reconnect GitHub
+                        {t("github.reconnect")}
                       </a>
                     </div>
                   </div>
@@ -840,7 +856,7 @@ function IntegrationsPageContent() {
                         href="/settings/repositories"
                         className="text-primary-400 hover:text-primary-300 text-sm flex items-center gap-1"
                       >
-                        Manage Repositories
+                        {t("github.manageRepos")}
                         <ArrowRight className="h-4 w-4" />
                       </Link>
                     </div>
@@ -860,9 +876,9 @@ function IntegrationsPageContent() {
                       </svg>
                     </div>
                     <div className="flex-1">
-                      <h2 className="text-lg font-medium text-foreground">Jira</h2>
+                      <h2 className="text-lg font-medium text-foreground">{t("jira.name")}</h2>
                       <p className="text-muted-foreground text-sm">
-                        Import and sync issues from Jira
+                        {t("jira.blurb")}
                       </p>
                     </div>
                     <ConnectionStatusBadge connected={jiraConnected} />
@@ -893,12 +909,12 @@ function IntegrationsPageContent() {
 
                   {!isAdmin && !jiraConnected && (
                     <p className="text-muted-foreground text-sm">
-                      Contact an admin to configure Jira integration.
+                      {t("jira.adminOnly")}
                     </p>
                   )}
                 </div>
 
-                {/* Status Mapping */}
+                {/* {t("mapping.heading")} */}
                 {jiraConnected && isAdmin && (
                   <div className="bg-card rounded-xl p-6">
                     <StatusMappingUI
@@ -925,9 +941,9 @@ function IntegrationsPageContent() {
                       </svg>
                     </div>
                     <div className="flex-1">
-                      <h2 className="text-lg font-medium text-foreground">Linear</h2>
+                      <h2 className="text-lg font-medium text-foreground">{t("linear.name")}</h2>
                       <p className="text-muted-foreground text-sm">
-                        Import and sync issues from Linear
+                        {t("linear.blurb")}
                       </p>
                     </div>
                     <ConnectionStatusBadge connected={linearConnected} />
@@ -958,12 +974,12 @@ function IntegrationsPageContent() {
 
                   {!isAdmin && !linearConnected && (
                     <p className="text-muted-foreground text-sm">
-                      Contact an admin to configure Linear integration.
+                      {t("linear.adminOnly")}
                     </p>
                   )}
                 </div>
 
-                {/* Status Mapping */}
+                {/* {t("mapping.heading")} */}
                 {linearConnected && isAdmin && (
                   <div className="bg-card rounded-xl p-6">
                     <StatusMappingUI
@@ -988,9 +1004,9 @@ function IntegrationsPageContent() {
                       <Slack className="h-6 w-6 text-[#E01E5A]" />
                     </div>
                     <div className="flex-1">
-                      <h2 className="text-lg font-medium text-foreground">Slack</h2>
+                      <h2 className="text-lg font-medium text-foreground">{t("slack.name")}</h2>
                       <p className="text-muted-foreground text-sm">
-                        Connect Slack for standups, blockers, and team updates
+                        {t("slack.blurb")}
                       </p>
                     </div>
                     <ConnectionStatusBadge connected={slackConnected} />
@@ -1009,7 +1025,7 @@ function IntegrationsPageContent() {
                         className="inline-flex items-center gap-2 px-4 py-2 bg-[#4A154B] hover:bg-[#611f64] text-[#E01E5A] rounded-lg transition font-medium"
                       >
                         {isStartingSlackInstall ? <Loader2 className="h-5 w-5 animate-spin" /> : <Slack className="h-5 w-5" />}
-                        {isStartingSlackInstall ? "Opening Slack…" : "Add to Slack"}
+                        {isStartingSlackInstall ? t("slack.opening") : t("slack.addToSlack")}
                       </button>
                     </div>
                   )}
@@ -1082,15 +1098,15 @@ function IntegrationsPageContent() {
 
                   {!isAdmin && !slackConnected && (
                     <p className="text-muted-foreground text-sm">
-                      Contact an admin to configure Slack integration.
+                      {t("slack.adminOnly")}
                     </p>
                   )}
                 </div>
 
-                {/* Default Notification Channel */}
+                {/* {t("slack.defaultChannel")} */}
                 {slackConnected && slackIntegration && isAdmin && (
                   <div className="bg-card rounded-xl p-6">
-                    <h3 className="text-foreground font-medium mb-1">Default Notification Channel</h3>
+                    <h3 className="text-foreground font-medium mb-1">{t("slack.defaultChannel")}</h3>
                     <p className="text-muted-foreground text-sm mb-4">
                       Choose where Slack notifications are sent by default. Per-category overrides can be set in{" "}
                       <Link href="/settings/notifications" className="text-primary hover:underline">notification settings</Link>.
@@ -1106,13 +1122,13 @@ function IntegrationsPageContent() {
                             toast.success(value ? "Default channel updated" : "Reset to direct messages");
                           } catch {
                             setDefaultChannelId(slackIntegration.default_channel_id);
-                            toast.error("Failed to update default channel");
+                            toast.error(t("slack.defaultChannelFailed"));
                           }
                         }}
                         disabled={isUpdatingSlack || isLoadingSlackChannels}
                         className="flex-1 max-w-sm px-3 py-2 bg-muted border border-border rounded-lg text-foreground text-sm focus:outline-none focus:border-primary-500"
                       >
-                        <option value="">Direct message (default)</option>
+                        <option value="">{t("slack.directMessage")}</option>
                         {slackChannelsData?.channels?.map((channel) => (
                           <option key={channel.id} value={channel.id}>
                             #{channel.name}
@@ -1129,9 +1145,9 @@ function IntegrationsPageContent() {
                   <div className="bg-card rounded-xl p-6">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                       <div>
-                        <h3 className="text-foreground font-medium">Configured Channels</h3>
+                        <h3 className="text-foreground font-medium">{t("slack.configuredChannels")}</h3>
                         <p className="text-muted-foreground text-sm">
-                          Select channels to monitor for standups and task updates
+                          {t("slack.channelsHint")}
                         </p>
                       </div>
                       <button
@@ -1139,7 +1155,7 @@ function IntegrationsPageContent() {
                         className="px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition text-sm flex items-center gap-2"
                       >
                         <Hash className="h-4 w-4" />
-                        Add Channel
+                        {t("slack.addChannel")}
                       </button>
                     </div>
 
@@ -1155,17 +1171,18 @@ function IntegrationsPageContent() {
                               <span className="text-foreground">{channel.channel_name}</span>
                               {channel.auto_parse_standups && (
                                 <span className="px-2 py-0.5 bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400 rounded text-xs">
-                                  Standups
+                                  {t("slack.standups")}
                                 </span>
                               )}
                               {channel.auto_parse_blockers && (
                                 <span className="px-2 py-0.5 bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 rounded text-xs">
-                                  Blockers
+                                  {t("slack.blockers")}
                                 </span>
                               )}
                             </div>
                             <button
                               onClick={() => removeSlackChannel(channel.id)}
+                              aria-label={t("slack.removeChannel")}
                               className="p-1.5 text-muted-foreground hover:text-red-400 hover:bg-accent rounded transition"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -1176,23 +1193,23 @@ function IntegrationsPageContent() {
                     ) : (
                       <div className="text-center py-8 text-muted-foreground">
                         <Hash className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                        <p>No channels configured yet</p>
-                        <p className="text-sm">Add channels to start monitoring</p>
+                        <p>{t("slack.noChannels")}</p>
+                        <p className="text-sm">{t("slack.noChannelsHint")}</p>
                       </div>
                     )}
                   </div>
                 )}
 
-                {/* Import History */}
+                {/* {t("slack.importHistory")} */}
                 {slackConnected && slackIntegration && isAdmin && (
                   <div className="bg-card rounded-xl p-6">
-                    <h3 className="text-foreground font-medium mb-4">Import History</h3>
+                    <h3 className="text-foreground font-medium mb-4">{t("slack.importHistory")}</h3>
                     <p className="text-muted-foreground text-sm mb-4">
-                      Import existing messages from Slack channels to populate standups and activity
+                      {t("slack.importHint")}
                     </p>
                     <div className="flex items-center gap-3">
                       <div className="flex items-center gap-2">
-                        <label className="text-muted-foreground text-sm">Days back:</label>
+                        <label className="text-muted-foreground text-sm">{t("slack.daysBack")}</label>
                         <input
                           type="number"
                           value={slackImportDays}
@@ -1210,12 +1227,12 @@ function IntegrationsPageContent() {
                         {isImportingSlack ? (
                           <>
                             <Loader2 className="h-4 w-4 animate-spin" />
-                            Importing...
+                            {t("slack.importing")}
                           </>
                         ) : (
                           <>
                             <MessageSquare className="h-4 w-4" />
-                            Import Messages
+                            {t("slack.import")}
                           </>
                         )}
                       </button>
@@ -1225,11 +1242,18 @@ function IntegrationsPageContent() {
               </div>
             )}
 
-            {/* Add Channel Modal */}
+            {/* {t("slack.addChannel")} Modal */}
             {showSlackChannelModal && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                <div className="bg-card rounded-xl p-6 w-full max-w-md">
-                  <h3 className="text-foreground font-medium mb-4">Add Channel</h3>
+              <Dialog
+                open
+                onOpenChange={(next) => {
+                  if (!next) setShowSlackChannelModal(false);
+                }}
+              >
+                <DialogContent className="max-w-md" aria-describedby={undefined}>
+                  <DialogTitle className="text-foreground font-medium mb-4">
+                    {t("slack.addChannel")}
+                  </DialogTitle>
 
                   {isLoadingSlackChannels ? (
                     <div className="flex items-center justify-center py-8">
@@ -1238,13 +1262,13 @@ function IntegrationsPageContent() {
                   ) : (
                     <div className="space-y-4">
                       <div>
-                        <label className="block text-sm text-muted-foreground mb-1">Select Channel</label>
+                        <label className="block text-sm text-muted-foreground mb-1">{t("slack.selectChannel")}</label>
                         <select
                           value={selectedSlackChannel}
                           onChange={(e) => setSelectedSlackChannel(e.target.value)}
                           className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground focus:outline-none focus:border-primary-500"
                         >
-                          <option value="">Choose a channel...</option>
+                          <option value="">{t("slack.chooseChannel")}</option>
                           {slackChannelsData?.channels?.map((channel) => (
                             <option key={channel.id} value={channel.id}>
                               #{channel.name}
@@ -1261,7 +1285,7 @@ function IntegrationsPageContent() {
                           }}
                           className="px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg transition text-sm"
                         >
-                          Cancel
+                          {tc("cancel")}
                         </button>
                         <button
                           onClick={async () => {
@@ -1290,13 +1314,13 @@ function IntegrationsPageContent() {
                           ) : (
                             <Check className="h-4 w-4" />
                           )}
-                          Add Channel
+                          {t("slack.addChannel")}
                         </button>
                       </div>
                     </div>
                   )}
-                </div>
-              </div>
+                </DialogContent>
+              </Dialog>
             )}
           </>
         )}

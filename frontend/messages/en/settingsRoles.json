@@ -1,6 +1,29 @@
 {
   "settingsRoles": {
     "title": "Organization roles",
-    "description": "Custom roles and the permissions they carry."
+    "description": "Description",
+    "system": "System",
+    "createTitle": "Create Custom Role",
+    "createSubtitle": "Define a new role with specific permissions",
+    "fromTemplate": "Start from template (optional)",
+    "fromScratch": "Start from scratch",
+    "roleName": "Role Name",
+    "color": "Color",
+    "descriptionPlaceholder": "What is this role for?",
+    "creating": "Creating…",
+    "createRole": "Create Role",
+    "loading": "Loading roles…",
+    "heading": "Roles",
+    "systemRoles": "System Roles",
+    "customRoles": "Custom Roles",
+    "noCustomRoles": "No Custom Roles",
+    "noCustomRolesHint": "Create custom roles to define specific permission sets for your team.",
+    "createFirst": "Create First Role",
+    "aboutHeading": "About Roles & Permissions",
+    "aboutSystem": "System roles",
+    "aboutCustom": "Custom roles",
+    "aboutProject": "Project overrides",
+    "editRole": "Edit role",
+    "deleteRole": "Delete role"
   }
 }

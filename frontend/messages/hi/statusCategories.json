@@ -1,0 +1,43 @@
+{
+  "statusCategories": {
+    "modal": {
+      "createTitle": "श्रेणी बनाएँ",
+      "editTitle": "श्रेणी संपादित करें",
+      "labelField": "लेबल",
+      "labelHint": "बोर्ड पर इस बकेट का नाम। इसे कभी भी बदल सकते हैं।",
+      "slugField": "Slug",
+      "slugHintNew": "लेबल से बनता है, और सेव होने के बाद तय हो जाता है: statuses इसका संदर्भ लेते हैं।",
+      "slugHintExisting": "तय — statuses पहले से इसका संदर्भ ले रहे हैं।",
+      "semanticsField": "Semantics",
+      "semanticsHint": "Burndown और velocity semantics के आधार पर चलते हैं — slug उपयोगकर्ता को दिखते हैं।",
+      "colorField": "रंग",
+      "saving": "सहेजा जा रहा है…",
+      "errors": {
+        "labelRequired": "लेबल आवश्यक है",
+        "slugEmpty": "Slug के लिए कम से कम एक अक्षर या अंक चाहिए, और इस लेबल में वह नहीं है। कुछ जोड़ें — लेबल बाद में वैसा ही रख सकते हैं।",
+        "slugExists": "इस slug वाली श्रेणी पहले से मौजूद है।",
+        "saveFailed": "श्रेणी सहेजी नहीं जा सकी"
+      },
+      "labelPlaceholder": "Design Review",
+      "slugPlaceholder": "design_review"
+    },
+    "semantics": {
+      "open": {
+        "label": "खुला",
+        "hint": "कतार में — शेष कार्य"
+      },
+      "active": {
+        "label": "सक्रिय",
+        "hint": "चल रहा है — WIP में गिना जाता है"
+      },
+      "done": {
+        "label": "पूर्ण",
+        "hint": "पूरा हुआ — velocity में गिना जाता है"
+      },
+      "cancelled": {
+        "label": "रद्द",
+        "hint": "पूरा किए बिना बंद"
+      }
+    }
+  }
+}

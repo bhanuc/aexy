@@ -69,7 +69,8 @@ label under the name saying *which layer decided it*.
 The layers, outermost first:
 
 1. **The workspace app switch.** Off means off, for everybody, whatever the
-   rest of this list says. Owner-only.
+   rest of this list says. Owner-only, and the **Apps** tab of this same page
+   — the tabs are in this list's order, so the leftmost is the outermost.
 2. **Department access profiles.** A department carries a named bundle of apps;
    somebody in several profiled departments gets the **union** of them.
 3. **The role default**, used when none of their departments carries a profile.
@@ -85,6 +86,10 @@ has been said about them yet.
 The Departments tab is where the second layer is edited. Giving a department a
 profile changes what everybody in it can open — including people added to it
 next month, which is the reason to prefer it over per-person overrides.
+
+If a profile change appears to do nothing, check the Apps tab first: layer one
+overrules layer two, and an app switched off for the workspace cannot be
+granted back by any profile.
 
 ## Asking for access
 

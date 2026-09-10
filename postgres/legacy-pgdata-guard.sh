@@ -25,9 +25,52 @@
 # start is recoverable; coming up empty is how people restore from backups they
 # find out they don't have.
 LEGACY_DIR=/var/lib/postgresql/data
+THIS_MAJOR="${PG_MAJOR:-18}"
 
 if [ -s "$LEGACY_DIR/PG_VERSION" ]; then
     legacy_version="$(cat "$LEGACY_DIR/PG_VERSION" 2>/dev/null)"
+
+    # Same major version: nothing needs upgrading, the server is simply being
+    # pointed at the wrong directory. Almost always someone who worked around
+    # the pre-0.37.3 startup failure by setting PGDATA to the volume root
+    # themselves, and has now picked up a compose file that puts it one level
+    # down. Telling them to dump and restore would be alarming and wrong.
+    if [ "$legacy_version" = "$THIS_MAJOR" ]; then
+        cat >&2 <<SAME
+
+================================ REFUSING TO START ================================
+A PostgreSQL $legacy_version cluster — the same major version this image runs —
+is sitting directly in $LEGACY_DIR, but \$PGDATA is set to
+$PGDATA.
+
+Nothing is wrong with your data and nothing needs upgrading. The server is just
+being pointed at a different directory inside the same volume, and starting
+anyway would initialise a second, empty cluster beside the one you have.
+
+Pick either:
+
+  * Keep using the directory you already have — drop the PGDATA override, or
+    set it back to $LEGACY_DIR:
+        PGDATA: $LEGACY_DIR
+    Note that a bare postgres:18+ image refuses a volume mounted at that path,
+    which is why the shipped compose file moves PGDATA down a level. This image
+    allows it, because this guard replaces the check that would have caught it.
+
+  * Or move the cluster to where PGDATA now points, with the container stopped:
+        docker run --rm -v aexy_postgres_data:/v alpine sh -c \\
+          'mkdir -p /v/pgdata && find /v -maxdepth 1 -mindepth 1 \\
+             ! -name pgdata -exec mv {} /v/pgdata/ \;'
+    Back the volume up first (see below) — this moves live data.
+
+  Back up before either:
+      docker run --rm -v aexy_postgres_data:/v -v "\$PWD":/out alpine \\
+        tar czf /out/postgres_data_backup.tgz -C /v .
+===================================================================================
+
+SAME
+        exit 1
+    fi
+
     cat >&2 <<MSG
 
 ================================ REFUSING TO START ================================
@@ -46,9 +89,15 @@ to be migrated rather than pointed at:
        docker run --rm -v aexy_postgres_data:/v -v "\$PWD":/out alpine \\
          tar czf /out/postgres_data_backup.tgz -C /v .
 
-  2. Dump with the OLD server, restore into the new one. Start the previous
-     image against the same volume (postgres:$legacy_version-alpine, mounted at
-     $LEGACY_DIR with no PGDATA override), then:
+  2. Dump with the OLD server, restore into the new one. The old server needs
+     pgvector: this database has 'vector' columns, and dumping their rows calls
+     the extension's output function, so a stock postgres image fails at the
+     step you least want to fail. Build the same image for the old major —
+     alpine throughout, so the postgres UID and libc collations still match the
+     volume:
+       docker build -t aexy-postgres:$legacy_version-alpine-pgvector \\
+         --build-arg PG_IMAGE=postgres:$legacy_version-alpine ./postgres
+     Run it against this volume with PGDATA at $LEGACY_DIR, then:
        docker exec <old-container> pg_dumpall -U postgres > dump.sql
      Bring this image up on an empty volume and feed the dump back in.
 

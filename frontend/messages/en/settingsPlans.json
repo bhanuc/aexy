@@ -1,6 +1,18 @@
 {
   "settingsPlans": {
     "title": "Subscription plans",
-    "description": "Compare plans, and upgrade or downgrade."
+    "description": "Compare plans, and upgrade or downgrade.",
+    "free": "Free",
+    "payAfterUse": "Pay after use",
+    "currentPlan": "Current Plan",
+    "ownerOnly": "Only the workspace owner can change plans",
+    "contactSales": "Contact Sales",
+    "contactBilling": "Contact billing@aexy.io",
+    "ctaGetStartedFree": "Get Started Free",
+    "ctaUpgrade": "Upgrade",
+    "ctaGetStarted": "Get Started",
+    "ctaSetUpPostpaid": "Set Up Postpaid",
+    "ctaContactSales": "Contact Sales",
+    "ctaSwitchTo": "Switch to {plan}"
   }
 }

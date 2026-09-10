@@ -27,14 +27,21 @@ test.describe("Docs SearchModal a11y (live)", () => {
     page,
   }) => {
     await page.goto("/docs", { waitUntil: "domcontentloaded", timeout: 60_000 });
-    await page.waitForTimeout(1_000);
-    await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
 
-    // Wait for the doc-scoped search input to appear (proves the
-    // capture-phase interception did its job).
-    await expect(page.getByPlaceholder(/search documents/i)).toBeVisible({
-      timeout: 5_000,
-    });
+    // The Cmd+K listener lives in a `useEffect` in DocsLayoutClient, so it
+    // only exists once React has hydrated. A single press after a fixed 1s
+    // wait was landing before that on the dev server (a first paint here
+    // measures ~2s) and the keystroke went nowhere, with nothing to retry it.
+    // Wait for the page to be interactive, then press until the modal answers.
+    const search = page.getByPlaceholder(/search documents/i);
+    await expect(page.getByRole("main")).toBeVisible({ timeout: 60_000 });
+    await expect(async () => {
+      await page.keyboard.press(
+        process.platform === "darwin" ? "Meta+K" : "Control+K",
+      );
+      // Proves the capture-phase interception beat the global palette.
+      await expect(search).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
 
     // The modal root must be a dialog with aria-modal=true and a
     // non-empty accessible label.

@@ -35,13 +35,12 @@ def _clear_caches():
     clear_effective_access_cache()
 
 
-def _department(name, app_config=None, is_primary=False, persona=None, slug=None):
+def _department(name, app_config=None, is_primary=False, slug=None):
     dept = SimpleNamespace(
         id=f"dept-{name.lower()}",
         name=name,
         app_config=app_config or {},
         access_profile_slug=slug,
-        default_persona=persona,
     )
     dept._is_primary = is_primary
     return dept
@@ -501,35 +500,29 @@ async def test_removed_member_gets_nothing(monkeypatch):
     assert all(not app["can_access"] for app in access["apps"].values())
 
 
-# ==================== suggested persona ====================
+# ==================== no persona survives ====================
 
 
 @pytest.mark.asyncio
-async def test_primary_department_suggests_the_sidebar_view(monkeypatch):
+async def test_access_payload_carries_no_persona(monkeypatch):
+    """Sidebar personas are gone; access alone decides what is navigable.
+
+    While both existed, a member could hold access to an app and still not
+    find it, because their persona filtered the entry out of the sidebar.
+    The payload is the contract the frontend reads, so guard it there: a
+    persona field reappearing means that second gate has come back.
+    """
     svc = _service(
         monkeypatch,
         member=_member(),
         departments=[
-            _department("Sales", SALES_PROFILE, is_primary=True, persona="sales"),
-            _department("Support", SUPPORT_PROFILE, persona="support"),
+            _department("Sales", SALES_PROFILE, is_primary=True),
+            _department("Support", SUPPORT_PROFILE),
         ],
     )
     access = await svc.get_effective_access("w1", "dev-1", use_cache=False)
 
-    # Only the primary department gets a say: averaging two personas produces
-    # neither of them.
-    assert access["suggested_persona"] == "sales"
-
-
-@pytest.mark.asyncio
-async def test_no_persona_configured_suggests_nothing(monkeypatch):
-    svc = _service(
-        monkeypatch,
-        member=_member(),
-        departments=[_department("Sales", SALES_PROFILE, is_primary=True)],
-    )
-    access = await svc.get_effective_access("w1", "dev-1", use_cache=False)
-    assert access["suggested_persona"] is None
+    assert not [key for key in access if "persona" in key]
 
 
 # ==================== delta computation ====================

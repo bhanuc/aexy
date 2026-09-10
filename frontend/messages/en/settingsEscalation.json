@@ -1,7 +1,29 @@
 {
   "settingsEscalation": {
     "title": "Escalation matrix",
-    "description": "Automatic escalation rules based on ticket severity.",
-    "add": "Add escalation matrix"
+    "description": "Description",
+    "add": "Add escalation matrix",
+    "channels": "Notification Channels",
+    "notifyUsers": "Notify Users",
+    "notifyTeams": "Notify Teams",
+    "notifyOncall": "Also notify on-call person",
+    "name": "Name",
+    "severityLevels": "Apply to Severity Levels",
+    "scope": "Scope (Optional - leave empty to apply to all)",
+    "forms": "Forms",
+    "teams": "Teams",
+    "rules": "Escalation Rules",
+    "addRule": "Add Rule",
+    "loading": "Loading…",
+    "noMatrices": "No escalation matrices",
+    "createFirst": "Create Your First Matrix",
+    "onCall": "On-call",
+    "removeStep": "Remove escalation step",
+    "descriptionPlaceholder": "Optional description",
+    "editTitle": "Edit Escalation Matrix",
+    "confirmDelete": "Are you sure you want to delete this escalation matrix?",
+    "createTitle": "Create Escalation Matrix",
+    "saving": "Saving…",
+    "update": "Update"
   }
 }

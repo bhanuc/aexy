@@ -1,0 +1,10 @@
+{
+  "settingsGmailExclusionsAdmin": {
+    "standingRules": "Standing rules",
+    "noneExcluded": "Nobody has excluded an address or domain.",
+    "individuallyHidden": "Individually hidden",
+    "trail": "Trail",
+    "nothingRecorded": "Nothing recorded yet.",
+    "title": "Gmail exclusions"
+  }
+}

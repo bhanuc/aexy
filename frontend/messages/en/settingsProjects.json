@@ -1,16 +1,88 @@
 {
   "settingsProjects": {
-    "general": { "subtitle": "Project settings" },
-    "permissions": { "subtitle": "Permissions and members" },
-    "statuses": { "subtitle": "Task statuses" },
-    "repositories": { "subtitle": "Linked repositories" },
+    "general": {
+      "subtitle": "Project settings",
+      "loading": "Loading project…",
+      "heading": "General Settings",
+      "name": "Project Name",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "What is this project about?",
+      "color": "Color",
+      "status": "Status",
+      "updated": "Project updated successfully!",
+      "saving": "Saving…",
+      "saveChanges": "Save Changes",
+      "publicHeading": "Public Page Configuration",
+      "publicSubtitle": "Choose which tabs to show on your public project page",
+      "viewPublicPage": "View Public Page",
+      "publicUpdated": "Public tabs updated successfully!",
+      "saveTabs": "Save Tab Settings",
+      "infoHeading": "Project Info",
+      "projectId": "Project ID",
+      "slug": "Slug",
+      "publicSlug": "Public Slug",
+      "visibility": "Visibility",
+      "members": "Members",
+      "teams": "Teams",
+      "created": "Created"
+    },
+    "permissions": {
+      "subtitle": "Permissions and members",
+      "loading": "Loading permissions…",
+      "notFoundDescription": "The project you're looking for doesn't exist.",
+      "membersHeading": "Project Members",
+      "membersSubtitle": "Assign project-specific roles to override organization roles",
+      "useOrgRoleInherited": "Use org role (inherited)",
+      "noMembers": "No members in this project yet",
+      "addFromWorkspace": "Workspace Members",
+      "inviteByEmail": "Invite by Email",
+      "memberLabel": "Member",
+      "selectMember": "Select member…",
+      "projectRoleOptional": "Project Role (optional)",
+      "useOrganizationRole": "Use organization role",
+      "useDefaultRole": "Use default role",
+      "adding": "Adding…",
+      "addMember": "Add Member",
+      "emailsLabel": "Email addresses (comma or newline separated)",
+      "guestNote": "Users will be added as guests if not already in the workspace",
+      "inviting": "Inviting…",
+      "sendInvites": "Send Invites",
+      "aboutRoles": "About Project Roles",
+      "inheritanceLabel": "Inheritance:",
+      "overrideLabel": "Override:",
+      "manageOrgRoles": "Manage organization roles →",
+      "removeFromProject": "Remove from project",
+      "confirmRemoveMember": "Remove this member from the project?"
+    },
+    "statuses": {
+      "subtitle": "Task statuses"
+    },
+    "repositories": {
+      "subtitle": "Linked repositories",
+      "openWorkspaceRepos": "Open workspace repositories →",
+      "loadFailed": "Failed to load repositories"
+    },
     "tabs": {
       "general": "General",
       "permissions": "Permissions",
       "repositories": "Repositories",
       "statuses": "Statuses",
       "tracker": "Tracker",
-      "oncall": "On-call"
-    }
+      "oncall": "On-call",
+      "projectSettings": "Project Settings",
+      "navLabel": "Project settings"
+    },
+    "breadcrumbs": {
+      "settings": "Settings",
+      "projects": "Projects"
+    },
+    "notFoundTitle": "Project Not Found",
+    "notFoundCta": "Back to Projects",
+    "usingWorkspaceDefaults": "Using workspace defaults",
+    "statusesEmptyTitle": "No Statuses",
+    "statusesEmptyDescription": "Add the project's first status to define its workflow.",
+    "categoriesHeading": "Categories",
+    "statusesSubtitleOwn": "Define this project's workflow columns. Drag to reorder.",
+    "statusesSubtitleInherited": "This project uses the workspace defaults. Customize to give the project its own workflow."
   }
 }

@@ -310,9 +310,18 @@ function KanbanColumn({
   const tone = TASK_STATUS_COLORS[status] ?? TASK_STATUS_COLORS.backlog;
   const totalPoints = tasks.reduce((sum, t) => sum + (t.story_points || 0), 0);
 
+  // The column carries its status name as a labelled group: without it the
+  // board is a stack of unnamed divs, so a screen reader reads the cards with
+  // no idea which column they sit in, and a test has nothing to hold onto but
+  // the layout classes (which is how the quick-add spec broke when the fixed
+  // column width became `BOARD_COLUMN_STACKING`).
+  const headingId = `workspace-tasks-col-${status}`;
+
   return (
     <div
       ref={setNodeRef}
+      role="group"
+      aria-labelledby={headingId}
       className={cn(
         "group/col rounded-xl transition-all duration-200",
         BOARD_COLUMN_STACKING,
@@ -322,7 +331,9 @@ function KanbanColumn({
     >
       <div className="sticky top-0 z-10 flex items-center justify-between px-3 py-3 border-b border-border/30 backdrop-blur-md bg-background/40 rounded-t-xl">
         <div className="flex items-center gap-2">
-          <h3 className={cn("font-medium text-sm", tone.text)}>{label}</h3>
+          <h3 id={headingId} className={cn("font-medium text-sm", tone.text)}>
+            {label}
+          </h3>
           <Badge variant="default" size="sm">
             {tasks.length}
           </Badge>

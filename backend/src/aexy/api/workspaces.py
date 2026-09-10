@@ -1578,7 +1578,6 @@ async def apply_onboarding_use_cases(
                 name=d.name,
                 function_key=d.function_key,
                 access_profile_slug=d.access_profile_slug,
-                default_persona=d.default_persona,
             )
             for d in departments
         ],
