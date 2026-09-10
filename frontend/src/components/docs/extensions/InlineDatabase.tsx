@@ -95,7 +95,7 @@ function CreateTablePrompt({
 }) {
   const { currentWorkspace } = useWorkspace();
   const workspaceId = currentWorkspace?.id || null;
-  const { tables, createTable, isCreating } = useTables(workspaceId);
+  const { tables, createTable, isCreating } = useTables(workspaceId, { scope: null });
   const [mode, setMode] = useState<"choose" | "create" | "link" | "modules">("choose");
   const [name, setName] = useState("");
 
@@ -276,7 +276,7 @@ function CollapsedTableCard({
   onRemove: () => void;
 }) {
   const { currentWorkspace } = useWorkspace();
-  const { tables } = useTables(currentWorkspace?.id || null);
+  const { tables } = useTables(currentWorkspace?.id || null, { scope: null });
   const table = tables.find((t) => t.id === tableId);
   const scopeMeta = SCOPE_META[scope || table?.scope || "standalone"] || SCOPE_META.standalone;
   const Icon = table ? getObjectIcon(table.name) : scopeMeta.icon;
@@ -587,7 +587,7 @@ function InlineDatabaseView(props: ReactNodeViewProps) {
   const height = (node.attrs.height as number) || 400;
   const collapsed = (node.attrs.collapsed as boolean) || false;
   const { currentWorkspace } = useWorkspace();
-  const { tables } = useTables(currentWorkspace?.id || null);
+  const { tables } = useTables(currentWorkspace?.id || null, { scope: null });
   const table = tableId ? tables.find((t) => t.id === tableId) : null;
 
   if (!tableId) {

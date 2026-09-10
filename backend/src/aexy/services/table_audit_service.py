@@ -66,7 +66,16 @@ class TableAuditService:
         count_query = select(func.count()).select_from(query.subquery())
         total = (await self.db.execute(count_query)).scalar() or 0
 
-        query = query.order_by(desc(TableAuditLog.created_at)).offset(offset).limit(limit)
+        # `id` breaks ties so paging is stable. Entries written in one
+        # transaction share a `created_at` — a bulk delete logs one per record,
+        # so that is the common case, not an edge one — and with only the
+        # timestamp to sort by the same row could appear on two pages while
+        # another appeared on none.
+        query = (
+            query.order_by(desc(TableAuditLog.created_at), desc(TableAuditLog.id))
+            .offset(offset)
+            .limit(limit)
+        )
         result = await self.db.execute(query)
         entries = list(result.scalars().all())
 

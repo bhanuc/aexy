@@ -13,6 +13,11 @@ const ACTION_CONFIG: Record<string, { label: string; icon: typeof Plus; color: s
   collaborator_added: { label: "Added collaborator", icon: Share2, color: "text-purple-400" },
   collaborator_removed: { label: "Removed collaborator", icon: Share2, color: "text-orange-400" },
   settings_changed: { label: "Changed settings", icon: Settings, color: "text-yellow-400" },
+  // Column operations. `field_deleted` takes every value in the column with
+  // it, so it reads in the same red as a record deletion.
+  field_added: { label: "Added column", icon: Plus, color: "text-green-400" },
+  field_updated: { label: "Changed column", icon: FileEdit, color: "text-blue-400" },
+  field_deleted: { label: "Deleted column", icon: Trash2, color: "text-red-400" },
 };
 
 function getActionInfo(action: string) {
@@ -112,6 +117,7 @@ const ACTION_FILTERS = [
   { value: "record_deleted", label: "Deleted" },
   { value: "collaborator_added", label: "Collaborator added" },
   { value: "settings_changed", label: "Settings changed" },
+  { value: "field_deleted", label: "Column deleted" },
 ];
 
 interface TableAuditLogProps {

@@ -5,6 +5,71 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.37.6] - 2026-09-10
+
+"Embed Module Data" can see module data, and edits made from a table view are
+recorded.
+
+### Fixed: the module picker was empty however much module data existed
+
+Inserting an inline database into a document offers three routes — create a
+table, link an existing one, or embed module data. The third always said "No
+module data available. Create CRM objects or project tables first," and
+creating a CRM object did not change that.
+
+The picker splits the workspace's tables into linkable ones
+(`standalone`/`document`) and module data (`crm`/`project`), but the hook that
+fetched them pinned its query to `scope=standalone`. So the module bucket
+filtered a list that could not contain a match — empty by construction, and the
+empty state's advice was unfollowable. The same pinning meant a document
+already embedding a CRM object could not resolve its name and showed
+"Database".
+
+The scope is now a parameter. The /tables module still asks for standalone
+tables only, as it should; the document embed asks for every scope and does its
+own splitting, which is what it was written to do.
+
+**Projects still will not appear there, and that is not a filter to widen.**
+Nothing in the product creates a table with `scope='project'` — a project is
+not a table, and the embed renders through table fields and records while
+project work lives in its own schema. Making projects embeddable means exposing
+project tasks through the table engine, which is a feature rather than a fix.
+The empty state no longer promises "project tables".
+
+### Fixed: nothing was recorded when a table's data changed
+
+A table could be edited from the table view, from a document embed, or over the
+API, and none of it was written down. Every part of an audit trail was already
+built: the `table_audit_log` table, a service that honours a per-table switch
+and retention period, a read endpoint, a log viewer on the table page, a toggle
+in table settings — and a field-level diff that record updates computed and
+handed back specifically so it could be recorded.
+
+Nothing called the writer. The only reference to the audit service outside its
+own module was the reader, so the log always came back empty. That is worse
+than having no audit log: an operator who switched auditing on, waited, and
+then opened the log would read "nothing happened" rather than "this is not
+recorded".
+
+Creating, updating and deleting records now record, as do adding, changing and
+deleting a column, changing a table's settings, and adding or removing a
+collaborator. Updates carry the field-level diff — which field, from what, to
+what — and deletions carry the values that were removed, since afterwards the
+row cannot say. Each entry names the actor and the calling address.
+
+Auditing remains off by default and per table, so nothing changes for a
+workspace that has not asked for it, and switching it on is itself the first
+entry in the log. Bulk deletion records one entry per record rather than one
+for the batch, because a trail has to say which rows went; that made entries
+sharing a timestamp the common case rather than an edge one, so the reader now
+orders on a stable tiebreak instead of letting a paged query show the same
+entry twice and skip another.
+
+Access control was already right and is unchanged: workspace membership, then
+per-table permission, then field-level validation of the specific values being
+written, then a check that the record belongs to the table named in the URL.
+What was missing was only the record of who used it.
+
 ## [0.37.5] - 2026-09-10
 
 Three loose ends from the 0.37.3 review: a subtask's board is now compared on

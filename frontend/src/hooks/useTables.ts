@@ -24,12 +24,33 @@ import { EMPTY_ARRAY } from "@/lib/emptyArray";
 
 // ==================== Table Hooks ====================
 
-export function useTables(workspaceId: string | null) {
+/**
+ * Tables in a workspace.
+ *
+ * `scope` defaults to `"standalone"` — what the /tables module shows, and what
+ * this hook used to hardcode. Pass `scope: null` for every scope, which is
+ * what a caller that does its own scope filtering needs: the document embed
+ * splits the list into linkable tables (`standalone`/`document`) and module
+ * data (`crm`/`project`), and with the scope pinned here the second bucket
+ * could never match anything, so "Embed Module Data" was empty by
+ * construction however many CRM objects existed. It also meant a document
+ * embedding a CRM object couldn't resolve its name and fell back to
+ * "Database".
+ */
+export function useTables(
+  workspaceId: string | null,
+  opts: { scope?: string | null } = {},
+) {
   const queryClient = useQueryClient();
+  // `undefined` (the default) means standalone; an explicit `null` means all.
+  const scope = opts.scope === undefined ? "standalone" : opts.scope;
 
   const { data: tables, isLoading, error, refetch } = useQuery<StandaloneTable[]>({
-    queryKey: ["tables", workspaceId],
-    queryFn: () => tablesApi.tables.list(workspaceId!, "standalone"),
+    // Scope is part of the key so the two variants cache separately. The
+    // mutations below invalidate on the ["tables", workspaceId] prefix, which
+    // still matches both.
+    queryKey: ["tables", workspaceId, scope],
+    queryFn: () => tablesApi.tables.list(workspaceId!, scope ?? undefined),
     enabled: !!workspaceId,
   });
 
