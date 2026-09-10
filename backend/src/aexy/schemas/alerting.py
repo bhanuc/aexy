@@ -80,6 +80,21 @@ class AlertEventResponse(BaseModel):
     error_message: str | None
     received_at: datetime
     processed_at: datetime | None
+    # Which integration, for a history that spans all of them. Resolved once
+    # server-side rather than left to the client, which would otherwise need a
+    # second request just to turn an id into a name.
+    integration_name: str | None = None
+    # So a row can link to the ticket it produced. `ticket_id` was returned all
+    # along and never rendered, because a link needs a number to show and
+    # fetching one per row is N+1. Null when the ticket was deleted — 213 of one
+    # desk's 430 events are in that state, and "deleted" is a better answer than
+    # a blank cell.
+    ticket_number: int | None = None
+    # What the provider actually sent. Stored on the model and deliberately
+    # omitted from this schema until now, which meant the one question a
+    # developer has about a `dropped` event — what was in the payload? — could
+    # only be answered with database access.
+    raw_payload: dict | None = None
 
 
 class AlertEventListResponse(BaseModel):

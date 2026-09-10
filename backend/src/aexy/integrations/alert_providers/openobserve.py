@@ -42,12 +42,30 @@ _MAX_LOG_LINES = 50
 _MAX_LOG_CHARS = 32_000
 
 
+# A value the sender's own template failed to substitute: "{service}",
+# "{{alert_name}}", "$service". OpenObserve passes an unknown variable through
+# verbatim, so a Destination Template naming a field OpenObserve does not
+# provide arrives as the placeholder itself — which is how tickets came to be
+# titled "[MEDIUM] {service}: error-spike".
+#
+# Treated as absent rather than cleaned, so the caller's fallback chain does the
+# work: `service` falls through to `stream_name` and finally to "unknown", which
+# is a true statement. Same principle as `strip_merge_tags` on the outbound
+# side — never emit a placeholder, wherever the text came from.
+_PLACEHOLDER_RE = re.compile(r"^\s*(?:\{\{?[\w.\-]+\}?\}|\$\{?[\w.\-]+\}?)\s*$")
+
+
+def _is_placeholder(value) -> bool:
+    return isinstance(value, str) and bool(_PLACEHOLDER_RE.match(value))
+
+
 def _first(payload: dict, *keys: str, default=None):
-    """Return the first present, non-empty value among ``keys``."""
+    """Return the first present, non-empty, non-placeholder value among ``keys``."""
     for k in keys:
         v = payload.get(k)
-        if v not in (None, ""):
-            return v
+        if v in (None, "") or _is_placeholder(v):
+            continue
+        return v
     return default
 
 
