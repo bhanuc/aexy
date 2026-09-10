@@ -155,7 +155,21 @@
       "publishSubmit": "Publish",
       "publishedThread": "View the public thread",
       "publishedLive": "Published in #{channel}",
-      "publishedNotLive": "Published, but the community isn't switched on yet — nobody outside can see it."
+      "publishedNotLive": "Published, but the community isn't switched on yet — nobody outside can see it.",
+      "priority": "Priority",
+      "priorityUnset": "Not set",
+      "notes": "Internal notes",
+      "notesEmpty": "No notes yet. Notes stay on the ticket and are never sent to the requester.",
+      "noteSystem": "Service Desk",
+      "noteUnknown": "Unknown",
+      "notePlaceholder": "Add a note for whoever picks this up next…",
+      "noteAdd": "Add note",
+      "noteSaving": "Saving…",
+      "splitStart": "Move messages to a new ticket",
+      "splitHint": "Use this when unrelated requests ended up on one ticket.",
+      "splitSelect": "Select this message to move",
+      "splitMove": "Move {count} message(s)",
+      "splitMoving": "Moving…"
     },
     "ai": {
       "title": "AI email categorisation",
@@ -204,7 +218,8 @@
       "taskProject": "Project",
       "taskNone": "Don't create a task",
       "taskAssignee": "Assign to",
-      "taskUnassigned": "Nobody yet"
+      "taskUnassigned": "Nobody yet",
+      "openLoggedTicket": "Open the logged ticket"
     },
     "templates": {
       "title": "Email templates",
@@ -247,7 +262,7 @@
       "connectGoogle": "Connect a Google account",
       "connectAnotherGoogle": "Connect another account",
       "name": "Name",
-      "domains": "Domains (comma-separated)",
+      "domains": "Domains and addresses",
       "assignedOwner": "Assigned owner",
       "noAssignedOwner": "No assigned owner",
       "address": "Address",
@@ -256,7 +271,7 @@
       "delete": "Delete",
       "empty": "Nothing here yet.",
       "readOnly": "You have read-only access to Master Data. Ask a workspace admin or service desk manager to make changes.",
-      "domainsHint": "acme.com / bob@acme.com",
+      "domainsHint": "acme.com, bob@acme.com",
       "masterDataHint": "The three tables the desk sorts incoming email against. The sender's domain decides which account a ticket belongs to and who it lands on — mail that matches nothing goes to triage.",
       "accountsHint": "Who the desk works for. When mail arrives, its sender domain is looked up here: the ticket is attributed to that account and assigned to the owner set below. A whole email address can be used instead of a domain, and beats a domain entry — use one when several accounts share a provider like gmail.com.",
       "accountsEmpty": "No accounts yet, so every incoming email lands in triage and is given an arbitrary owner. Add the domains you receive requests from and tickets start routing themselves.",
@@ -266,9 +281,12 @@
       "productsEmpty": "No products yet, so tickets are not tagged with one and the digest cannot group by it.",
       "assignedOwnerFor": "Assigned owner for {name}",
       "unownedAccountWarning": "No assigned owner — tickets from this account go to an arbitrary member of the desk department.",
-      "noDomainsWarning": "No domains — sender matching can never attach a ticket to this account on its own, so its owner is only used when someone sets the account by hand."
+      "noDomainsWarning": "No domains — sender matching can never attach a ticket to this account on its own, so its owner is only used when someone sets the account by hand.",
+      "domainInvalid": "This is not a domain or an email address, so it can never match a sender. Remove it or correct it.",
+      "domainsFor": "Domains for {name}",
+      "domainsNeedRepair": "Stored as a single value, so this row currently matches no sender. The chips above show how it will be saved.",
+      "domainsRepair": "Save corrected list"
     },
-    "noDepartment": "You're not in a department yet, so no tickets can be routed to you. Ask an admin to add you from Organization → Departments.",
     "assignedOnly": "You see the tickets assigned to you, and none are open right now. Other tickets on the desk are handled by their own owners.",
     "workingHours": {
       "title": "Working hours",
@@ -519,6 +537,12 @@
         "finishFilters": "Every condition needs a value.",
         "finishKpi": "Give the KPI a name, a weight above 0, and a complete measure."
       }
+    },
+    "priority": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "urgent": "Urgent"
     }
   }
 }

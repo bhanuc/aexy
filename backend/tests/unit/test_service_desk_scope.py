@@ -199,12 +199,20 @@ async def test_a_non_ops_function_keeps_its_queue_without_gaining_peer_access(db
 
 @pytest.mark.asyncio
 async def test_someone_in_no_department_matches_nothing(db_session, desk):
-    """Distinguishable from a quiet day, which is the whole point of the name."""
+    """Still sees no *existing* ticket — but is no longer told none can reach them.
+
+    The scope name was ``"none"``, which drove the message "you're not in a
+    department yet, so no tickets can be routed to you". That became false once
+    assignment started granting visibility on its own: the same message was
+    shown to an engineer holding a ticket somebody had just handed them. The
+    floor is ``"assigned"`` now, and the row count is unchanged — nothing here
+    is assigned to them and they logged nothing.
+    """
     nobody = await _member(db_session, desk["ws"], "nobody", permissions=["can_view_service_desk"])
     await db_session.commit()
 
     assert await _visible(db_session, desk["ws"], nobody) == set()
-    assert await describe_scope(db_session, desk["ws"], nobody) == "none"
+    assert await describe_scope(db_session, desk["ws"], nobody) == "assigned"
 
 
 @pytest.mark.asyncio
@@ -421,3 +429,69 @@ async def test_a_percent_in_a_search_is_a_character_not_a_wildcard(db_session, d
         )
         == 0
     )
+
+
+# ── assignment grants visibility on its own ─────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_an_assignee_outside_the_desks_functions_still_sees_their_ticket(
+    db_session, desk
+):
+    """Reported as: "he got the notification but gets not found when he clicks it".
+
+    The assignee clause used to be gated on the caller belonging to one of the
+    desk's own internal functions. On a desk whose functions are
+    operations/sales/finance/marketing, an engineer in Tech handed a ticket had
+    no function in that set, so the clause was never added at all — the clause
+    list came out empty, the scope collapsed to `false()`, and every ticket was
+    hidden including their own.
+
+    A desk routinely hands work to Tech, Legal or Product without adding them to
+    its taxonomy first, so assignment has to stand on its own.
+    """
+    engineer = await _member(db_session, desk["ws"], "engineer")
+    await _in_department(db_session, desk["ws"], "tech", engineer)
+    # Hand them a ticket that is pending with the KAM bucket, i.e. one they have
+    # no queue-based claim to whatsoever.
+    ticket = await db_session.get(Ticket, desk["tickets"]["b"])
+    ticket.assignee_id = engineer
+    await db_session.commit()
+
+    seen = await _visible(db_session, desk["ws"], engineer)
+
+    assert desk["tickets"]["b"] in seen
+    # And the page must not tell them nothing can ever reach them.
+    assert await describe_scope(db_session, desk["ws"], engineer) == "assigned"
+
+
+@pytest.mark.asyncio
+async def test_that_does_not_hand_them_anybody_elses_ticket(db_session, desk):
+    """The clause admits their own rows and nothing more."""
+    engineer = await _member(db_session, desk["ws"], "engineer2")
+    await _in_department(db_session, desk["ws"], "tech", engineer)
+    await db_session.commit()
+
+    seen = await _visible(db_session, desk["ws"], engineer)
+
+    assert seen == set()
+
+
+@pytest.mark.asyncio
+async def test_a_call_you_logged_stays_yours(db_session, desk):
+    """Logging a call assigns the owner from Master Data, usually somebody else.
+
+    Without this the operator lost the ticket the instant it existed, and the
+    attachment upload — a second, scope-checked request — 404'd against the
+    ticket the same person had just created.
+    """
+    operator = await _member(db_session, desk["ws"], "operator")
+    ticket = await db_session.get(Ticket, desk["tickets"]["b"])
+    values = dict(ticket.field_values or {})
+    values["logged_by_id"] = str(operator)
+    ticket.field_values = values
+    await db_session.commit()
+
+    seen = await _visible(db_session, desk["ws"], operator)
+
+    assert seen == {desk["tickets"]["b"]}

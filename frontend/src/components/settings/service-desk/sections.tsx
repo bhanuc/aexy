@@ -28,6 +28,7 @@ import {
   Stakeholder,
   TestSLAOverride,
   TestStageSLA,
+  Vendor,
 } from "@/lib/service-desk-api";
 import { serviceDeskApi } from "@/lib/service-desk-api";
 import { GoogleAccountSummary, googleIntegrationApi } from "@/lib/api";
@@ -38,6 +39,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
+import { TagInput } from "@/components/ui/tag-input";
+import {
+  hasUnmatchableDomains,
+  isValidDomainTag,
+  normalizeDomainTag,
+  splitStoredDomains,
+} from "@/lib/domain-tags";
 
 function TemplateEditor({
   tpl,
@@ -1288,6 +1296,7 @@ function AccountRow({
   products,
   saving,
   onSaveOwner,
+  onSaveDomains,
   onSaveProducts,
   onDelete,
 }: {
@@ -1297,22 +1306,29 @@ function AccountRow({
   products: Product[];
   saving: boolean;
   onSaveOwner: (ownerId: string | null) => void;
+  onSaveDomains: (domains: string[]) => void;
   onSaveProducts: (products: AccountProductInput[]) => void;
   onDelete: () => void;
 }) {
   const t = useTranslations("serviceDesk");
   const ownerLabel =
     account.assigned_owner_name || account.assigned_owner_email || null;
+  // Rows saved before the chip field existed can hold several addresses in one
+  // string. Split on read so they open as the chips they were meant to be —
+  // otherwise fixing one means retyping all of them.
+  const domainTags = splitStoredDomains(account.domains);
+  const needsRepair = hasUnmatchableDomains(account.domains);
 
   return (
     <Row canManage={canManage} onDelete={onDelete}>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <span className="font-medium">{account.name}</span>
-        {account.domains.map((d) => (
-          <Badge key={d} variant="secondary" className="text-[10px]">
-            {d}
-          </Badge>
-        ))}
+        {!canManage &&
+          domainTags.map((d) => (
+            <Badge key={d} variant="secondary" className="text-[10px]">
+              {d}
+            </Badge>
+          ))}
         {/* Subdomains are matched automatically, so `mail.partner.com` needs no
             row of its own. Said here because the list is where somebody would
             otherwise add one. */}
@@ -1345,6 +1361,45 @@ function AccountRow({
           </span>
         )}
       </div>
+      {canManage && (
+        <div className="mt-1.5">
+          <TagInput
+            value={domainTags}
+            onChange={onSaveDomains}
+            normalizeTag={normalizeDomainTag}
+            isValidTag={isValidDomainTag}
+            invalidHint={t("settings.domainInvalid")}
+            placeholder={t("settings.domainsHint")}
+            ariaLabel={t("settings.domainsFor", { name: account.name })}
+            disabled={saving}
+            className="max-w-xl"
+          />
+          {/* Only on the rows that actually hold a joined-up value. Saying it on
+              every row would train people to ignore it.
+
+              The chips above are the *split* view of a value still stored as one
+              string, so without this the row would look repaired while matching
+              nothing. The button saves exactly what is displayed — user-initiated,
+              because a silent migration of somebody's master data is not ours to
+              make. */}
+          {needsRepair && (
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                {t("settings.domainsNeedRepair")}
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 text-xs"
+                disabled={saving}
+                onClick={() => onSaveDomains(domainTags)}
+              >
+                {t("settings.domainsRepair")}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
       {!account.assigned_owner_id && (
         <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
           {t("settings.unownedAccountWarning")}
@@ -1354,7 +1409,7 @@ function AccountRow({
           matching joins on the domain rows, so an account with none can only
           ever be attached to a ticket by hand — and the owner sitting right
           next to it makes that look configured. */}
-      {account.domains.length === 0 && (
+      {domainTags.length === 0 && (
         <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
           {t("settings.noDomainsWarning")}
         </p>
@@ -1367,6 +1422,65 @@ function AccountRow({
         saving={saving}
         onSave={onSaveProducts}
       />
+    </Row>
+  );
+}
+
+/**
+ * One vendor row: name and the domains its mail arrives from.
+ *
+ * Editable for the same reason accounts are — the domains are the only thing
+ * that makes the row do anything, and until now the only way to correct one was
+ * to delete the vendor and retype it.
+ */
+function VendorRow({
+  vendor,
+  canManage,
+  saving,
+  onSaveDomains,
+  onDelete,
+}: {
+  vendor: Vendor;
+  canManage: boolean;
+  saving: boolean;
+  onSaveDomains: (domains: string[]) => void;
+  onDelete: () => void;
+}) {
+  const t = useTranslations("serviceDesk");
+  const domainTags = splitStoredDomains(vendor.domains);
+  const needsRepair = hasUnmatchableDomains(vendor.domains);
+
+  return (
+    <Row canManage={canManage} onDelete={onDelete}>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="font-medium">{vendor.name}</span>
+        {!canManage &&
+          domainTags.map((d) => (
+            <Badge key={d} variant="secondary" className="text-[10px]">
+              {d}
+            </Badge>
+          ))}
+      </div>
+      {canManage && (
+        <div className="mt-1.5">
+          <TagInput
+            value={domainTags}
+            onChange={onSaveDomains}
+            normalizeTag={normalizeDomainTag}
+            isValidTag={isValidDomainTag}
+            invalidHint={t("settings.domainInvalid")}
+            placeholder={t("settings.domainsHint")}
+            ariaLabel={t("settings.domainsFor", { name: vendor.name })}
+            disabled={saving}
+            className="max-w-xl"
+          />
+          {needsRepair && (
+            <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+              {t("settings.domainsNeedRepair")}
+            </p>
+          )}
+        </div>
+      )}
     </Row>
   );
 }
@@ -1503,13 +1617,11 @@ export function MasterDataSections() {
   const canManage = settings.data?.can_manage === true;
 
   const [pName, setPName] = useState("");
-  const [pDomains, setPDomains] = useState("");
+  const [pDomains, setPDomains] = useState<string[]>([]);
   const [pOwner, setPOwner] = useState("");
   const [iName, setIName] = useState("");
-  const [iDomains, setIDomains] = useState("");
+  const [iDomains, setIDomains] = useState<string[]>([]);
   const [lName, setLName] = useState("");
-
-  const domains = (s: string) => s.split(",").map((d) => d.trim()).filter(Boolean);
 
   return (
     <>
@@ -1518,7 +1630,16 @@ export function MasterDataSections() {
         {canManage && (
           <div className="flex flex-wrap items-end gap-2">
             <Input value={pName} onChange={(e) => setPName(e.target.value)} placeholder={t("settings.name")} className="max-w-[180px]" />
-            <Input value={pDomains} onChange={(e) => setPDomains(e.target.value)} placeholder={t("settings.domainsHint")} className="max-w-[220px]" />
+            <TagInput
+              value={pDomains}
+              onChange={setPDomains}
+              normalizeTag={normalizeDomainTag}
+              isValidTag={isValidDomainTag}
+              invalidHint={t("settings.domainInvalid")}
+              placeholder={t("settings.domainsHint")}
+              ariaLabel={t("settings.domains")}
+              className="max-w-[260px]"
+            />
             <select
               value={pOwner}
               onChange={(e) => setPOwner(e.target.value)}
@@ -1543,8 +1664,8 @@ export function MasterDataSections() {
                 // cleared nothing and said nothing. The inputs keep their text
                 // on failure so the fix is a correction, not a re-type.
                 m.createAccount.mutate(
-                  { name: pName.trim(), assigned_owner_id: pOwner.trim() || null, domains: domains(pDomains) },
-                  { onSuccess: () => { setPName(""); setPDomains(""); setPOwner(""); } },
+                  { name: pName.trim(), assigned_owner_id: pOwner.trim() || null, domains: pDomains },
+                  { onSuccess: () => { setPName(""); setPDomains([]); setPOwner(""); } },
                 );
               }}
             >{t("settings.add")}</Button>
@@ -1568,6 +1689,9 @@ export function MasterDataSections() {
             onSaveOwner={(ownerId) =>
               m.updateAccount.mutate({ id: p.id, data: { assigned_owner_id: ownerId } })
             }
+            onSaveDomains={(next) =>
+              m.updateAccount.mutate({ id: p.id, data: { domains: next } })
+            }
             onSaveProducts={(next) =>
               m.updateAccount.mutate({ id: p.id, data: { products: next } })
             }
@@ -1581,12 +1705,21 @@ export function MasterDataSections() {
         {canManage && (
           <div className="flex flex-wrap items-end gap-2">
             <Input value={iName} onChange={(e) => setIName(e.target.value)} placeholder={t("settings.name")} className="max-w-[180px]" />
-            <Input value={iDomains} onChange={(e) => setIDomains(e.target.value)} placeholder={t("settings.domainsHint")} className="max-w-[220px]" />
+            <TagInput
+              value={iDomains}
+              onChange={setIDomains}
+              normalizeTag={normalizeDomainTag}
+              isValidTag={isValidDomainTag}
+              invalidHint={t("settings.domainInvalid")}
+              placeholder={t("settings.domainsHint")}
+              ariaLabel={t("settings.domains")}
+              className="max-w-[260px]"
+            />
             <Button
               disabled={!iName.trim() || m.createVendor.isPending}
               onClick={() => m.createVendor.mutate(
-                { name: iName.trim(), domains: domains(iDomains) },
-                { onSuccess: () => { setIName(""); setIDomains(""); } },
+                { name: iName.trim(), domains: iDomains },
+                { onSuccess: () => { setIName(""); setIDomains([]); } },
               )}
             >{t("settings.add")}</Button>
           </div>
@@ -1596,10 +1729,14 @@ export function MasterDataSections() {
         {vendors.isLoading ? <Spinner size="sm" /> : (vendors.data ?? []).length === 0 ? (
           <p className="max-w-2xl text-sm text-muted-foreground">{t("settings.vendorsEmpty")}</p>
         ) : (vendors.data ?? []).map((i) => (
-          <Row key={i.id} canManage={canManage} onDelete={() => m.deleteVendor.mutate(i.id)}>
-            <span className="font-medium">{i.name}</span>{" "}
-            {i.domains.map((d) => <Badge key={d} variant="secondary" className="ml-1 text-[10px]">{d}</Badge>)}
-          </Row>
+          <VendorRow
+            key={i.id}
+            vendor={i}
+            canManage={canManage}
+            saving={m.updateVendor.isPending}
+            onSaveDomains={(next) => m.updateVendor.mutate({ id: i.id, data: { domains: next } })}
+            onDelete={() => m.deleteVendor.mutate(i.id)}
+          />
         ))}
       </Section>
 

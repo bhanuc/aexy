@@ -284,7 +284,12 @@ async def test_visibility_follows_the_workspaces_own_function_keys(db_session: A
         WorkspaceMember(workspace_id=ws.id, developer_id=stranger.id, role="member", status="active")
     )
     await db_session.flush()
-    assert await describe_scope(db_session, ws.id, stranger.id) == "none"
+    # "assigned" is the floor now, not "none". Assignment grants visibility on
+    # its own, so no caller is in the state "nothing can ever match" — and the
+    # message "none" drove was being shown to people holding a ticket somebody
+    # had just handed them. A stranger still *sees* nothing here; they simply
+    # are not told routing to them is impossible.
+    assert await describe_scope(db_session, ws.id, stranger.id) == "assigned"
 
 
 # ---------------------------------------------------------------- taxonomy CRUD

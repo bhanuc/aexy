@@ -34,7 +34,9 @@ async def _workspace(db: AsyncSession, slug: str) -> tuple[Workspace, Developer]
     await db.flush()
     ws = Workspace(
         id=str(uuid4()), name=f"WS {slug}", slug=f"{slug}-{uuid4().hex[:6]}",
-        owner_id=owner.id, settings={},
+        owner_id=owner.id,
+        # About which department the pool draws from, so it asks for the pool.
+        settings={"service_desk": {"unmatched_assignment": "random"}},
     )
     db.add(ws)
     db.add(

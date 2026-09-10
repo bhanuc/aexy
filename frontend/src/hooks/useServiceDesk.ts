@@ -28,6 +28,7 @@ import {
   AIAccuracy,
   DigestPreview,
   ServiceDeskTicket,
+  TicketPriority,
   TicketQuery,
   ServiceDeskTicketDetail,
   PublishTargets,
@@ -482,8 +483,20 @@ export function useServiceDeskMutations() {
       onSuccess: (_r, v) => invalidateTickets(v.id),
     }),
     updateTicket: useDeskMutation({
-      mutationFn: ({ id, data }: { id: string; data: Partial<{ request_type: RequestType; product_id: string | null; account_id: string | null; assigned_owner_id: string | null; needs_triage: boolean }> }) =>
+      mutationFn: ({ id, data }: { id: string; data: Partial<{ request_type: RequestType; product_id: string | null; account_id: string | null; assigned_owner_id: string | null; needs_triage: boolean; priority: TicketPriority | null }> }) =>
         serviceDeskApi.updateTicket(ws!, id, data),
+      onSuccess: (_r, v) => invalidateTickets(v.id),
+    }),
+    addNote: useDeskMutation({
+      mutationFn: ({ id, content }: { id: string; content: string }) =>
+        serviceDeskApi.addNote(ws!, id, content),
+      onSuccess: (_r, v) => invalidateTickets(v.id),
+    }),
+    splitMessages: useDeskMutation({
+      mutationFn: ({ id, data }: { id: string; data: Parameters<typeof serviceDeskApi.splitMessages>[2] }) =>
+        serviceDeskApi.splitMessages(ws!, id, data),
+      // Both tickets change: the source loses messages and the new one appears
+      // in every list, so the whole ticket cache is refreshed rather than one row.
       onSuccess: (_r, v) => invalidateTickets(v.id),
     }),
     createManual: useDeskMutation({
@@ -552,6 +565,11 @@ export function useServiceDeskMutations() {
     deleteAccount: useDeskMutation({ mutationFn: (id: string) => serviceDeskApi.deleteAccount(ws!, id), onSuccess: invalidateMaster }),
     createVendor: useDeskMutation({
       mutationFn: (data: Parameters<typeof serviceDeskApi.createVendor>[1]) => serviceDeskApi.createVendor(ws!, data),
+      onSuccess: invalidateMaster,
+    }),
+    updateVendor: useDeskMutation({
+      mutationFn: ({ id, data }: { id: string; data: Parameters<typeof serviceDeskApi.updateVendor>[2] }) =>
+        serviceDeskApi.updateVendor(ws!, id, data),
       onSuccess: invalidateMaster,
     }),
     deleteVendor: useDeskMutation({ mutationFn: (id: string) => serviceDeskApi.deleteVendor(ws!, id), onSuccess: invalidateMaster }),

@@ -80,10 +80,16 @@ describe("Service Desk tickets empty state", () => {
     expect(container.textContent).not.toContain("noDepartment");
   });
 
-  it("still distinguishes someone who is in no department at all", async () => {
+  it("does not tell a caller outside the desk's departments that nothing can reach them", async () => {
+    // Scope "none" is no longer emitted: assignment grants visibility on its
+    // own, so "you're not in a department, no tickets can be routed to you" was
+    // being shown to people holding a ticket somebody had just handed them. A
+    // stale value from an older server must fall back to the neutral wording,
+    // never to that claim.
     mocks.scope = "none";
     await act(async () => root.render(<ServiceDeskTicketsPage />));
-    expect(container.textContent).toContain("noDepartment");
+    expect(container.textContent).toContain("dashboard.empty");
+    expect(container.textContent).not.toContain("noDepartment");
   });
 
   it("falls back to the plain wording for a full-view caller", async () => {

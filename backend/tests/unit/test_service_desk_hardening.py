@@ -36,7 +36,12 @@ async def _ws(db: AsyncSession, slug: str) -> Workspace:
     owner = Developer(id=str(uuid4()), email=f"owner-{slug}@example.com", name="Owner")
     db.add(owner)
     await db.flush()
-    ws = Workspace(id=str(uuid4()), name=f"WS {slug}", slug=slug, owner_id=owner.id)
+    ws = Workspace(
+        id=str(uuid4()), name=f"WS {slug}", slug=slug, owner_id=owner.id,
+        # These tests exercise the random KAM pool, which is no longer the
+        # default policy — so they ask for it rather than inherit it.
+        settings={"service_desk": {"unmatched_assignment": "random"}},
+    )
     db.add(ws)
     await db.flush()
     db.add(WorkspaceMember(workspace_id=ws.id, developer_id=owner.id, role="admin", status="active"))

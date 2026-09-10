@@ -124,6 +124,55 @@ async def ticket_number_in_subject(
     return int(match.group(1)) if match else None
 
 
+# Reply/forward markers, in the languages a desk realistically sees them. Only
+# ever stripped from the *start* of a subject, repeatedly, because that is where
+# mail clients put them and "Re" is an ordinary word elsewhere.
+_SUBJECT_PREFIX_RE = re.compile(
+    r"^\s*(?:re|fw|fwd|aw|wg|rv|res|antw|sv|vs|उत्तर)\s*(?:\[\d+\])?\s*:\s*",
+    re.IGNORECASE,
+)
+# Bracketed groups anywhere in the subject: "[EXTERNAL]", "[SD-41]", "[1]".
+#
+# Stripped wherever they sit, not just at the front, because the desk stamps its
+# own ticket id into every subject it sends — so a genuine reply's subject is the
+# stored one *plus* a bracketed id, and comparing them raw rejects every real
+# continuation. Nothing is lost by removing them: a subject that carries a valid
+# ticket id never reaches the comparison at all, because the number lookup
+# matches first and returns.
+_SUBJECT_TAG_RE = re.compile(r"\[[^\]]{1,40}\]")
+
+
+def normalise_subject(subject: str | None) -> str:
+    """A subject reduced to what two messages in one conversation should share.
+
+    Used to ask whether a thread-id match is plausible. Gmail's ``threadId``
+    groups by subject as well as by references, over conversations that run for
+    months — so on a desk whose heaviest senders are colleagues reusing one chain
+    per partner, trusting it alone collapsed unrelated requests into one ticket.
+    Comparing normalised subjects is the cheap, deterministic check that tells a
+    genuine reply from a new topic raised in an old chain.
+
+    Reply and forward markers come off (repeatedly — ``Re: Fwd: Re:`` is one
+    message's worth of history), as do leading bracketed tags, and what remains
+    is case-folded with its whitespace collapsed. Punctuation is deliberately
+    kept: ``"Easy Home Finance GHI || 1 - 3 Sep'26"`` differs from the same
+    partner's other subjects only in punctuation and digits.
+    """
+    if not subject:
+        return ""
+    # Tags first and everywhere, so a leading "[EXTERNAL] Re: x" still has its
+    # Re: found by the loop below.
+    value = _SUBJECT_TAG_RE.sub(" ", subject)
+    # Bounded rather than `while True`: a subject with hundreds of stacked
+    # prefixes is malformed, and this runs on every inbound message.
+    for _ in range(10):
+        stripped = _SUBJECT_PREFIX_RE.sub("", value)
+        if stripped == value:
+            break
+        value = stripped
+    return " ".join(value.split()).casefold()
+
+
 # Headers that mean "a machine sent this". The X-Auto* ones only ever appear on
 # auto-responders, so their presence is enough; Precedence needs a value check
 # because ordinary mail carries it too.
@@ -134,6 +183,97 @@ _AUTO_RESPONSE_SUBJECT_RE = re.compile(
     r"on (annual )?leave|vacation repl(y|ied)|away from (my |the )?(desk|office)",
     re.IGNORECASE,
 )
+
+# Two different questions get asked about a machine address, and conflating them
+# is a mistake with real cost in both directions:
+#
+#   1. "Can the desk write back to this?" — no, for every local part below.
+#   2. "Did this message carry a request?" — a *bounce* carries none. A vendor's
+#      `no-reply@` notice carries the whole request, and is exactly the mail a
+#      desk exists to act on (see `_sender_is_ignored`, which refuses to infer
+#      noise from an address for this reason; Ops maintains that list by hand).
+#
+# So there are two sets. `_BOUNCE_LOCAL_PARTS` answers (2) and is deliberately
+# tiny: only senders that exist to report a delivery failure. Everything here
+# answers (1).
+#
+# Matched on the local part alone: the sending domain is whatever mail provider
+# generated the notice (`mailer-daemon@googlemail.com` on this desk) and is not
+# knowable in advance, while the local parts are conventional and stable.
+_BOUNCE_LOCAL_PARTS = frozenset(
+    {
+        "mailer-daemon",
+        "mailerdaemon",
+        "postmaster",
+        "bounce",
+        "bounces",
+        "bounce-notification",
+    }
+)
+_BOUNCE_PREFIXES = ("mailer-daemon+", "bounce+", "bounces+")
+
+# Addresses no human reads, so nothing the desk sends to one arrives. A superset
+# of the bounce set: a `no-reply@` box cannot be replied to either, it simply has
+# something to say.
+_NON_REPLY_LOCAL_PARTS = _BOUNCE_LOCAL_PARTS | frozenset(
+    {
+        "no-reply",
+        "noreply",
+        "donotreply",
+        "do-not-reply",
+        "notifications-noreply",
+    }
+)
+_NON_REPLY_PREFIXES = _BOUNCE_PREFIXES + ("noreply+", "no-reply+")
+
+
+def _local_part(address: str | None) -> str | None:
+    """The local part, lower-cased, or None when this is not an address."""
+    if not address or "@" not in address:
+        return None
+    return address.strip().lower().lstrip("<").split("@", 1)[0]
+
+
+def is_bounce_address(address: str | None) -> bool:
+    """Whether this sender exists only to report that delivery failed.
+
+    The narrow question, and the one intake must ask before deciding a message
+    carried no request. Kept apart from ``is_non_reply_address`` because that
+    one also covers ``no-reply@`` boxes — which cannot be written *to* but whose
+    mail is often the request itself, so treating them as contentless skips
+    their classification, withholds their acknowledgement and stops a reply
+    reopening their ticket.
+    """
+    local = _local_part(address)
+    if local is None:
+        return False
+    return local in _BOUNCE_LOCAL_PARTS or local.startswith(_BOUNCE_PREFIXES)
+
+
+def is_non_reply_address(address: str | None) -> bool:
+    """Whether writing to this address is pointless by construction.
+
+    Deliberately a property of the *address*, not of the message that carried
+    it: a bounce recorded on a ticket before this check existed left a daemon
+    address behind in the ticket's reply-to, and asking the question on read is
+    what lets those tickets recover without a migration.
+
+    Conservative on purpose. It answers "no human reads this mailbox", which is
+    a much narrower question than "was this message automatic" — a real person
+    at `support@` is not caught, and should not be. It is narrower still than
+    ``is_bounce_address``: use that one to decide whether a message carried a
+    request, because a `no-reply@` sender usually did.
+    """
+    local = _local_part(address)
+    if local is None:
+        return False
+    if local in _NON_REPLY_LOCAL_PARTS:
+        return True
+    # VERP and per-message bounce addresses carry the tag plus an id, e.g.
+    # `bounces+12345-abc@`. Prefix match rather than membership, because the
+    # suffix is generated per message and there is nothing to enumerate.
+    return local.startswith(_NON_REPLY_PREFIXES)
+
 
 # The headers that answer "did a person write this?", for a caller that has to ask
 # the provider for named headers rather than being handed the whole message.
@@ -223,13 +363,23 @@ UNMATCHED_ASSIGNMENT_CHOICES: tuple[str, ...] = ("random", "unassigned", "desk_h
 def unmatched_assignment(service_desk_settings: Mapping[str, object]) -> str:
     """What to do with a ticket whose account intake could not identify.
 
-    Defaults to ``"random"``, which is what the desk has always done, so no
-    existing workspace changes behaviour on upgrade. It is also the option that
-    hid the problem: an arbitrarily-assigned ticket is indistinguishable from a
-    deliberately-assigned one, so a missing domain mapping in Master Data
-    surfaced only as a KAM asking why a partner they do not handle is in their
-    queue. ``"unassigned"`` leaves it visibly waiting instead, and
-    ``"desk_head"`` gives every unmatched ticket to one accountable person.
+    Defaults to ``"desk_head"``: one accountable person receives every ticket
+    the desk could not route, and can hand it on. ``"unassigned"`` leaves it
+    visibly waiting instead, and ``"random"`` distributes it across the desk
+    department.
+
+    The default was ``"random"`` — chosen so no workspace changed behaviour on
+    upgrade, which turned out to be the wrong thing to optimise for. Random
+    assignment does not merely pick badly, it *hides* the picking: an
+    arbitrarily-assigned ticket is indistinguishable from a deliberate one, so a
+    missing domain mapping in Master Data surfaces only as a KAM asking why a
+    partner they have never handled is in their queue. Worse, on a desk where
+    row visibility follows assignment, the coin toss also decides who can see
+    the ticket at all — so a wrong guess does not mislabel the ticket, it hides
+    it from everybody else.
+
+    Changing a default does not touch a workspace that stored a value
+    explicitly; those have to be migrated or changed in settings.
 
     An unrecognised stored value falls back to the default rather than raising:
     this is read on the intake path, and refusing to route mail because a
@@ -238,7 +388,7 @@ def unmatched_assignment(service_desk_settings: Mapping[str, object]) -> str:
     value = service_desk_settings.get("unmatched_assignment")
     if isinstance(value, str) and value in UNMATCHED_ASSIGNMENT_CHOICES:
         return value
-    return "random"
+    return "desk_head"
 
 
 def normalise_email_list(values: object) -> list[str]:

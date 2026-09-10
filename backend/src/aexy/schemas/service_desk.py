@@ -4,7 +4,14 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 
 
 # Stakeholder and request-type slugs used to be `Literal[...]` unions listing one
@@ -17,6 +24,13 @@ TaxonomySlug = str
 _SLUG_FIELD = Field(..., min_length=1, max_length=64)
 
 TicketOrigin = Literal["email", "manual", "internal"]
+# Mirrors models.ticketing.TicketPriority. Spelled out as a Literal rather than
+# imported so the wire contract cannot drift when the enum gains a member that
+# the desk's own UI has no control for.
+TicketPriority = Literal["low", "medium", "high", "urgent"]
+# Highest first — the order a queue should be worked in, and the order the sort
+# uses. `None` (nobody has said) sorts after every stated priority.
+PRIORITY_ORDER: tuple[str, ...] = ("urgent", "high", "medium", "low")
 MailboxChannel = Literal["webhook", "gmail_sync"]
 StakeholderSemantics = Literal["internal", "external", "closed"]
 # Which master-data table an external stakeholder speaks for.
@@ -268,6 +282,17 @@ class MailboxResponse(BaseModel):
     integration_id: str | None = None
     is_active: bool = True
     created_at: datetime
+    # Whether a KAM can actually reply from this mailbox. Outbound needs a
+    # connected Gmail account, so a `webhook` mailbox receives everything and can
+    # answer nothing — and the only sign of that used to be a RuntimeError at the
+    # moment somebody pressed Send on a ticket a customer was waiting on.
+    #
+    # Derived from the two fields above rather than stored, so it cannot drift
+    # from the condition `send_stakeholder_email` actually raises on.
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def can_send(self) -> bool:
+        return self.channel == "gmail_sync" and bool(self.integration_id)
 
 
 # ==================== Intake (internal, normalized email) ====================
@@ -330,6 +355,15 @@ class ManualTicketCreate(BaseModel):
     request_type: TaxonomySlug | None = Field(None, max_length=64)
     product_id: str | None = None
     account_id: str | None = None
+    # Who owns the ticket. Applied last, so an explicit choice beats the owner
+    # Master Data would have derived from the partner.
+    #
+    # The dialog had no such field. It had an "Assign to" under "Raise the work
+    # now", which is the *task's* assignee and does nothing at all when no
+    # project is picked — so an operator who chose somebody there watched the
+    # ticket go to the partner's mapped owner instead, with no way to say
+    # otherwise and nothing on screen admitting the difference.
+    assigned_owner_id: str | None = None
 
 
 # ==================== Ticket views ====================
@@ -360,6 +394,16 @@ class ServiceDeskTicketResponse(BaseModel):
     needs_triage: bool
     ai_confidence: float | None = None
     created_at: datetime
+    # How urgent this is, as opposed to how long it has been waiting. The desk
+    # had no such field: `Ticket.priority` exists on the model and the generic
+    # Tickets module uses it, but nothing in Service Desk read, wrote, filtered
+    # or displayed it, so every ticket carried null and urgency was expressed
+    # only as TAT breach level — a clock, not a severity. A P1 outage and a
+    # routine address change were indistinguishable until time ran out on both.
+    #
+    # Null means nobody has said, which is different from "normal" and stays
+    # visible as unset rather than being silently defaulted on read.
+    priority: TicketPriority | None = None
 
 
 class TicketFilters(BaseModel):
@@ -385,7 +429,7 @@ class TicketFilters(BaseModel):
     # same model, and a CSV that came back in a different order than the screen
     # it was generated from is its own small betrayal.
     sort: Literal[
-        "created", "ticket", "subject", "account", "type", "pending", "status"
+        "created", "ticket", "subject", "account", "type", "pending", "status", "priority"
     ] = "created"
     direction: Literal["asc", "desc"] = "desc"
 
@@ -403,6 +447,7 @@ class TicketFilters(BaseModel):
     origin: TicketOrigin | None = None
     status: str | None = Field(None, max_length=32)
     assigned_to: str | None = None
+    priority: TicketPriority | None = None
     # Tickets nobody has finished classifying. The one filter that answers a
     # question about the desk's own hygiene rather than about its work.
     needs_triage: bool | None = None
@@ -508,6 +553,32 @@ class TicketFieldsUpdate(BaseModel):
     vendor_id: str | None = None
     needs_triage: bool | None = None
     assigned_owner_id: str | None = None
+    # Lives on `Ticket`, not `ServiceDeskTicket`, so the service writes it to a
+    # different row than the rest of this payload — see `update_ticket`.
+    priority: TicketPriority | None = None
+
+
+class MessageSplitRequest(BaseModel):
+    """Move correspondence off this ticket and onto a new one.
+
+    Repairs a ticket that absorbed a second, unrelated request — which is what
+    an unqualified provider thread-id match used to do on any long email chain.
+    The messages named here leave; the ticket keeps everything else.
+    """
+
+    response_ids: list[str] = Field(..., min_length=1, max_length=100)
+    #: Subject for the new ticket. Defaults to the first moved message's own.
+    title: str | None = Field(None, min_length=1, max_length=500)
+    #: Which bucket the new ticket starts in. Defaults to the source ticket's.
+    pending_with: TaxonomySlug | None = Field(None, max_length=64)
+    #: Who owns the new ticket. Defaults to the source ticket's owner.
+    assigned_owner_id: str | None = None
+
+
+class MessageSplitResponse(BaseModel):
+    ticket_id: str
+    display_id: str
+    moved: int
 
 
 class DetectedIssue(BaseModel):
@@ -565,6 +636,38 @@ class ServiceDeskCorrespondence(BaseModel):
     # stakeholder reply the mailbox sync matched onto it. The card must say
     # which, or a thread of both reads as if the stakeholder said everything.
     direction: Literal["incoming", "outgoing"] = "incoming"
+
+
+class ServiceDeskNote(BaseModel):
+    """An internal note on a ticket — the desk talking to itself.
+
+    Deliberately its own list rather than a flag on ``ServiceDeskCorrespondence``,
+    which means "mail that actually left or arrived" and should keep meaning
+    exactly that. A note has never been sent to anybody, and rendering the two
+    in one stream is how somebody ends up believing a partner was told
+    something.
+
+    The storage already existed — ``TicketResponse.is_internal`` — and the desk
+    has always written notes for its own audit trail: stage transitions, splits,
+    routing decisions, merges. There was no endpoint to add one and the detail
+    query filtered them out, so both a KAM's note *and* the system's own
+    explanation of what it did were unreachable from the ticket.
+    """
+
+    id: str
+    #: Null for a note the desk wrote itself (a transition, a routing decision).
+    author_id: str | None = None
+    author_name: str | None = None
+    content: str
+    created_at: datetime
+    #: True when nobody typed this — the desk explaining its own behaviour.
+    system: bool = False
+
+
+class NoteCreate(BaseModel):
+    # Long enough for a real handover note, short enough not to become a
+    # document. The ticket is not the place for the attachment-sized version.
+    content: str = Field(..., min_length=1, max_length=10_000)
 
 
 class TicketEmailRecipient(BaseModel):
@@ -718,6 +821,10 @@ class ServiceDeskTicketDetail(ServiceDeskTicketResponse):
     split_done_indexes: list[int] = Field(default_factory=list)
     segments: list[SegmentResponse] = Field(default_factory=list)
     correspondence: list[ServiceDeskCorrespondence] = Field(default_factory=list)
+    # Internal notes, kept apart from `correspondence` on purpose — that list
+    # means "mail that left or arrived", and merging the two is how somebody
+    # comes to believe a partner was told something they were not.
+    notes: list[ServiceDeskNote] = Field(default_factory=list)
     email_recipients: list[TicketEmailRecipient] = Field(default_factory=list)
     reply_all: TicketReplyAll = Field(default_factory=TicketReplyAll)
     attachments: list[TicketAttachment] = Field(default_factory=list)
@@ -993,25 +1100,32 @@ class ServiceDeskSettings(BaseModel):
     auto_split_enabled: bool = False
     # What intake does when it cannot tell which account a ticket belongs to.
     #
-    # "random" is the historical behaviour and stays the default so no existing
-    # desk changes on upgrade — but it is the reason "assignment is not following
-    # our master data" was so hard to see: a randomly-assigned ticket looks
-    # exactly like a deliberately-assigned one. "unassigned" leaves it visibly
-    # waiting; "desk_head" sends every unmatched ticket to one accountable
-    # person. The reason is written to the ticket either way.
-    unmatched_assignment: Literal["random", "unassigned", "desk_head"] = "random"
+    # "desk_head" is the default: one accountable person gets every ticket the
+    # desk could not route, and hands it on. "unassigned" leaves it visibly
+    # waiting; "random" distributes across the desk department.
+    #
+    # "random" was the default, so no desk changed on upgrade — the wrong thing
+    # to optimise for. It is the reason "assignment is not following our master
+    # data" was so hard to see: a randomly-assigned ticket looks exactly like a
+    # deliberate one. And where row visibility follows assignment, the coin toss
+    # decides who can see the ticket at all, so a wrong guess hides it rather
+    # than merely mislabelling it. The reason is written to the ticket either way.
+    unmatched_assignment: Literal["random", "unassigned", "desk_head"] = "desk_head"
     # Whether the CALLER may edit master data / settings / templates, i.e. holds
     # can_manage_service_desk. Returned here so the Master Data page can hide
     # controls it would only get a 403 from; the server-side gate is still the
     # authority (api/service_desk.py::require_manage).
     can_manage: bool = False
     # How wide the caller's ticket view is: "all" (full-view or manager),
-    # "function" (their department's pending-with queue), "assigned" (an owner
-    # who sees only their own tickets) or "none" (in no department, so no ticket
-    # can ever match). Lets the tickets page distinguish "nothing to do" from
-    # "you only ever see your own" and from "nobody has placed you in a
-    # department yet". Defaults to "all" so a response from an older server can
-    # never raise a false alarm.
+    # "function" (their department's pending-with queue) or "assigned" (sees
+    # their own tickets and the calls they logged). Lets the tickets page
+    # distinguish "nothing to do" from "you only ever see your own". Defaults to
+    # "all" so a response from an older server can never raise a false alarm.
+    #
+    # "none" is retained on the wire for older clients but is no longer emitted:
+    # assignment grants visibility on its own now, so there is no caller for whom
+    # no ticket can ever match, and the message it drove ("no tickets can be
+    # routed to you") was shown to people holding assigned tickets.
     scope: Literal["all", "assigned", "function", "none"] = "all"
     # The working window the breach clock runs on, as "HH:MM" in `timezone`.
     # Returned so the Master Data page can show and edit it — the clock reads the

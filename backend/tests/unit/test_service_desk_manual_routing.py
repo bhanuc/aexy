@@ -243,8 +243,15 @@ async def test_no_partner_picked_leaves_the_intake_owner_alone(
     db_session: AsyncSession,
 ) -> None:
     """Nothing to route on, so nothing to override — and no note claiming a
-    mapping problem that doesn't exist."""
-    d = await _desk(db_session, "mr-noaccount")
+    mapping problem that doesn't exist.
+
+    Pinned to the pool: this test is about the *override* not firing, and the
+    owner it lands on is incidental. Left on the default it would assert against
+    whichever policy ships, which is a different question.
+    """
+    d = await _desk(
+        db_session, "mr-noaccount", sd_settings={"unmatched_assignment": "random"}
+    )
 
     ticket_id = await ServiceDeskService(db_session).create_manual_ticket(
         d.ws.id, ManualTicketCreate(subject="Walk-in, partner unknown")
@@ -258,15 +265,22 @@ async def test_no_partner_picked_leaves_the_intake_owner_alone(
 # ── 2. what happens when nothing matches is the desk's choice ────────────
 
 
-def test_the_default_is_the_historical_behaviour() -> None:
-    """No existing desk may change behaviour on upgrade."""
-    assert unmatched_assignment({}) == "random"
+def test_the_default_is_the_accountable_owner() -> None:
+    """Changed deliberately from "random", which was kept only so no desk
+    changed on upgrade — the wrong thing to optimise for.
+
+    Random assignment does not merely pick badly, it hides the picking: an
+    arbitrary assignment is indistinguishable from a deliberate one. And where
+    row visibility follows assignment, the coin toss decides who can *see* the
+    ticket, so a wrong guess hides it rather than mislabelling it.
+    """
+    assert unmatched_assignment({}) == "desk_head"
 
 
 def test_an_unrecognised_stored_value_does_not_break_intake() -> None:
     """Read on the mail path; refusing to route because a settings blob is odd
     would drop tickets on the floor."""
-    assert unmatched_assignment({"unmatched_assignment": "nonsense"}) == "random"
+    assert unmatched_assignment({"unmatched_assignment": "nonsense"}) == "desk_head"
 
 
 @pytest.mark.asyncio
@@ -340,3 +354,93 @@ async def test_a_known_partner_is_unaffected_by_the_policy(
     await db_session.commit()
 
     assert str(ticket.assignee_id) == str(d.kam.id)
+
+
+# ── 4. the operator keeps the ticket they logged ─────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_whoever_logged_the_call_can_still_see_it(
+    db_session: AsyncSession,
+) -> None:
+    """Reported as "Ticket logged, but finishing up failed: Ticket not found".
+
+    Logging a call assigns the owner from Master Data, which is usually somebody
+    else — and row visibility follows assignment, so the operator lost the ticket
+    the instant it existed. The attachment upload is a second, scope-checked
+    request, and it 404'd against the ticket the same person had just created:
+    the file was silently left behind and the message named no ticket to open.
+    """
+    from aexy.services.service_desk_service import (
+        can_edit_ticket,
+        is_service_desk_ticket_visible,
+    )
+
+    d = await _desk(db_session, "mr-logger")
+    # The operator is not the owner and holds no queue — the shape that broke.
+    operator = Developer(
+        id=str(uuid4()), email=f"operator-{uuid4().hex[:6]}@desk.example", name="Operator"
+    )
+    db_session.add(operator)
+    await db_session.flush()
+    await _member(db_session, d.ws, operator)
+    await db_session.commit()
+
+    ticket_id = await ServiceDeskService(db_session).create_manual_ticket(
+        d.ws.id,
+        ManualTicketCreate(subject="Walk-in", account_id=d.account.id),
+        logged_by_id=operator.id,
+    )
+    await db_session.commit()
+
+    ticket = await _ticket(db_session, ticket_id)
+    # Assignment is unchanged: Master Data still decides the owner.
+    assert str(ticket.assignee_id) == str(d.kam.id)
+    assert str(ticket.assignee_id) != str(operator.id)
+
+    # But the operator can reach it, which is what the upload needed.
+    assert await is_service_desk_ticket_visible(
+        db_session, d.ws.id, ticket_id, str(operator.id)
+    )
+    assert await can_edit_ticket(
+        db_session,
+        d.ws.id,
+        str(operator.id),
+        assignee_id=ticket.assignee_id,
+        pending_with="kam",
+        logged_by_id=(ticket.field_values or {}).get("logged_by_id"),
+    )
+
+
+@pytest.mark.asyncio
+async def test_logging_a_call_does_not_widen_anything_else(
+    db_session: AsyncSession,
+) -> None:
+    """The clause admits exactly one ticket, not a queue.
+
+    `logged_by_id` is stamped only by the manual path, so an email ticket — which
+    has no such field — stays as restricted as it was.
+    """
+    from aexy.services.service_desk_service import is_service_desk_ticket_visible
+
+    d = await _desk(db_session, "mr-logger-narrow")
+    operator = Developer(
+        id=str(uuid4()), email=f"op2-{uuid4().hex[:6]}@desk.example", name="Operator"
+    )
+    db_session.add(operator)
+    await db_session.flush()
+    await _member(db_session, d.ws, operator)
+    await db_session.commit()
+
+    mine = await ServiceDeskService(db_session).create_manual_ticket(
+        d.ws.id, ManualTicketCreate(subject="Mine"), logged_by_id=operator.id
+    )
+    theirs = await ServiceDeskService(db_session).create_manual_ticket(
+        d.ws.id, ManualTicketCreate(subject="Somebody else's"), logged_by_id=d.kam.id
+    )
+    await db_session.commit()
+
+    assert await is_service_desk_ticket_visible(db_session, d.ws.id, mine, str(operator.id))
+    assert not await is_service_desk_ticket_visible(
+        db_session, d.ws.id, theirs, str(operator.id)
+    )

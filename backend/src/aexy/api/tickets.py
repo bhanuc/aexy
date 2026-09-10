@@ -411,6 +411,11 @@ async def _get_owned_ticket(
             developer_id,
             assignee_id=ticket.assignee_id,
             pending_with=sd.pending_with,
+            # A logged call is editable by whoever logged it, whatever Master
+            # Data then did with the owner — the generic module has to honour the
+            # same rule or the attachment upload 404s on a ticket its own author
+            # created seconds earlier.
+            logged_by_id=(ticket.field_values or {}).get("logged_by_id"),
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

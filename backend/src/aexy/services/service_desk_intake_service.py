@@ -49,8 +49,11 @@ from aexy.services.service_desk_config import (
     domain_candidates,
     forwarded_sender,
     force_ticket_id_into_subject,
+    is_bounce_address,
+    is_non_reply_address,
     looks_automatic,
     message_recipients,
+    normalise_subject,
     normalise_ignored_senders,
     sender_is_ignored,
     ticket_number_in_subject,
@@ -79,6 +82,12 @@ MANUAL_SENDER_ADDRESS = "manual@local"
 ACK_SENT = "sent"
 ACK_NOTHING_TO_DO = "nothing_to_do"
 ACK_FAILED = "failed"
+# How long a provider conversation id stays a reason to append to its ticket.
+# Past this, a chain being revived is more often new work than a continuation —
+# and the cost of being wrong is asymmetric: a spare ticket can be merged, a
+# request buried inside somebody else's ticket cannot be found. Roughly the
+# window in which a partner is still discussing the same request.
+_THREAD_REVIVAL_MAX_DAYS = 30
 _TICKET_NUMBER_ATTEMPTS = 5
 _MAX_ISSUES_PER_EMAIL = 5
 # An email may only be auto-split into two tickets, and only when the model is
@@ -113,6 +122,11 @@ class FlushOutcome(NamedTuple):
     sent: int
     failed: int
     skipped: int
+
+
+def _aware(dt: datetime) -> datetime:
+    """Treat naive datetimes (SQLite) as UTC so arithmetic is safe."""
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
 
 def _domain_of(email: str | None) -> str | None:
@@ -236,10 +250,29 @@ def is_automatic_response(email: InboundEmail) -> bool:
     them invents work, and reopening a closed ticket from one hides a closure
     the requester never disputed.
 
-    The predicate itself is shared with the outbound side, which has to ask the
+    The header predicate is shared with the outbound side, which has to ask the
     same question about the desk's own mail — see ``looks_automatic``.
+
+    A *bounce* sender is consulted as well, because the headers are not reliably
+    there: providers differ in which markers they set on a delivery-status
+    notice and some set none, yet nothing arriving from ``mailer-daemon`` was
+    typed by a person. Getting that wrong is expensive in three directions at
+    once — the message would be offered to the AI matcher (which will find it a
+    home in somebody's claim), reopen a closed ticket, and be acknowledged back
+    to the daemon.
+
+    Deliberately ``is_bounce_address`` and **not** ``is_non_reply_address``. The
+    wider predicate also covers ``no-reply@`` boxes, which cannot be written to
+    but whose mail is routinely the request itself — an insurer sending policy
+    documents from ``no-reply@insurer.com``. Treating those as contentless would
+    skip their classification, force them to triage, withhold the receipt and
+    stop a reply reopening the ticket, which is exactly what
+    ``_sender_is_ignored`` refuses to do by inference and leaves to the
+    Ops-maintained ignore list.
     """
-    return looks_automatic(email.headers or {}, email.subject)
+    if looks_automatic(email.headers or {}, email.subject):
+        return True
+    return is_bounce_address(_address_of(email.from_email))
 
 
 class ServiceDeskIntakeService:
@@ -303,8 +336,9 @@ class ServiceDeskIntakeService:
             return None
 
         # 2) Threading — append to an existing ticket if this is a reply
-        existing = await self._find_thread_ticket(workspace_id, email)
-        match_note: str | None = None
+        existing, match_note = await self._find_thread_ticket(
+            workspace_id, email, automatic=automatic
+        )
         suggestion: str | None = None
         if existing is None and not automatic and await self._ai_enabled(workspace_id):
             # 2b) Deterministic matching found nothing. With AI on, a stakeholder
@@ -401,7 +435,10 @@ class ServiceDeskIntakeService:
             logger.info("Service desk: duplicate message %s ignored", email.message_id)
             return None
 
-        ticket = await self._find_thread_ticket(workspace_id, email)
+        # The note is discarded here: this is the desk's own outbound being read
+        # back off the mailbox, and "why did this attach" is only a question
+        # worth answering on somebody else's mail arriving.
+        ticket, _ = await self._find_thread_ticket(workspace_id, email)
         if ticket is None:
             logger.info(
                 "Service desk: desk reply %s matched no ticket, not ingested",
@@ -465,30 +502,45 @@ class ServiceDeskIntakeService:
 
     # --------------------------------------------------------------- threading
 
-    async def _find_thread_ticket(self, workspace_id: str, email: InboundEmail) -> Ticket | None:
-        thread_ref = email.thread_id or email.in_reply_to
-        if thread_ref:
-            sdt = (
-                await self.db.execute(
-                    select(ServiceDeskTicket).where(
-                        ServiceDeskTicket.workspace_id == workspace_id,
-                        ServiceDeskTicket.thread_ref == thread_ref,
-                    )
-                )
-            ).scalar_one_or_none()
-            if sdt is not None:
-                return await self.db.get(Ticket, sdt.ticket_id)
+    async def _find_thread_ticket(
+        self, workspace_id: str, email: InboundEmail, automatic: bool = False
+    ) -> tuple[Ticket | None, str | None]:
+        """The ticket this message belongs to, and why — deterministically.
 
-        # subject carries BSD-<n>?
-        #
-        # ticket_number is shared with the GENERIC ticketing module, so this must
-        # join service_desk_tickets. Matching on the number alone let anyone who
-        # emailed the desk with "Re: BSD-7" post a public reply onto generic
-        # ticket #7 (an HR helpdesk ticket, say) — and swallow their mail, since
-        # no service desk ticket was created for it.
+        Returns ``(ticket, match_note)``. The note is written to the timeline on
+        every merge, not only the AI ones: a thread-id match used to record
+        nothing at all, so a ticket that had quietly absorbed somebody else's
+        request could not be explained from the ticket.
+
+        **The ticket id in the subject is the strong signal.** The desk stamps
+        ``[SD-n]`` into every subject it sends, so a reply carrying one is
+        answering that ticket and nothing else needs asking. It is therefore
+        tried first, and it overrides a conflicting thread id.
+
+        **The provider's thread id is a weaker signal than it looks.** Gmail's
+        ``threadId`` is a *conversation*: grouped partly by subject, running for
+        months, and indifferent to topic. On this desk 258 of 314 tickets come
+        from colleagues who keep one rolling chain per partner and raise whatever
+        comes up inside it — so an unqualified thread-id match merged a booking
+        run with a COI recon sheet, and an API onboarding question with a demo
+        follow-up. Two conditions now qualify it:
+
+        * **Subject agreement.** A genuine reply keeps the subject (bar
+          ``Re:``/``Fwd:`` and tags). A new topic raised in an old chain does not.
+        * **Staleness.** A conversation revived after weeks is usually new work,
+          not a continuation, so past a cut-off the message opens its own ticket.
+
+        Neither condition applies when the subject carries the ticket id, because
+        then the requester has told us the answer. Subject agreement is also not
+        asked of ``automatic`` mail: an out-of-office is subjected "Automatic
+        reply: …" and a bounce "Delivery Status Notification (Failure)", by
+        design and by the sender's mail system — the topic-drift this guards
+        against is a *person* raising something new in an old chain, and a
+        machine's reply belongs on the thread it is answering.
+        """
         number = await ticket_number_in_subject(self.db, workspace_id, email.subject)
         if number is not None:
-            return (
+            by_number = (
                 await self.db.execute(
                     select(Ticket)
                     .join(ServiceDeskTicket, ServiceDeskTicket.ticket_id == Ticket.id)
@@ -499,7 +551,104 @@ class ServiceDeskIntakeService:
                     )
                 )
             ).scalar_one_or_none()
-        return None
+            if by_number is not None:
+                # No note: the id in the subject is the designed path, and a note
+                # on every ordinary reply would bury the ones worth reading.
+                return by_number, None
+
+        thread_ref = email.thread_id or email.in_reply_to
+        if thread_ref:
+            # Only the Ticket is wanted; the service-desk row is joined for its
+            # thread_ref and workspace scope, not read.
+            ticket = (
+                await self.db.execute(
+                    select(Ticket)
+                    .join(ServiceDeskTicket, ServiceDeskTicket.ticket_id == Ticket.id)
+                    .where(
+                        ServiceDeskTicket.workspace_id == workspace_id,
+                        ServiceDeskTicket.thread_ref == thread_ref,
+                    )
+                )
+            ).scalars().first()
+            if ticket is not None:
+                accepted, note = self._thread_match_verdict(email, ticket, automatic)
+                if accepted:
+                    return ticket, note
+                logger.info(
+                    "Service desk: thread id %s matches %s but the message reads as a new "
+                    "topic (%s), so it opens its own ticket",
+                    thread_ref,
+                    ticket.id,
+                    note,
+                )
+                return None, None
+
+        return None, None
+
+    @staticmethod
+    def _thread_match_verdict(
+        email: InboundEmail, ticket: Ticket, automatic: bool = False
+    ) -> tuple[bool, str | None]:
+        """Whether a thread-id hit is a genuine continuation. ``(accepted, note)``.
+
+        The number lookup above has already failed, so nothing in this message
+        names the ticket — the conversation id is all there is, and it is being
+        cross-checked rather than trusted.
+
+        Note the asymmetry in what the two answers cost. Wrongly *rejecting* a
+        continuation opens a second ticket, which a person can merge and which
+        the AI matcher may reunite by itself. Wrongly *accepting* one silently
+        buries a request inside another ticket, where it shares a clock, a
+        classification and a closure with work it has nothing to do with. So
+        both checks fail towards a new ticket.
+        """
+        # A machine's reply carries whatever subject its mail system chose, so
+        # there is nothing here for a subject to agree with — and rejecting it
+        # would open a fresh ticket for every out-of-office, which is the
+        # opposite of keeping it as correspondence on the thread it answers.
+        subject_now = normalise_subject(email.subject)
+        # Compared against both, because the ticket's title is what the desk
+        # displays while `field_values["subject"]` is what actually arrived, and
+        # a human edit to the title must not detach the thread.
+        stored = {
+            normalise_subject(ticket.title),
+            normalise_subject((ticket.field_values or {}).get("subject")),
+        }
+        stored.discard("")
+
+        # Both sides must agree, and "the ticket has no subject to agree with"
+        # is not agreement. Skipping the check when `stored` was empty accepted
+        # any topic into a subject-less ticket — the unsafe direction, and on
+        # precisely the tickets least able to show that it had happened.
+        if not automatic and subject_now not in stored:
+            return False, (
+                f"subject {email.subject!r} does not match the ticket's "
+                f"{ticket.title!r}"
+            )
+
+        arrived = email.sent_at or datetime.now(timezone.utc)
+        last = _aware(ticket.updated_at or ticket.created_at)
+        if last is not None:
+            idle_days = (_aware(arrived) - last).total_seconds() / 86400
+            if idle_days > _THREAD_REVIVAL_MAX_DAYS:
+                return False, (
+                    f"the conversation had been idle {idle_days:.0f} days, past the "
+                    f"{_THREAD_REVIVAL_MAX_DAYS}-day cut-off"
+                )
+
+        if automatic:
+            # No note: a bounce or an out-of-office landing on its own thread is
+            # routine, and annotating each one would bury the merges that matter.
+            return True, None
+
+        # Accepted, and said so on the ticket. This is the merge that used to
+        # leave no trace: the only record that a second request had been folded
+        # in was the correspondence itself.
+        return True, (
+            f"Added to this ticket because it arrived in the same email conversation "
+            f"(subject: {email.subject or 'no subject'}). No ticket id was in the "
+            f"subject. Move it if it belongs elsewhere."
+        )
 
     async def _ai_match_ticket(
         self, workspace_id: str, email: InboundEmail
@@ -657,7 +806,10 @@ class ServiceDeskIntakeService:
         )
         self.db.add(response)
         self._absorb_attachments(ticket, email)
-        self._absorb_participants(ticket, email, mailbox)
+        # `automatic` is passed, not ignored: this call used to run before the
+        # guard below and without the flag, so a bounce correctly failed to
+        # reopen the ticket while still becoming its reply-to address.
+        self._absorb_participants(ticket, email, mailbox, automatic=automatic)
         await self.db.flush()
 
         # A reply to a closed ticket must reopen it — otherwise the requester's
@@ -968,6 +1120,7 @@ class ServiceDeskIntakeService:
         email: InboundEmail,
         mailbox: ServiceDeskMailbox | None,
         from_desk: bool = False,
+        automatic: bool = False,
     ) -> None:
         """Record who else is on this email thread.
 
@@ -985,7 +1138,21 @@ class ServiceDeskIntakeService:
         thread that has moved on to an insurer's claims handler must not answer
         the partner who opened it three weeks ago. Mail the desk itself sent
         updates the chain but never this — the desk does not reply to itself.
+
+        ``automatic`` mail is recorded on the ticket and contributes nothing
+        here. A bounce, an out-of-office and a mailing-list digest are all
+        messages *about* the conversation rather than turns in it: they name no
+        new correspondent, and treating the sender as "the last person who wrote
+        in" pointed the compose box at ``mailer-daemon@googlemail.com`` and
+        demoted the actual customer to Cc. Because every reply then bounced and
+        every bounce re-applied the same rule, the ticket could not be answered
+        at all until somebody noticed and retyped the address by hand.
         """
+        # Nothing a machine sent is a correspondent. Checked before any of the
+        # work below because the answer is the same for all of it.
+        if automatic:
+            return
+
         desk = (mailbox.address or "").strip().lower() if mailbox is not None else ""
         values = dict(ticket.field_values or {})
         stored = values.get("thread_participants")
@@ -1000,7 +1167,13 @@ class ServiceDeskIntakeService:
         # A ticket logged by phone has no requester address, only the sentinel
         # standing in for one. Recording it would prefill the compose box with an
         # address that cannot receive mail, which is worse than an empty box.
-        if sender == MANUAL_SENDER_ADDRESS:
+        #
+        # The same argument covers a daemon or no-reply address, which reaches
+        # here when a notice carries none of the headers that mark it automatic.
+        # The `automatic` guard above catches the well-formed case; this catches
+        # the rest, and both exist because the cost of getting it wrong is a
+        # ticket whose reply goes nowhere.
+        if sender == MANUAL_SENDER_ADDRESS or is_non_reply_address(sender):
             sender = None
         if sender and not from_desk:
             arriving.append(sender)
@@ -1009,7 +1182,7 @@ class ServiceDeskIntakeService:
         for address in arriving:
             if not address or address == desk or address in participants:
                 continue
-            if address == MANUAL_SENDER_ADDRESS:
+            if address == MANUAL_SENDER_ADDRESS or is_non_reply_address(address):
                 continue
             if len(participants) >= THREAD_PARTICIPANT_LIMIT:
                 break
@@ -1117,10 +1290,14 @@ class ServiceDeskIntakeService:
             assigned_owner_id = (
                 await self.db.execute(select(Workspace.owner_id).where(Workspace.id == workspace_id))
             ).scalar_one_or_none()
+            # Says which dead end this was. The note used to assert "no active
+            # members" for every cause, which is wrong and expensively so — it
+            # sends somebody to check the department roster when the actual fix
+            # is to record a head, or to name a desk department at all.
             assignment_note = (
                 (assignment_note or "Assigned by fallback.")
-                + " The desk department has no active members either, so the ticket went to the "
-                "workspace owner."
+                + " "
+                + await self._dead_end_reason(workspace_id, policy)
             )
         elif assigned_owner_id is None:
             needs_triage = True
@@ -1164,7 +1341,10 @@ class ServiceDeskIntakeService:
             assignee_id=assigned_owner_id,
             source=source,
         )
-        self._absorb_participants(ticket, email, mailbox)
+        # A ticket can be opened by a machine's message too — an auto-reply that
+        # matched nothing gets one, and is flagged for triage below. Its sender
+        # is no more a correspondent than a bounce's is.
+        self._absorb_participants(ticket, email, mailbox, automatic=automatic)
         await self.db.flush()
 
         # Where a new ticket starts and what it is triaged as both come from the
@@ -1720,15 +1900,66 @@ class ServiceDeskIntakeService:
         if policy == "unassigned":
             return None
         if policy == "desk_head":
-            from aexy.services.service_desk_service import resolve_desk_department
+            from aexy.services.service_desk_service import (
+                resolve_desk_department,
+                resolve_desk_head_id,
+            )
 
+            # Reads both places a head is recorded — the department column and
+            # the "head" membership role the org chart actually writes. Reading
+            # only the column is why this policy did nothing on a desk whose org
+            # chart plainly names one.
+            head_id = await resolve_desk_head_id(self.db, workspace_id)
+            if head_id:
+                return head_id
             dept = await resolve_desk_department(self.db, workspace_id)
-            if dept is not None and dept.head_id:
-                return str(dept.head_id)
-            # No head recorded. A member of the desk still beats nobody, and the
-            # note on the ticket says which answer was used.
-            return await self._random_owner(workspace_id)
+            # No head recorded, and this policy does not quietly become the one
+            # it was chosen instead of. It used to fall back to `_random_owner`,
+            # so a desk that had explicitly asked for one accountable owner was
+            # still distributing tickets by coin toss — and the only trace was a
+            # note nobody reads until they are already asking why.
+            #
+            # Returning None hands the decision to the caller's dead-end branch,
+            # which assigns the workspace owner and says on the ticket that no
+            # head is set. Accountable, and it names the thing to fix.
+            logger.warning(
+                "Service desk for workspace %s is set to assign unmatched tickets to the "
+                "desk head, but department %s has no head recorded",
+                workspace_id,
+                dept.id if dept is not None else "<none resolved>",
+            )
+            return None
         return await self._random_owner(workspace_id)
+
+    async def _dead_end_reason(self, workspace_id: str, policy: str) -> str:
+        """Why no owner could be chosen, in the words of the thing to fix.
+
+        Read only when a ticket has already fallen through to the workspace
+        owner, so it costs a query on a path that is by definition rare — and
+        buys the difference between "assignment is broken" and one specific
+        empty field somebody can go and fill in.
+        """
+        from aexy.services.service_desk_service import (
+            resolve_desk_department,
+            resolve_desk_head_id,
+        )
+
+        dept = await resolve_desk_department(self.db, workspace_id)
+        if dept is None:
+            return (
+                "No desk department could be resolved for this workspace, so the ticket went "
+                "to the workspace owner. Name one in Service Desk settings."
+            )
+        if policy == "desk_head" and not await resolve_desk_head_id(self.db, workspace_id):
+            return (
+                f'This desk assigns unmatched tickets to the head of "{dept.name}", which has '
+                "no head recorded — so the ticket went to the workspace owner. Set a department "
+                "head to stop unmatched tickets collecting there."
+            )
+        return (
+            f'"{dept.name}" has no active members either, so the ticket went to the workspace '
+            "owner."
+        )
 
     async def _random_owner(self, workspace_id: str) -> str | None:
         """Pick a random member of the department that runs this desk.

@@ -15,7 +15,7 @@ import {
   useServiceDeskTickets,
   useVendors,
 } from "@/hooks/useServiceDesk";
-import { serviceDeskApi, TicketQuery } from "@/lib/service-desk-api";
+import { serviceDeskApi, TicketPriority, TicketQuery } from "@/lib/service-desk-api";
 import { rememberServiceDeskReturn } from "../returnTo";
 import { useWorkspace, useWorkspaceMembers } from "@/hooks/useWorkspace";
 import { useProjects } from "@/hooks/useProjects";
@@ -42,7 +42,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 
-type SortKey = "created" | "ticket" | "subject" | "account" | "type" | "pending" | "status";
+type SortKey = "created" | "ticket" | "subject" | "account" | "type" | "pending" | "status" | "priority";
 
 // Text reads naturally A→Z; a date and a number read newest/highest first.
 // Getting this wrong means every first click on a column looks broken.
@@ -54,6 +54,19 @@ const SORT_DEFAULT_DIRECTION: Record<SortKey, "asc" | "desc"> = {
   type: "asc",
   pending: "asc",
   status: "asc",
+  // Most urgent first on the first click. The server ranks by severity and
+  // always sorts "nobody has said" last, whichever way the arrow points.
+  priority: "desc",
+};
+
+// Severity colour, kept separate from the stakeholder palette: this is a
+// judgement about urgency, not about which team holds the ticket, and sharing a
+// scale would make the two read as the same axis.
+const PRIORITY_CLASS: Record<TicketPriority, string> = {
+  urgent: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
+  high: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
+  medium: "bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300",
+  low: "bg-muted text-muted-foreground",
 };
 
 const FILTER_CLASS =
@@ -172,7 +185,7 @@ const dayEnd = (day: string) => (day ? `${day}T23:59:59Z` : undefined);
  *  off the state object so a stray key can never reach the address bar. */
 const URL_STRING_FILTERS = [
   "q", "created_from", "created_to", "account_id", "product_id", "vendor_id",
-  "request_type", "pending_with", "origin", "status", "assigned_to",
+  "request_type", "pending_with", "origin", "status", "assigned_to", "priority",
 ] as const;
 
 /** Filters that round-trip as `1`/`0`. `is_open` is genuinely three-valued —
@@ -345,15 +358,18 @@ function ServiceDeskTicketsPageContent() {
   const total = countData?.total ?? 0;
   const { stakeholders, requestTypes, stakeholderLabel, requestTypeLabel } = useServiceDeskTaxonomy();
   // An empty list means different things to different people, and the generic
-  // "no tickets yet" is misleading for two of them: scope "none" is someone
-  // who was never added to a department (nothing can ever match), and scope
-  // "assigned" is an owner who sees only their own tickets (the desk may be
-  // busy; none of it is theirs). The server does the filtering either way.
+  // "no tickets yet" is misleading for one of them: scope "assigned" is an owner
+  // who sees only their own tickets and the calls they logged — the desk may be
+  // busy, none of it is theirs. The server does the filtering either way.
+  //
+  // Scope "none" is gone. It meant "in no department, so nothing can ever
+  // match", which stopped being true once assignment alone granted visibility —
+  // and the message it drove ("no tickets can be routed to you") was being shown
+  // to people holding a ticket somebody had just handed them.
   const settings = useServiceDeskSettings();
   const scope = settings.data?.scope;
-  const outOfScope = scope === "none";
   const emptyDescription =
-    scope === "none" ? t("noDepartment") : scope === "assigned" ? t("assignedOnly") : t("dashboard.empty");
+    scope === "assigned" ? t("assignedOnly") : t("dashboard.empty");
   // A filtered list that matches nothing is not an empty desk. "No open tickets
   // — new requests will appear here automatically" is actively wrong then: it
   // says the work does not exist when it is only hidden, and the reader's next
@@ -409,6 +425,7 @@ function ServiceDeskTicketsPageContent() {
   }
   if (filters.request_type) chip("request_type", t("table.type"), requestTypeLabel(filters.request_type));
   if (filters.pending_with) chip("pending_with", t("table.pendingWith"), stakeholderLabel(filters.pending_with));
+  if (filters.priority) chip("priority", t("detail.priority"), t(`priority.${filters.priority}`));
   if (filters.is_open !== undefined)
     chip("is_open", t("filters.state"), filters.is_open ? t("filters.open") : t("filters.closed"));
   if (filters.assigned_to_me) chip("assigned_to_me", t("filters.owner"), t("filters.mine"));
@@ -419,7 +436,7 @@ function ServiceDeskTicketsPageContent() {
   // workspace's own, and sending nothing lets the server resolve it.
   const EMPTY_FORM = {
     subject: "", body: "", requester_name: "", requester_email: "",
-    request_type: "", product_id: "", account_id: "",
+    request_type: "", product_id: "", account_id: "", assigned_owner_id: "",
     // Optional: raise the work in the same step as the ticket.
     task_project_id: "", task_assignee_id: "",
   };
@@ -432,6 +449,9 @@ function ServiceDeskTicketsPageContent() {
   const [files, setFiles] = useState<File[]>([]);
   const [logging, setLogging] = useState(false);
   const [logError, setLogError] = useState<string | null>(null);
+  // The ticket that was created when a later step failed, so the dialog can
+  // offer a way to it instead of telling somebody to go and find it.
+  const [loggedTicketId, setLoggedTicketId] = useState<string | null>(null);
 
   // Preselect the workspace's default once the taxonomy has loaded, so the
   // dropdown isn't empty while still deferring to the server if it hasn't.
@@ -461,7 +481,11 @@ function ServiceDeskTicketsPageContent() {
     if (!form.subject.trim() || !currentWorkspace?.id) return;
     setLogging(true);
     setLogError(null);
+    setLoggedTicketId(null);
     let createdId: string | undefined;
+    // Kept so the failure message can name the ticket. "Open the ticket" is
+    // useless advice without saying which.
+    let createdNumber: string | undefined;
     try {
       const created = await createManual.mutateAsync({
         subject: form.subject.trim(),
@@ -474,8 +498,10 @@ function ServiceDeskTicketsPageContent() {
         requester_email: form.requester_email || undefined,
         product_id: form.product_id || undefined,
         account_id: form.account_id || undefined,
+        assigned_owner_id: form.assigned_owner_id || undefined,
       });
       createdId = created?.ticket_id;
+      createdNumber = created?.display_id ?? undefined;
       if (!createdId) throw new Error("The ticket was logged but returned no id.");
 
       if (files.length > 0) {
@@ -499,18 +525,21 @@ function ServiceDeskTicketsPageContent() {
       }
     } catch (err) {
       // The ticket itself may well exist — the caller is on the phone and must
-      // not be told the call was lost. Say what did not finish and leave the
-      // dialog open with the ticket id, so the rest can be done on the ticket.
+      // not be told the call was lost. Say what did not finish, name the ticket
+      // so it can be opened, and KEEP everything the operator typed.
+      //
+      // This used to clear the form and drop the files on a partial failure,
+      // which is the worst possible moment to do it: the person is mid-call,
+      // the attachment they chose is gone, and the message told them to "open
+      // the ticket" without saying which one. Nothing here is recoverable from
+      // anywhere else, so nothing here is discarded.
       setLogError(
         createdId
-          ? `Ticket logged, but finishing up failed: ${getApiErrorMessage(err, "unknown error")}. Open the ticket to add the file or raise the task.`
+          ? `Ticket logged${createdNumber ? ` as ${createdNumber}` : ""}, but finishing up failed: ${getApiErrorMessage(err, "unknown error")}. Your details are still here — retry, or open the ticket to add the file or raise the task.`
           : getApiErrorMessage(err, "Could not log that ticket."),
       );
+      setLoggedTicketId(createdId ?? null);
       setLogging(false);
-      if (createdId) {
-        setFiles([]);
-        setForm(EMPTY_FORM);
-      }
       return;
     }
     setLogging(false);
@@ -744,6 +773,7 @@ function ServiceDeskTicketsPageContent() {
                 <SortableHeader label={terms.account ?? t("table.account")} column="account" sort={sort} direction={direction} onSort={onSort} />
                 <SortableHeader label={t("table.type")} column="type" sort={sort} direction={direction} onSort={onSort} />
                 <SortableHeader label={t("table.pendingWith")} column="pending" sort={sort} direction={direction} onSort={onSort} />
+                <SortableHeader label={t("detail.priority")} column="priority" sort={sort} direction={direction} onSort={onSort} />
                 <SortableHeader label={t("table.status")} column="status" sort={sort} direction={direction} onSort={onSort} />
                 <SortableHeader label={t("table.age")} column="created" sort={sort} direction={direction} onSort={onSort} align="right" />
               </tr>
@@ -776,6 +806,21 @@ function ServiceDeskTicketsPageContent() {
                       <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs ${pc?.bg} ${pc?.text}`}>
                         {stakeholderLabel(tk.pending_with)}
                       </span>
+                    </td>
+                    {/* Urgency, as distinct from the age column at the end.
+                        Unset is rendered as a dash rather than as a default, so
+                        "nobody has triaged this" stays visible instead of
+                        reading as a deliberate "medium". */}
+                    <td className="px-3 py-2">
+                      {tk.priority ? (
+                        <span
+                          className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs ${PRIORITY_CLASS[tk.priority]}`}
+                        >
+                          {t(`priority.${tk.priority}`)}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </td>
                     <td className="px-3 py-2">
                       <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs ${sc.bg} ${sc.text}`}>{ticketFieldLabel(tk.status)}</span>
@@ -879,6 +924,33 @@ function ServiceDeskTicketsPageContent() {
                   {(accounts.data ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </div>
+              {/* Who owns the ticket — which this dialog could not express.
+                  Leaving it alone derives the owner from the partner, which is
+                  usually right; naming somebody wins outright. The only
+                  "Assign to" here was the *task's*, disabled unless a project
+                  was also picked, so an operator who chose an owner there
+                  watched the ticket go somewhere else and had nothing on screen
+                  to explain it. */}
+              <div>
+                <label className="mb-1 block text-xs text-muted-foreground">
+                  {terms.owner ?? t("manual.assignedOwner")}
+                </label>
+                <select
+                  value={form.assigned_owner_id}
+                  data-testid="manual-ticket-owner"
+                  onChange={(e) => set("assigned_owner_id", e.target.value)}
+                  className="w-full rounded-md border border-border bg-background px-2 py-2 text-sm"
+                >
+                  <option value="">{t("manual.ownerFromPartner")}</option>
+                  {members
+                    .filter((m) => m.status === "active")
+                    .map((m) => (
+                      <option key={m.developer_id} value={m.developer_id}>
+                        {m.developer_name || m.developer_email || m.developer_id}
+                      </option>
+                    ))}
+                </select>
+              </div>
             </div>
 
             {/* Files the requester sent. Uploaded after the ticket exists — the
@@ -960,7 +1032,21 @@ function ServiceDeskTicketsPageContent() {
             )}
 
             {logError && (
-              <p className="text-sm text-destructive" data-testid="manual-ticket-error">{logError}</p>
+              <div className="space-y-1.5" data-testid="manual-ticket-error">
+                <p className="text-sm text-destructive">{logError}</p>
+                {/* A way to the ticket that does exist. The message used to say
+                    "open the ticket" and name nothing, leaving the operator to
+                    search a list mid-call. */}
+                {loggedTicketId && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => router.push(`/service-desk/tickets/${loggedTicketId}`)}
+                  >
+                    {t("manual.openLoggedTicket")}
+                  </Button>
+                )}
+              </div>
             )}
           </div>
           <DialogFooter>

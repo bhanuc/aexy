@@ -114,7 +114,14 @@ async def _desk(db: AsyncSession, slug: str) -> _Desk:
     await db.commit()
 
     settings = dict(d.ws.settings or {})
-    settings["service_desk"] = {"desk_department_id": department.id}
+    settings["service_desk"] = {
+        "desk_department_id": department.id,
+        # Every assertion here tells "the fallback fired" from "Master Data
+        # answered" by whether the ticket landed on `desk_member`, the pool's
+        # only candidate. The pool is no longer the default policy, so this desk
+        # asks for it rather than inheriting it.
+        "unmatched_assignment": "random",
+    }
     d.ws.settings = settings
     await db.commit()
 

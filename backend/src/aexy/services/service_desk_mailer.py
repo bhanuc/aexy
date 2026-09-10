@@ -29,6 +29,7 @@ from aexy.models.google_integration import GoogleIntegration
 from aexy.models.service_desk import MailboxChannel, ServiceDeskMailbox
 from aexy.services.service_desk_config import (
     AUTO_RESPONSE_HEADER_NAMES,
+    is_non_reply_address,
     looks_automatic,
 )
 
@@ -331,6 +332,32 @@ async def send_service_desk_email(
                              nothing to retry until somebody configures one
     """
     if not to_email:
+        return SEND_UNCONFIGURED
+
+    # A ticket logged by phone or WhatsApp carries `manual@local` where a
+    # requester address would be — a sentinel, not a mailbox. "There is nobody to
+    # write to" is the same answer as an empty address, so it belongs here rather
+    # than in each caller.
+    #
+    # It was guarded in three callers and missed in the fourth: closing a manual
+    # ticket queued its closure mail to the sentinel, which fell through Gmail to
+    # the transactional sender and produced `Postmark API error (422): Invalid
+    # 'To' address: 'manual@local'` on every such closure. Asking once, on the
+    # path both callers share, is what stops the next caller having to remember.
+    from aexy.services.service_desk_intake_service import MANUAL_SENDER_ADDRESS
+
+    if to_email.strip().lower() == MANUAL_SENDER_ADDRESS:
+        logger.info(
+            "Service desk: send skipped, this ticket has no requester address (%s)",
+            MANUAL_SENDER_ADDRESS,
+        )
+        return SEND_UNCONFIGURED
+
+    # Nothing a machine sent can be written back to. A ticket whose requester is
+    # a bounce notice would otherwise have its closure mail addressed to the
+    # daemon that reported the original failure.
+    if is_non_reply_address(to_email):
+        logger.info("Service desk: send skipped, %s is not a deliverable reply address", to_email)
         return SEND_UNCONFIGURED
 
     # Derived once and used on both channels, so an acknowledgement reads the
