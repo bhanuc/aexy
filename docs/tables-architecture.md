@@ -7,7 +7,7 @@ Tables are a workspace-level, Airtable-style data store. Same underlying machine
 
 ## Why it shares the CRM models
 
-`CRMObject.object_type` includes a `CUSTOM` variant, and `CRMObject.scope` distinguishes `crm` from `standalone`/`document`/`project`. Tables are `CRMObject` rows with `scope != "crm"` and `object_type = CUSTOM`. Records, attributes, and saved views (`CRMList`) all reuse the CRM tables, which means:
+`CRMObject.object_type` includes a `CUSTOM` variant, and `CRMObject.scope` distinguishes `crm` from `standalone`/`document`/`project`. Three of those four are written in practice: `crm` by the CRM object create paths (which omit `scope` and take the model default), `standalone` by `POST /tables`, and `document` by a table created from inside a document. **Nothing writes `project`** — a project is not a table, and the embed renders through table attributes and records while project work lives in `sprint_tasks`. The document embed's "Embed Module Data" picker filters for `crm`/`project`, so it lists CRM objects and never projects; making projects embeddable means exposing project tasks through the table engine, which does not exist yet. Tables are `CRMObject` rows with `scope != "crm"` and `object_type = CUSTOM`. Records, attributes, and saved views (`CRMList`) all reuse the CRM tables, which means:
 
 - Custom attribute types — TEXT, NUMBER, SELECT, RECORD_REFERENCE, AI_COMPUTED — all available to tables
 - Cross-table references via `RECORD_REFERENCE` attributes
@@ -47,7 +47,7 @@ GET    /workspaces/{ws}/tables/{table_id}/access                read ACL
 POST   /workspaces/{ws}/tables/{table_id}/collaborators
 PATCH  /workspaces/{ws}/tables/{table_id}/collaborators/{id}
 DELETE /workspaces/{ws}/tables/{table_id}/collaborators/{id}
-GET    /workspaces/{ws}/tables/{table_id}/audit                 changes log
+GET    /workspaces/{ws}/tables/{table_id}/audit-log             changes log (opt-in per table)
 ```
 
 ## Saved views
@@ -116,9 +116,57 @@ Layer order on a request: workspace permission → table visibility → row acce
 
 ## Audit trail
 
-Every record create/update/delete writes to the per-table audit log. Endpoints expose this at `GET /tables/{table_id}/audit`. The model captures `actor_id`, `action`, `old_value`, `new_value`, `timestamp` — useful when an auditor asks "who changed cell X on row Y on date Z."
+**Off by default, per table.** `CRMObject.audit_config` holds
+`{"enabled": bool, "retention_days": int}`, and the writer returns without
+doing anything when `enabled` is false — so a workspace that has not asked for
+a trail pays nothing, and reads an empty log because there is nothing to read.
+The toggle lives on the table's settings page. Enabling it is itself the first
+entry recorded, which is what lets a reader tell "auditing was on and nothing
+happened" from "auditing was off".
 
-The audit writer is a Temporal activity in `temporal/activities/tables.py` invoked from the record-service `update`/`delete` paths, so it's fire-and-forget and won't slow user writes.
+Until 0.37.6 nothing called the writer at all. Every other part existed — the
+model, the read endpoint, the viewer, the toggle, the retention reaper — so the
+log always came back empty however much a table was edited. That is worth
+knowing when reading older data: an absence of entries before 0.37.6 says
+nothing about whether the table changed.
+
+Recorded actions, and the vocabulary the viewer decorates
+(`components/tables/TableAuditLog.tsx`):
+
+| Action | Written by |
+|---|---|
+| `record_created` / `record_updated` / `record_deleted` | the record endpoints, including inline edits from a document embed |
+| `field_added` / `field_updated` / `field_deleted` | the column endpoints |
+| `settings_changed` | `PATCH /tables/{id}` |
+| `collaborator_added` / `collaborator_removed` | the collaborator endpoints |
+
+`TableAuditLog` (`models/crm.py`) captures `table_id`, `record_id` (null for
+table-level actions), `actor_id`, `action`, `changes` and `ip_address`, with
+`created_at` as the timestamp. `changes` is a JSON blob whose shape depends on
+the action rather than a fixed old/new pair: an update carries
+`{"fields": [{"field", "old", "new"}]}` — the diff `DataTableService.update_record`
+computes and returns on `_changes` — while a deletion carries the values that
+were removed, snapshotted before the delete because afterwards the row cannot
+say. `ip_address` prefers the left-most `X-Forwarded-For` entry and falls back
+to the socket peer.
+
+The writer is `TableAuditService.log()`, called synchronously from the API
+endpoints in the same transaction as the mutation. It is **not** a Temporal
+activity — `temporal/activities/tables.py` holds
+`cleanup_expired_audit_logs`, the retention *reaper* that purges entries past
+each table's `retention_days`, which is a different job.
+
+Reads are `GET /workspaces/{ws}/tables/{table_id}/audit-log`, paged, filterable
+by action and by record. Ordering is `created_at DESC, id DESC`: entries written
+in one transaction share a timestamp — a bulk delete logs one per record — and
+without the tiebreak a paged query could show the same entry on two pages and
+omit another.
+
+Access control and the trail are separate concerns, and only the first was ever
+enforced: a record write passes workspace permission, then per-table
+capability, then field-level validation of the values being written, then a
+check that the record belongs to the table named in the URL. Before 0.37.6 you
+could prove who *may* edit a table and not who *did*.
 
 ## Frontend
 
@@ -130,5 +178,5 @@ The audit writer is a Temporal activity in `temporal/activities/tables.py` invok
 - **`row_access_mode` doesn't apply to admins.** Workspace admins see all rows regardless. Be careful generating "owner-only" reports for admins — they'll see everything.
 - **AI_COMPUTED cycles.** If attribute A inputs attribute B and B inputs A, the computation never settles. The Temporal activity has a cycle detector that aborts with an error, but the UI doesn't warn at config time. Validate inputs explicitly.
 - **Saved views are global.** A view created from one user's filtered list is visible (and editable) to anyone with table access unless `is_private=true`. Mark personal views private.
-- **Bulk-delete is hard-delete.** Unlike `DELETE /records/{id}` which soft-archives via `is_archived=true`, `bulk-delete` removes the rows. The audit log retains the deletion event, but the rows are gone.
+- **Bulk-delete is hard-delete.** Unlike `DELETE /records/{id}` which soft-archives via `is_archived=true`, `bulk-delete` removes the rows. With auditing enabled the log retains one entry per deleted record, carrying the values that were removed; with auditing off — the default — nothing is retained and the rows are simply gone.
 - **Cross-table reference rename pain.** Renaming the slug of a target object's primary attribute will break the displayed name of every `RECORD_REFERENCE` value pointing at it. Re-run the display-name cache rebuild after primary-attribute changes.
