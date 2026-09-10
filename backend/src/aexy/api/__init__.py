@@ -372,6 +372,28 @@ api_router.include_router(document_spaces_router, tags=["document-spaces"], depe
 api_router.include_router(tracking_router, tags=["tracking"])
 # Ticketing
 api_router.include_router(ticket_forms_router, tags=["ticket-forms"], dependencies=[Depends(require_app_access("tickets")), Depends(require_workspace_permission_for_writes("can_manage_forms"))])
+# App access and nothing else, deliberately — do not add
+# `require_workspace_permission("can_view_tickets")` here, despite the
+# permission existing and looking unenforced.
+#
+# Reads: app access already answers "may this person reach tickets?", and it
+# answers it through four layers the admin can edit (workspace switch, role
+# fallback, department profile, member override). `can_view_tickets` is a flat
+# role-template flag with no per-member override in that flow. Gating reads on
+# both means two gates that can disagree about one question, and the loser is
+# somebody whose navigation offers a page that 403s — which is the exact
+# failure the sidebar personas were removed for.
+#
+# Writes: gated inside `tickets.py` by role (`check_workspace_permission`,
+# "admin" for delete) plus Service Desk row scoping (`_get_owned_ticket`,
+# `for_edit=True`), which is finer than a router-wide dependency can be. A
+# blanket `require_workspace_permission_for_writes("can_manage_tickets")` like
+# the escalation routers use would be wrong here: POST /{id}/responses is a
+# write, `can_manage_tickets` is admin and support only, and a developer has to
+# be able to comment on the ticket they raised.
+#
+# What `can_view_tickets` does do is decide which ticket widgets a dashboard
+# offers. See the comment on it in `models/permissions.py`.
 api_router.include_router(tickets_router, tags=["tickets"], dependencies=[Depends(require_app_access("tickets"))])
 api_router.include_router(public_forms_router, tags=["public-forms"])
 api_router.include_router(public_tickets_router, tags=["public-tickets"])
