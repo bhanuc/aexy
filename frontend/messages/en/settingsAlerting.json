@@ -21,7 +21,6 @@
     "addRule": "Add rule",
     "rulesHint": "First matching rule wins. Leave a field blank to match anything.",
     "noRules": "No rules — all alerts use the default form and severity-based priority.",
-    "noAlerts": "No alerts received yet.",
     "done": "Done",
     "name": "Name",
     "baseUrl": "Base URL (for trace/log deep links)",

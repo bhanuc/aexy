@@ -313,7 +313,6 @@ function RoutingRulesEditor({
 // the standalone Alert history page so the two cannot drift. `compact` keeps
 // this card a glance rather than a debugging surface.
 function EventLog({ workspaceId, integrationId }: { workspaceId: string; integrationId: string }) {
-  const t = useTranslations("settingsAlerting");
   const { data, isLoading } = useAlertIntegrationEvents(workspaceId, integrationId);
   return (
     <AlertEventLog events={data?.events ?? []} isLoading={isLoading} compact />
