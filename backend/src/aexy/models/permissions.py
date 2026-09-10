@@ -106,7 +106,11 @@ PERMISSIONS: dict[str, dict] = {
     "can_view_tickets": {
         "category": PermissionCategory.TICKETS,
         "description": "View support tickets",
-        "default_for": ["admin", "support", "manager"],
+        # Developers included, matching `can_create_tickets`. The tickets app is
+        # filed under Engineering and its Alerts view is an on-call queue —
+        # letting a developer raise a ticket and then not read the queue it
+        # lands in was an accident of these two lists being written apart.
+        "default_for": ["admin", "support", "manager", "developer"],
     },
     "can_create_tickets": {
         "category": PermissionCategory.TICKETS,
