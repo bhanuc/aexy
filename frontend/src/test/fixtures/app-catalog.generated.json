@@ -324,6 +324,13 @@
         "docs": {
           "modules": []
         },
+        "drive": {
+          "modules": [
+            "files",
+            "search",
+            "smart_views"
+          ]
+        },
         "email_marketing": {
           "modules": [
             "campaigns",
@@ -352,6 +359,13 @@
             "chart",
             "departments",
             "directory"
+          ]
+        },
+        "reports": {
+          "modules": [
+            "custom_reports",
+            "exports",
+            "monthly_engineering"
           ]
         },
         "service_desk": {
@@ -394,6 +408,13 @@
         "docs": {
           "modules": []
         },
+        "drive": {
+          "modules": [
+            "files",
+            "search",
+            "smart_views"
+          ]
+        },
         "gtm": {
           "modules": []
         },
@@ -415,6 +436,13 @@
             "chart",
             "departments",
             "directory"
+          ]
+        },
+        "reports": {
+          "modules": [
+            "custom_reports",
+            "exports",
+            "monthly_engineering"
           ]
         },
         "service_desk": {
@@ -504,6 +532,13 @@
         "docs": {
           "modules": []
         },
+        "drive": {
+          "modules": [
+            "files",
+            "search",
+            "smart_views"
+          ]
+        },
         "email_marketing": {
           "modules": [
             "campaigns",
@@ -552,6 +587,13 @@
             "chart",
             "departments",
             "directory"
+          ]
+        },
+        "reports": {
+          "modules": [
+            "custom_reports",
+            "exports",
+            "monthly_engineering"
           ]
         },
         "reviews": {
@@ -632,6 +674,13 @@
         "docs": {
           "modules": []
         },
+        "drive": {
+          "modules": [
+            "files",
+            "search",
+            "smart_views"
+          ]
+        },
         "forms": {
           "modules": []
         },
@@ -663,6 +712,13 @@
             "chart",
             "departments",
             "directory"
+          ]
+        },
+        "reports": {
+          "modules": [
+            "custom_reports",
+            "exports",
+            "monthly_engineering"
           ]
         },
         "reviews": {

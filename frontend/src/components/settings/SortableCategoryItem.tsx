@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Edit2, MoreVertical, Trash2 } from "lucide-react";
 
 import { WorkspaceStatusCategory } from "@/lib/api";
@@ -38,6 +39,8 @@ export function SortableCategoryItem({
   onEdit,
   onDelete,
 }: SortableCategoryItemProps) {
+  const t = useTranslations("taskStatusRow");
+  const tc = useTranslations("common");
   const [showMenu, setShowMenu] = useState(false);
 
   return (
@@ -58,7 +61,7 @@ export function SortableCategoryItem({
           </span>
           {category.is_default && (
             <span className="px-2 py-0.5 rounded text-xs bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400">
-              Default
+              {t("default")}
             </span>
           )}
         </div>
@@ -87,7 +90,7 @@ export function SortableCategoryItem({
                   className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-accent flex items-center gap-2"
                 >
                   <Edit2 className="h-4 w-4" />
-                  Edit
+                  {tc("edit")}
                 </button>
                 <button
                   onClick={() => {
@@ -97,7 +100,7 @@ export function SortableCategoryItem({
                   className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-accent flex items-center gap-2"
                 >
                   <Trash2 className="h-4 w-4" />
-                  Delete
+                  {tc("delete")}
                 </button>
               </div>
             </>

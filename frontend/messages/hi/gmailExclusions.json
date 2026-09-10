@@ -1,0 +1,12 @@
+{
+  "gmailExclusions": {
+    "neverSync": "कभी सिंक न करें",
+    "domain": "डोमेन",
+    "address": "पता",
+    "nothingExcluded": "अभी कुछ बाहर नहीं रखा गया।",
+    "alsoStopSyncing": "छिपाया गया। सिंक भी बंद करें",
+    "noThanks": "नहीं, धन्यवाद",
+    "typeLabel": "अपवाद प्रकार",
+    "valueLabel": "बाहर रखने के लिए पता या डोमेन"
+  }
+}

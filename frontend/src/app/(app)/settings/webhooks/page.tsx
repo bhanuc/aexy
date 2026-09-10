@@ -31,10 +31,11 @@ import { useTranslations } from "next-intl";
 import { SettingsPage } from "@/components/settings/SettingsPrimitives";
 
 function StatusBadge({ webhook }: { webhook: BookingWebhook }) {
+  const tc = useTranslations("common");
   if (!webhook.is_active) {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs text-muted-foreground bg-muted">
-        Disabled
+        {tc("disabled")}
       </span>
     );
   }
@@ -49,7 +50,7 @@ function StatusBadge({ webhook }: { webhook: BookingWebhook }) {
   return (
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs text-emerald-400 bg-emerald-400/10">
       <CheckCircle2 className="h-3 w-3" />
-      Active
+      {tc("status.active")}
     </span>
   );
 }
@@ -69,6 +70,8 @@ function WebhookRow({
   onRotateSecret: (id: string) => void;
   workspaceId: string;
 }) {
+  const t = useTranslations("settingsWebhooks");
+  const tc = useTranslations("common");
   const [showMenu, setShowMenu] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
   const [secret, setSecret] = useState<string | null>(null);
@@ -145,7 +148,7 @@ function WebhookRow({
               ) : (
                 <Eye className="h-3 w-3" />
               )}
-              {showSecret ? "Hide" : "Show"} secret
+              {showSecret ? t("hide") : t("show")} secret
             </button>
             {showSecret && secret && (
               <>
@@ -155,7 +158,7 @@ function WebhookRow({
                 <button
                   onClick={handleCopySecret}
                   className="text-xs text-muted-foreground hover:text-foreground"
-                  title="Copy secret"
+                  title={t("copySecret")}
                 >
                   <Copy className="h-3 w-3" />
                 </button>
@@ -165,6 +168,7 @@ function WebhookRow({
         </div>
         <div className="relative flex-shrink-0">
           <button
+            aria-label={`Manage webhook ${webhook.name}`}
             onClick={() => setShowMenu(!showMenu)}
             className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition"
           >
@@ -178,29 +182,29 @@ function WebhookRow({
                   onClick={() => { onTest(webhook.id); setShowMenu(false); }}
                   className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-muted flex items-center gap-2 rounded-t-lg"
                 >
-                  <Play className="h-3.5 w-3.5" /> Test Webhook
+                  <Play className="h-3.5 w-3.5" /> {t("testWebhook")}
                 </button>
                 <button
                   onClick={() => { onToggle(webhook.id, !webhook.is_active); setShowMenu(false); }}
                   className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-muted flex items-center gap-2"
                 >
                   {webhook.is_active ? (
-                    <><ToggleLeft className="h-3.5 w-3.5" /> Disable</>
+                    <><ToggleLeft className="h-3.5 w-3.5" /> {tc("disable")}</>
                   ) : (
-                    <><ToggleRight className="h-3.5 w-3.5" /> Enable</>
+                    <><ToggleRight className="h-3.5 w-3.5" /> {tc("enable")}</>
                   )}
                 </button>
                 <button
                   onClick={() => { onRotateSecret(webhook.id); setShowMenu(false); }}
                   className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-muted flex items-center gap-2"
                 >
-                  <RefreshCw className="h-3.5 w-3.5" /> Rotate Secret
+                  <RefreshCw className="h-3.5 w-3.5" /> {t("rotateSecret")}
                 </button>
                 <button
                   onClick={() => { onDelete(webhook.id); setShowMenu(false); }}
                   className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-muted flex items-center gap-2 rounded-b-lg"
                 >
-                  <Trash2 className="h-3.5 w-3.5" /> Delete
+                  <Trash2 className="h-3.5 w-3.5" /> {tc("delete")}
                 </button>
               </div>
             </>
@@ -222,6 +226,8 @@ function CreateWebhookForm({
   onCancel: () => void;
   isSubmitting: boolean;
 }) {
+  const t = useTranslations("settingsWebhooks");
+  const tc = useTranslations("common");
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
@@ -245,12 +251,12 @@ function CreateWebhookForm({
   return (
     <form onSubmit={handleSubmit} className="p-4 bg-accent/30 rounded-lg space-y-4">
       <div>
-        <label className="block text-sm font-medium text-foreground mb-1">Name</label>
+        <label className="block text-sm font-medium text-foreground mb-1">{t("name")}</label>
         <input
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="My Webhook"
+          placeholder={t("namePlaceholder")}
           className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground text-sm placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
         />
       </div>
@@ -270,7 +276,7 @@ function CreateWebhookForm({
       <div>
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-1.5">
-            <label className="block text-sm font-medium text-foreground">Events</label>
+            <label className="block text-sm font-medium text-foreground">{t("events")}</label>
             <HelpTooltip content="Select which events trigger this webhook. Each event sends a JSON payload with relevant data" />
           </div>
           <button
@@ -278,7 +284,7 @@ function CreateWebhookForm({
             onClick={selectAll}
             className="text-xs text-blue-400 hover:text-blue-300"
           >
-            {selectedEvents.length === availableEvents.length ? "Deselect all" : "Select all"}
+            {selectedEvents.length === availableEvents.length ? t("deselectAll") : t("selectAll")}
           </button>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -327,7 +333,7 @@ function CreateWebhookForm({
           onClick={onCancel}
           className="px-4 py-2 bg-muted text-foreground rounded-lg text-sm hover:bg-accent transition"
         >
-          Cancel
+          {tc("cancel")}
         </button>
       </div>
     </form>
@@ -450,6 +456,7 @@ export default function WebhooksSettingsPage() {
           {testResult.message}
           <button
             onClick={() => setTestResult(null)}
+            aria-label={t("dismissTest")}
             className="ml-auto text-muted-foreground hover:text-foreground"
           >
             <X className="h-3.5 w-3.5" />
@@ -494,8 +501,8 @@ export default function WebhooksSettingsPage() {
         ) : webhooks.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
             <Webhook className="h-10 w-10 mb-3" />
-            <p className="text-sm font-medium">No webhooks configured</p>
-            <p className="text-xs mt-1">Add a webhook to receive event notifications</p>
+            <p className="text-sm font-medium">{t("noWebhooks")}</p>
+            <p className="text-xs mt-1">{t("noWebhooksHint")}</p>
           </div>
         ) : (
           <div>
@@ -522,7 +529,7 @@ export default function WebhooksSettingsPage() {
       {/* Documentation section */}
       <div className="bg-card rounded-xl border border-border p-5">
         <div className="flex items-center gap-1.5 mb-3">
-          <h3 className="text-sm font-semibold text-foreground">Webhook Signature Verification</h3>
+          <h3 className="text-sm font-semibold text-foreground">{t("signatureHeading")}</h3>
           <HelpTooltip content="Used to sign webhook payloads with HMAC-SHA256. Verify signatures to ensure requests are authentic" />
         </div>
         <p className="text-xs text-muted-foreground mb-3">

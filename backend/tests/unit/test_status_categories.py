@@ -444,3 +444,79 @@ async def test_delete_workspace_category_counts_inheriting_projects(
     with pytest.raises(TaskValidationError) as exc:
         await service.delete_category(ws_qa.id)
     assert exc.value.code == "category_in_use"
+
+
+@pytest.mark.asyncio
+async def test_slugify_preserves_marks_across_scripts() -> None:
+    """A name in a mark-carrying script must round-trip, not be mangled.
+
+    ``[^\\w\\s-]`` dropped combining marks, because Python's ``\\w`` covers no
+    mark category — so "समीक्षा में" was silently written as "समकष_म", every
+    vowel sign gone. Filtering on Mn alone is not enough either: Devanagari's
+    vowel signs are Mc, so that still lost "ी" and "ा".
+    """
+    from aexy.services.task_config_service import slugify
+
+    assert slugify("In Review") == "in_review"
+    # Devanagari: consonants and both kinds of mark survive.
+    assert slugify("समीक्षा में") == "समीक्षा_में"
+    # Other mark-carrying scripts, kept by category rather than by range.
+    assert slugify("ทดสอบ") == "ทดสอบ"
+    assert slugify("مراجعة") == "مراجعة"
+    # CJK was never broken — those are word characters.
+    assert slugify("日本語") == "日本語"
+    # ASCII behaviour is untouched.
+    assert slugify("  Hello  World  ") == "hello_world"
+    assert slugify("a-b c") == "a_b_c"
+    assert slugify("Revisión") == "revisión"
+    # Nothing to build a slug from.
+    assert slugify("🎉") == ""
+
+
+@pytest.mark.asyncio
+async def test_create_status_falls_back_when_the_name_yields_no_slug(
+    db_session: AsyncSession,
+) -> None:
+    """An emoji-only name has no slug in it, so one is generated.
+
+    Writing "" would give the row a slug that matches nothing and collides
+    with the next such row. The display name is what anyone sees, so a generic
+    stem costs nothing.
+    """
+    ws = await _make_workspace(db_session, "ws-slug-fallback")
+    service = TaskConfigService(db_session)
+    await service.seed_default_statuses(ws.id)
+    await db_session.commit()
+
+    first = await service.create_status(workspace_id=ws.id, name="🎉", category="todo")
+    second = await service.create_status(workspace_id=ws.id, name="🚀", category="todo")
+    await db_session.commit()
+
+    assert first.slug == "status"
+    # The dedup loop numbers the second rather than colliding.
+    assert second.slug == "status_1"
+    # The names the operator chose are kept exactly.
+    assert first.name == "🎉"
+    assert second.name == "🚀"
+
+
+@pytest.mark.asyncio
+async def test_create_status_keeps_a_non_latin_name_and_slug(
+    db_session: AsyncSession,
+) -> None:
+    """The case that used to be corrupted, end to end."""
+    ws = await _make_workspace(db_session, "ws-slug-devanagari")
+    service = TaskConfigService(db_session)
+    await service.seed_default_statuses(ws.id)
+    await db_session.commit()
+
+    status = await service.create_status(
+        workspace_id=ws.id, name="समीक्षा में", category="in_review"
+    )
+    await db_session.commit()
+
+    assert status.name == "समीक्षा में"
+    assert status.slug == "समीक्षा_में"
+    # And it resolves back by slug, which a mangled one would not.
+    found = await service.get_status_by_slug(ws.id, "समीक्षा_में")
+    assert found is not None and found.id == status.id

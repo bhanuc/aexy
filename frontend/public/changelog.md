@@ -5,6 +5,134 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.0] - 2026-09-11
+
+Access is decided in one place and shown in one order. The sidebar presets are
+gone — what you can open is what you can see — the workspace app switch moved
+next to the department and member settings it overrules, and departments get
+default access profiles of their own. The settings tree is translated (972
+strings), its dialogs are real dialogs, and its icon-only buttons have names.
+
+### Removed: the preset sidebar roles
+
+A member's navigation used to be filtered twice: once by app access, and again
+by a "sidebar view" — developer, sales, support, hr, manager, product, admin —
+derived from their department or picked by hand. Two gates answering one
+question, and they disagreed. Someone could hold access to an app and still not
+find it, because their view filtered the entry out; the page was reachable, only
+the door was missing. That is how an alert queue took 430 alerts into three
+tickets over two months with nobody looking at it.
+
+Access now decides the sidebar on its own. The 22 `personas` declarations are
+out of the navigation config, the view picker is gone from Appearance, and
+`Department.default_persona`, `dashboard_preferences.sidebar_persona` and the
+API's `suggested_persona` no longer carry a value anywhere. The two columns
+remain in the database, unread, to be dropped in a follow-up.
+
+Nothing about **dashboard widget presets** changed. They share some of the same
+words and are a different feature — which is part of how the two got conflated
+in the first place.
+
+If you relied on a persona to keep a section out of somebody's way, the
+replacement is a department access profile, below.
+
+### Added: default access profiles per department
+
+A department can now carry a named bundle of apps — Engineering, People,
+Business, Full access — or a hand-picked set for the case a bundle cannot
+express ("Business, but not the Inbox"). Everybody in the department resolves to
+it, including people added next month, which is the reason to prefer it over
+per-person overrides. Managed on **Settings → Access Control → Departments**,
+which also says how many people in each department have pinned themselves off
+their department's profile, since editing it does not reach them.
+
+A department with no profile is called out rather than left blank: its members
+are still being decided by their legacy workspace role.
+
+### Changed: the workspace app switch moved into Access Control
+
+It was on **Settings → Organization**, three layers away from the settings it
+overrules. That is not cosmetic: an app switched off for the workspace cannot be
+granted back by any department profile or personal override, so an admin could
+grant a department an app, watch nothing happen for anyone in it, and have no
+reason to look at another page for the cause.
+
+It is now the **Apps** tab of **Settings → Access Control**, and the tabs read
+in the order access actually resolves — Apps, Departments, Access Matrix,
+Requests. The page still opens on the matrix, so existing bookmarks land where
+they always did. Organization keeps a link to the new location. Still
+owner-only: an admin who can edit departments cannot switch an app off for the
+whole workspace.
+
+### Fixed: developers could raise a ticket and not read the queue it landed in
+
+`can_view_tickets` defaulted to admins, support and managers; `can_create_tickets`
+included developers. The asymmetry was accidental and its effect was five hidden
+dashboard widgets — ticket stats, SLA overview, recent tickets, tickets by
+priority, ticket trends — for the role the tickets app is filed under.
+
+Existing workspaces are covered by
+`scripts/migrate_developer_can_view_tickets.sql`, which rewrites only role rows
+that still match the old template exactly. A permission an admin removed
+deliberately is not handed back by a deploy; "reset to template" is there for
+anyone who wants the new default.
+
+### Fixed: Drive and Reports were on for workspaces but in no bundle
+
+Both were switchable at the workspace level and absent from all four access
+bundles, so no department resolved to either one. Turning an app on only makes
+it grantable — a use case that enables an app has to seed a department whose
+profile grants it, which is now checked by a test rather than trusted.
+
+### Fixed: one bad response could blank a whole settings page
+
+The team review card read `data.snapshots.find(...)` behind only a null check,
+so any truthy response without that array threw during render — and because the
+card sits inside a page-level boundary, the entire page became "Settings
+encountered an error" over one card's data.
+
+### Added: the settings tree in Hindi
+
+972 strings across 30-odd settings areas: organization, access control, org
+roles, projects and project statuses, permissions, task configuration,
+integrations, CRM integrations, email marketing, email delivery, billing, SSO,
+ticket forms, alerting, escalation, insights, webhooks, notifications, admin
+invoices, repositories, plan overrides, workflow secrets and access templates.
+Technical terms stay in English, as elsewhere.
+
+### Fixed: settings dialogs, and buttons with no name
+
+Seventeen hand-rolled modals across settings were `<div>`s with a dark
+backdrop. They had no dialog role, did not trap focus, did not close on Escape
+and did not stop the page behind them scrolling. Settings had never adopted
+`components/ui/dialog`, the Radix wrapper 30 other files use — two files in the
+whole tree did. All seventeen are on it now, keeping their own layout, and the
+one that animates composes the primitive rather than replacing it.
+
+Twenty-seven icon-only buttons — row menus, deletes, removes, drag handles,
+add-to-list, a copy-URL — announced as just "button" to a screen reader. They
+have accessible names. Both are held by a test that walks the settings tree, and
+that test had to be rewritten before it was worth anything: its first version
+used a regex that could not cross the `>` inside `onClick={() => …}`, so it
+skipped almost every button in the codebase and reported 10 offenders where
+there were 27.
+
+### Fixed: four settings pages with no way out, and two headers
+
+Access logs, Gmail exclusions, access templates and the identity admin page had
+no breadcrumb and no sibling navigation — arriving at one, the only way back was
+the browser button. They share a header with their area now, as do the five
+project settings tabs and the nine Service Desk settings pages, and the project
+row menu offers every destination it has rather than three of them.
+
+### Fixed: a category label in Hindi produced an empty slug
+
+The frontend and backend `slugify` disagreed, and both dropped Devanagari vowel
+signs: filtering on the `Mn` Unicode category alone is not enough, because those
+marks are `Mc`. A label of only marks and spaces yielded an empty slug, which
+the API accepted. The two implementations now agree, marks survive, and a label
+that still yields nothing is refused with a message rather than saved.
+
 ## [0.37.6] - 2026-09-10
 
 "Embed Module Data" can see module data, and edits made from a table view are

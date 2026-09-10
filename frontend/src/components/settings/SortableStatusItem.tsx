@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Edit2, GripVertical, MoreVertical, Trash2 } from "lucide-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -31,7 +32,7 @@ export interface SortableStatusItemProps {
   isAdmin: boolean;
   onEdit: (status: TaskStatusConfig) => void;
   onDelete: (statusId: string) => void;
-  /** When true the row renders with a "Workspace default" chip and no
+  /** When true the row renders with a "{t("workspaceDefault")}" chip and no
       drag/edit/delete affordances. Used in per-project mode before the
       admin has clicked "Customize for this project". */
   readOnly?: boolean;
@@ -44,6 +45,8 @@ export function SortableStatusItem({
   onDelete,
   readOnly = false,
 }: SortableStatusItemProps) {
+  const t = useTranslations("taskStatusRow");
+  const tc = useTranslations("common");
   const interactive = isAdmin && !readOnly;
   const [showMenu, setShowMenu] = useState(false);
   const {
@@ -73,6 +76,7 @@ export function SortableStatusItem({
         <button
           {...attributes}
           {...listeners}
+          aria-label={`Reorder ${status.name}`}
           className="p-1 text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing"
         >
           <GripVertical className="h-4 w-4" />
@@ -94,12 +98,12 @@ export function SortableStatusItem({
           </span>
           {status.is_default && (
             <span className="px-2 py-0.5 rounded text-xs bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400">
-              Default
+              {t("default")}
             </span>
           )}
           {readOnly && (
             <span className="px-2 py-0.5 rounded text-xs bg-muted text-muted-foreground border border-border">
-              Workspace default
+              {t("workspaceDefault")}
             </span>
           )}
         </div>
@@ -108,6 +112,7 @@ export function SortableStatusItem({
       {interactive && (
         <div className="relative">
           <button
+            aria-label={`Manage status ${status.name}`}
             onClick={() => setShowMenu(!showMenu)}
             className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition"
           >
@@ -125,7 +130,7 @@ export function SortableStatusItem({
                   className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-accent flex items-center gap-2"
                 >
                   <Edit2 className="h-4 w-4" />
-                  Edit
+                  {tc("edit")}
                 </button>
                 <button
                   onClick={() => {
@@ -135,7 +140,7 @@ export function SortableStatusItem({
                   className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-accent flex items-center gap-2"
                 >
                   <Trash2 className="h-4 w-4" />
-                  Delete
+                  {tc("delete")}
                 </button>
               </div>
             </>

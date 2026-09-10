@@ -109,7 +109,6 @@ const MY_WORK_PREFERENCES = {
   checklist_dismissed: true,
   sidebar_page_visits: {},
   sidebar_pinned_items: [],
-  sidebar_persona: null,
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",
 };

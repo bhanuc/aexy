@@ -2,6 +2,24 @@
   "settingsTicketForms": {
     "title": "टिकट फ़ॉर्म",
     "description": "सार्वजनिक फ़ॉर्म जो टिकट सबमिट होने पर संरचित जानकारी एकत्र करते हैं।",
-    "create": "फ़ॉर्म बनाएँ"
+    "create": "फ़ॉर्म बनाएँ",
+    "copyPublicUrl": "सार्वजनिक URL कॉपी करें",
+    "openForm": "फ़ॉर्म खोलें",
+    "duplicate": "डुप्लिकेट",
+    "duplicateForm": "फ़ॉर्म डुप्लिकेट करें",
+    "newFormName": "नए फ़ॉर्म का नाम",
+    "createTitle": "टिकट फ़ॉर्म बनाएँ",
+    "fromTemplate": "टेम्पलेट से",
+    "blankForm": "खाली फ़ॉर्म",
+    "selectTemplate": "टेम्पलेट चुनें",
+    "formName": "फ़ॉर्म का नाम",
+    "creating": "बनाया जा रहा है…",
+    "createForm": "फ़ॉर्म बनाएँ",
+    "previewForm": "फ़ॉर्म का पूर्वावलोकन",
+    "editForm": "फ़ॉर्म संपादित करें",
+    "noFormsYet": "अभी कोई टिकट फ़ॉर्म नहीं",
+    "namePlaceholder": "फ़ॉर्म का नाम डालें…",
+    "templateNameHint": "टेम्पलेट का नाम उपयोग करने के लिए खाली छोड़ें",
+    "emptyDescription": "टिकट सबमिट होने पर संरचित जानकारी इकट्ठा करने के लिए कस्टम फ़ॉर्म बनाएँ।"
   }
 }

@@ -103,19 +103,44 @@ PERMISSIONS: dict[str, dict] = {
         "default_for": ["admin", "manager"],
     },
     # Tickets
+    #
+    # `can_view_tickets` is NOT the read gate on the ticket API, and adding one
+    # would be a mistake — see `tickets_router` in `api/__init__.py`. It decides
+    # which dashboard widgets a person is offered (WIDGET_PERMISSIONS, below),
+    # and that is all it does. Reaching the app itself is `require_app_access`.
+    #
+    # So the list to keep it equal to is not `can_manage_tickets` — it is who
+    # the *app access* defaults let into the app at all. Offering somebody the
+    # tickets app and then hiding every ticket widget from their dashboard is
+    # the accident this pair keeps drifting into.
+    # `test_ticket_permission_defaults.py` compares the two and names the roles
+    # where they deliberately differ.
     "can_view_tickets": {
         "category": PermissionCategory.TICKETS,
         "description": "View support tickets",
-        "default_for": ["admin", "support", "manager"],
+        # Developers included, matching `can_create_tickets`. The tickets app is
+        # filed under Engineering and its Alerts view is an on-call queue —
+        # letting a developer raise a ticket and then not read the queue it
+        # lands in was an accident of these two lists being written apart.
+        "default_for": ["admin", "support", "manager", "developer"],
     },
     "can_create_tickets": {
         "category": PermissionCategory.TICKETS,
         "description": "Create new tickets",
+        # Equal to `can_view_tickets` on purpose: creating a ticket you then
+        # cannot find is not a coherent grant. Note the ticket API has no
+        # create route — tickets arrive through forms and alert intake — so
+        # nothing enforces this one either.
         "default_for": ["admin", "support", "manager", "developer"],
     },
     "can_manage_tickets": {
         "category": PermissionCategory.TICKETS,
         "description": "Edit, assign, and resolve tickets",
+        # Read by the escalation and ticket-form routers, which gate their
+        # writes on it. The ticket API deliberately does not: its writes include
+        # commenting on a ticket, and a developer must be able to answer one
+        # they raised. Those writes are gated by role plus Service Desk row
+        # scoping instead — again, see `api/__init__.py`.
         "default_for": ["admin", "support"],
     },
     "can_delete_tickets": {

@@ -40,6 +40,7 @@ const VALID_NAME = /^[A-Za-z0-9_-]{1,120}$/;
 
 export default function WorkflowSecretsPage() {
   const t = useTranslations("settingsWorkflowSecrets");
+  const tc = useTranslations("common");
   const { currentWorkspaceId } = useWorkspace();
   const {
     secrets,
@@ -157,7 +158,7 @@ export default function WorkflowSecretsPage() {
           <div className="mx-auto h-12 w-12 rounded-full bg-accent flex items-center justify-center">
             <ShieldAlert className="h-6 w-6 text-muted-foreground" />
           </div>
-          <p className="text-sm font-medium">Admins only</p>
+          <p className="text-sm font-medium">{t("adminsOnly")}</p>
           <p className="text-xs text-muted-foreground max-w-sm mx-auto">
             Managing workspace secrets needs an admin role. Steps you build can
             still reference a secret an admin has already added.
@@ -175,27 +176,27 @@ export default function WorkflowSecretsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs text-muted-foreground mb-1">
-                    Name
+                    {t("name")}
                   </label>
                   <input
                     type="text"
                     value={name}
                     disabled={!!rotating}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="STRIPE_API_KEY"
+                    placeholder={t("namePlaceholder")}
                     className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-60"
                   />
                 </div>
                 <div>
                   <label className="block text-xs text-muted-foreground mb-1">
-                    Value
+                    {t("value")}
                   </label>
                   <input
                     type="password"
                     value={value}
                     autoComplete="off"
                     onChange={(e) => setValue(e.target.value)}
-                    placeholder="Paste the credential"
+                    placeholder={t("valuePlaceholder")}
                     className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                     onKeyDown={(e) => e.key === "Enter" && handleSave()}
                   />
@@ -211,7 +212,7 @@ export default function WorkflowSecretsPage() {
                   type="text"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Stripe live key, used by the billing webhook"
+                  placeholder={t("descriptionPlaceholder")}
                   className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                 />
               </div>
@@ -230,13 +231,13 @@ export default function WorkflowSecretsPage() {
                   className="inline-flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
                 >
                   {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {rotating ? "Replace value" : "Save secret"}
+                  {rotating ? t("replaceValue") : t("saveSecret")}
                 </button>
                 <button
                   onClick={resetForm}
                   className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  Cancel
+                  {tc("cancel")}
                 </button>
               </div>
             </div>
@@ -252,7 +253,7 @@ export default function WorkflowSecretsPage() {
               <div className="mx-auto h-12 w-12 rounded-full bg-accent flex items-center justify-center">
                 <KeyRound className="h-6 w-6 text-muted-foreground" />
               </div>
-              <p className="text-sm font-medium">No secrets yet</p>
+              <p className="text-sm font-medium">{t("noSecrets")}</p>
               <p className="text-xs text-muted-foreground max-w-sm mx-auto">
                 Add one here, then reference it from a webhook header as{" "}
                 <code className="font-mono">{"{{secrets.NAME}}"}</code>. The
@@ -262,9 +263,9 @@ export default function WorkflowSecretsPage() {
           ) : (
             <div className="border border-border rounded-lg divide-y divide-border">
               <div className="grid grid-cols-[1fr_150px_140px_110px] gap-4 px-4 py-2 text-xs text-muted-foreground font-medium">
-                <div>Name</div>
-                <div>Reference</div>
-                <div>Last used</div>
+                <div>{t("name")}</div>
+                <div>{t("colReference")}</div>
+                <div>{t("lastUsed")}</div>
                 <div />
               </div>
 
@@ -300,8 +301,8 @@ export default function WorkflowSecretsPage() {
                           addSuffix: true,
                         })
                       ) : (
-                        <span title="No step has resolved this yet">
-                          Never
+                        <span title={t("neverResolved")}>
+                          {t("never")}
                         </span>
                       )}
                     </div>
@@ -313,19 +314,19 @@ export default function WorkflowSecretsPage() {
                             onClick={() => handleDelete(secret.name)}
                             disabled={isDeleting}
                             className="px-2 py-1 text-xs font-medium text-red-400 hover:bg-red-400/10 rounded transition-colors"
-                            title="Any step still referencing this will fail on its next run"
+                            title={t("deleteWarning")}
                           >
                             {isDeleting ? (
                               <Loader2 className="h-3.5 w-3.5 animate-spin" />
                             ) : (
-                              "Delete"
+                              tc("delete")
                             )}
                           </button>
                           <button
                             onClick={() => setConfirmDelete(null)}
                             className="px-2 py-1 text-xs text-muted-foreground hover:text-foreground rounded transition-colors"
                           >
-                            Cancel
+                            {tc("cancel")}
                           </button>
                         </>
                       ) : (
@@ -333,14 +334,14 @@ export default function WorkflowSecretsPage() {
                           <button
                             onClick={() => startRotate(secret.name)}
                             className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors"
-                            title="Replace the value"
+                            title={t("replaceTitle")}
                           >
                             <RefreshCw className="h-4 w-4" />
                           </button>
                           <button
                             onClick={() => setConfirmDelete(secret.name)}
                             className="p-1.5 text-muted-foreground hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
-                            title="Delete this secret"
+                            title={t("deleteTitle")}
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -356,7 +357,7 @@ export default function WorkflowSecretsPage() {
           {confirmDelete && (
             <p className="flex items-start gap-2 text-xs text-amber-400">
               <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-              Deleting <code className="font-mono">{confirmDelete}</code> will
+              {t("deletingPrefix")} <code className="font-mono">{confirmDelete}</code> will
               not edit any workflow. Steps still referencing it fail on their
               next run, with the missing name in the error.
             </p>

@@ -54,6 +54,74 @@
     "integrations": {
       "title": "Integrations",
       "description": "Connect Google so Gmail and Calendar populate the CRM, and set the rules that turn incoming mail into deals."
-    }
+    },
+    "google": {
+      "title": "Google Integration",
+      "blurb": "Gmail & Calendar sync for CRM",
+      "connected": "Connected",
+      "notConnected": "Not connected",
+      "connectedAccounts": "Connected Google accounts",
+      "showingFor": "Showing settings for",
+      "accountPickerLabel": "Which Google account these sync settings apply to",
+      "connect": "Connect Google",
+      "connectWith": "Connect with Google",
+      "secureTitle": "Your data is secure",
+      "secure1": "We only read email metadata and signatures",
+      "secure2": "Your data stays in your workspace",
+      "secure3": "You can disconnect anytime",
+      "lastSyncError": "Last Sync Error"
+    },
+    "gmail": {
+      "title": "Gmail Sync",
+      "blurb": "Sync emails to populate contacts and track communication",
+      "scheduleTitle": "Auto-Sync Schedule",
+      "scheduleHint": "Automatically sync emails at a regular interval (minimum 5 minutes)"
+    },
+    "calendar": {
+      "title": "Calendar Sync",
+      "blurb": "Sync events to track meetings with contacts",
+      "scheduleHint": "Automatically sync calendar events at a regular interval (minimum 5 minutes)"
+    },
+    "enrichment": {
+      "title": "AI Contact Enrichment",
+      "blurb": "Extract contact details from email signatures using AI",
+      "run": "Run Enrichment"
+    },
+    "deals": {
+      "title": "Auto-Create Deals from Emails",
+      "blurb": "Automatically create deals when new emails are synced",
+      "mode": "Deal Creation Mode",
+      "modeAuto": "Auto",
+      "modeAutoHint": "All emails",
+      "modeAi": "Smart detection",
+      "modeCriteria": "Criteria",
+      "modeCriteriaHint": "Rules-based",
+      "skipPersonal": "Skip personal email domains",
+      "skipPersonalHint": "Gmail, Yahoo, Outlook, etc.",
+      "defaultStage": "Default Deal Stage",
+      "filterCriteria": "Filter Criteria",
+      "subjectKeywords": "Subject Keywords (creates deal if subject contains any)",
+      "fromDomains": "From Domains (creates deal if sender is from domain)",
+      "autoNote": "Auto mode:",
+      "aiNote": "AI mode:",
+      "criteriaNote": "Criteria mode:",
+      "addKeyword": "Add subject keyword",
+      "addDomain": "Add domain",
+      "allBusinessEmails": "All business emails",
+      "modePrefix": "Mode:",
+      "aiOpportunities": "AI-detected opportunities",
+      "criteriaOnly": "Matching criteria only"
+    },
+    "shortcuts": {
+      "inbox": "View Inbox",
+      "inboxHint": "Browse synced emails",
+      "people": "View People",
+      "peopleHint": "See auto-created contacts",
+      "dealsLink": "View Deals",
+      "dealsHint": "See auto-created deals"
+    },
+    "syncNow": "Sync Now",
+    "orCustom": "Or enter custom:",
+    "configure": "Configure"
   }
 }

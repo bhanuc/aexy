@@ -1,6 +1,87 @@
 {
   "settingsOrganization": {
     "title": "संगठन",
-    "description": "आपका वर्कस्पेस, उसके सदस्य और उनकी भूमिकाएँ।"
+    "description": "आपका वर्कस्पेस, उसके सदस्य और उनकी भूमिकाएँ।",
+    "community": {
+      "title": "सार्वजनिक कम्युनिटी",
+      "description": "चुने गए चैट चैनल को सार्वजनिक, SEO-अनुकूल फ़ोरम के रूप में प्रकाशित करें।"
+    },
+    "member": {
+      "noDepartment": "कोई विभाग नहीं — सौंपें",
+      "changeRole": "भूमिका बदलें",
+      "customRole": "कस्टम भूमिका",
+      "remove": "वर्कस्पेस से हटाएँ",
+      "confirmRemove": "क्या आप वाकई इस सदस्य को वर्कस्पेस से हटाना चाहते हैं?",
+      "markAsLeft": "छोड़ा हुआ चिह्नित करें",
+      "restoreAsActive": "सक्रिय के रूप में पुनर्स्थापित करें",
+      "resending": "फिर भेजा जा रहा है…",
+      "resendInvite": "आमंत्रण फिर भेजें"
+    },
+    "invite": {
+      "title": "टीम सदस्य आमंत्रित करें",
+      "email": "ईमेल पता",
+      "role": "भूमिका",
+      "department": "विभाग",
+      "noDepartmentLater": "कोई विभाग नहीं — बाद में सौंपें",
+      "team": "टीम",
+      "noTeamLater": "कोई टीम नहीं — बाद में जोड़ें",
+      "roleMember": "सदस्य",
+      "roleManager": "मैनेजर",
+      "roleLead": "लीड",
+      "previewHeading": "उन्हें यह दिखेगा",
+      "previewLoading": "पता लगाया जा रहा है…",
+      "previewEmpty": "अभी कुछ नहीं — ऐक्सेस प्रोफ़ाइल वाला विभाग चुनें।",
+      "submitting": "आमंत्रित किया जा रहा है…",
+      "submit": "आमंत्रण भेजें",
+      "noTeamWarning": "टीम के बिना उन्हें स्टैंडअप संकेत नहीं मिलेंगे, उनके ब्लॉकर किसी को एस्केलेट नहीं होंगे, और छुट्टी की मंज़ूरी वर्कस्पेस मैनेजर के पास चली जाएगी।"
+    },
+    "workspace": {
+      "createTitle": "वर्कस्पेस बनाएँ",
+      "name": "वर्कस्पेस का नाम",
+      "namePlaceholder": "My Team",
+      "descriptionOptional": "विवरण (वैकल्पिक)",
+      "descriptionPlaceholder": "यह वर्कस्पेस किस लिए है?",
+      "type": "प्रकार",
+      "internal": "आंतरिक",
+      "internalHint": "सदस्य प्रबंधन मैन्युअल",
+      "githubLinked": "GitHub से जुड़ा",
+      "githubHint": "GitHub org से सिंक करें",
+      "githubOrg": "GitHub संगठन",
+      "selectOrg": "एक संगठन चुनें…",
+      "creating": "बनाया जा रहा है…"
+    },
+    "seats": {
+      "used": "उपयोग में सीटें"
+    },
+    "inviteRow": {
+      "pending": "लंबित",
+      "expired": "समाप्त",
+      "noExpiry": "कोई समाप्ति नहीं",
+      "resend": "आमंत्रण फिर भेजें",
+      "revoke": "आमंत्रण रद्द करें",
+      "confirmRevoke": "क्या आप वाकई यह आमंत्रण रद्द करना चाहते हैं?"
+    },
+    "apps": {
+      "heading": "ऐप सेटिंग्स",
+      "movedToAccess": "Access Control में ले जाया गया — उन डिपार्टमेंट और सदस्य सेटिंग्स के पास, जिन पर यह भारी पड़ता है।"
+    },
+    "page": {
+      "workspaces": "वर्कस्पेस",
+      "newWorkspace": "नया वर्कस्पेस",
+      "github": "GitHub",
+      "noWorkspaces": "अभी कोई वर्कस्पेस नहीं",
+      "noWorkspacesHint": "अपनी टीम प्रबंधित करने के लिए पहला वर्कस्पेस बनाएँ।",
+      "teamMembers": "टीम सदस्य",
+      "showPast": "पूर्व सदस्य दिखाएँ",
+      "inviteMember": "सदस्य आमंत्रित करें",
+      "noMembers": "कोई सदस्य नहीं मिला",
+      "pendingInvitations": "लंबित आमंत्रण",
+      "projects": "प्रोजेक्ट",
+      "manageProjects": "प्रोजेक्ट प्रबंधित करें",
+      "repositories": "रिपॉज़िटरी",
+      "manageRepos": "रिपो प्रबंधित करें",
+      "billing": "बिलिंग",
+      "comingSoon": "जल्द आ रहा है"
+    }
   }
 }

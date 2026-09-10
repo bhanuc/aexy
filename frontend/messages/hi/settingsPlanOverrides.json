@@ -5,6 +5,32 @@
     "denied": {
       "title": "प्लेटफ़ॉर्म एडमिन एक्सेस आवश्यक",
       "body": "इसे केवल Aexy प्लेटफ़ॉर्म स्टाफ़ प्रबंधित कर सकता है। वर्कस्पेस owner और admin को पहुँच नहीं है।"
-    }
+    },
+    "createTitle": "ओवरराइड बनाएँ या अपडेट करें",
+    "workspaceId": "वर्कस्पेस ID",
+    "billingModel": "बिलिंग मॉडल",
+    "modelDefault": "डिफ़ॉल्ट (कोई ओवरराइड नहीं)",
+    "modelFree": "मुफ़्त",
+    "modelPerSeat": "प्रति सीट",
+    "modelFlatUsage": "फ़्लैट + उपयोग",
+    "modelPostpaid": "पोस्टपेड",
+    "perSeatPrice": "प्रति सीट मूल्य (सेंट)",
+    "baseFee": "आधार शुल्क (सेंट)",
+    "maxRepos": "अधिकतम रिपो",
+    "maxStorage": "अधिकतम स्टोरेज (GB)",
+    "llmPerDay": "LLM अनुरोध/दिन",
+    "discount": "छूट %",
+    "notes": "टिप्पणियाँ",
+    "previewButton": "प्रभावी प्लान पूर्वावलोकन",
+    "previewHeading": "प्रभावी प्लान पूर्वावलोकन",
+    "activeOverrides": "सक्रिय ओवरराइड",
+    "loading": "ओवरराइड लोड हो रहे हैं…",
+    "none": "अभी कोई कस्टम प्लान ओवरराइड कॉन्फ़िगर नहीं।",
+    "workspacePlaceholder": "वर्कस्पेस UUID डालें",
+    "notesPlaceholder": "इस ओवरराइड के बारे में आंतरिक टिप्पणियाँ",
+    "previewTitle": "प्रभावी प्लान का पूर्वावलोकन",
+    "removeTitle": "ओवरराइड हटाएँ",
+    "saved": "प्लान ओवरराइड सहेजा गया",
+    "removed": "ओवरराइड हटाया गया"
   }
 }

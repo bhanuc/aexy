@@ -1,8 +1,28 @@
 {
   "settingsAccessTemplates": {
     "title": "Access templates",
-    "description": "Reusable bundles of app and module access you can apply to members.",
+    "description": "Description",
     "breadcrumbParent": "Access Control",
-    "create": "Create template"
+    "create": "Create template",
+    "systemTemplates": "System Templates",
+    "system": "System",
+    "customTemplates": "Custom Templates",
+    "noCustom": "No custom templates yet",
+    "noCustomHint": "Create a template to quickly assign app access to members",
+    "configureApps": "Configure which apps are included in this template.",
+    "name": "Name",
+    "color": "Color",
+    "includedApps": "Included Apps",
+    "deleteTemplate": "Delete Template",
+    "descriptionPlaceholder": "Optional description",
+    "editTitle": "Edit Template",
+    "saveChanges": "Save Changes",
+    "created": "Template created",
+    "createFailed": "Failed to create template",
+    "updated": "Template updated",
+    "updateFailed": "Failed to update template",
+    "deleted": "Template deleted",
+    "deleteFailed": "Failed to delete template",
+    "createTemplate": "Create Template"
   }
 }

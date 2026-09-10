@@ -29,6 +29,12 @@ import { useTaskStatuses, useStatusCategories, useCustomFields } from "@/hooks/u
 import { useProjects } from "@/hooks/useProjects";
 import { useAuth } from "@/hooks/useAuth";
 import { CategoryModal } from "@/components/settings/CategoryModal";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { DeleteStatusModal } from "@/components/settings/DeleteStatusModal";
 import { SortableCategoryItem } from "@/components/settings/SortableCategoryItem";
 import { SortableStatusItem } from "@/components/settings/SortableStatusItem";
@@ -108,6 +114,8 @@ interface SortableFieldItemProps {
 }
 
 function SortableFieldItem({ field, isAdmin, onEdit, onDelete }: SortableFieldItemProps) {
+  const t = useTranslations("settingsTaskConfig");
+  const tc = useTranslations("common");
   const [showMenu, setShowMenu] = useState(false);
   const {
     attributes,
@@ -134,6 +142,7 @@ function SortableFieldItem({ field, isAdmin, onEdit, onDelete }: SortableFieldIt
         <button
           {...attributes}
           {...listeners}
+          aria-label={t("fields.reorder", { name: field.name })}
           className="p-1 text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing"
         >
           <GripVertical className="h-4 w-4" />
@@ -150,7 +159,7 @@ function SortableFieldItem({ field, isAdmin, onEdit, onDelete }: SortableFieldIt
           </span>
           {field.is_required && (
             <span className="px-2 py-0.5 rounded text-xs bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400">
-              Required
+              {t("fields.required")}
             </span>
           )}
         </div>
@@ -159,6 +168,7 @@ function SortableFieldItem({ field, isAdmin, onEdit, onDelete }: SortableFieldIt
       {isAdmin && (
         <div className="relative">
           <button
+            aria-label={t("fields.manage", { name: field.name })}
             onClick={() => setShowMenu(!showMenu)}
             className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition"
           >
@@ -176,7 +186,7 @@ function SortableFieldItem({ field, isAdmin, onEdit, onDelete }: SortableFieldIt
                   className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-accent flex items-center gap-2"
                 >
                   <Edit2 className="h-4 w-4" />
-                  Edit
+                  {tc("edit")}
                 </button>
                 <button
                   onClick={() => {
@@ -186,7 +196,7 @@ function SortableFieldItem({ field, isAdmin, onEdit, onDelete }: SortableFieldIt
                   className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-accent flex items-center gap-2"
                 >
                   <Trash2 className="h-4 w-4" />
-                  Delete
+                  {tc("delete")}
                 </button>
               </div>
             </>
@@ -212,6 +222,8 @@ interface FieldModalProps {
 }
 
 function FieldModal({ field, onClose, onSave, isSaving }: FieldModalProps) {
+  const t = useTranslations("settingsTaskConfig");
+  const tc = useTranslations("common");
   const [name, setName] = useState(field?.name || "");
   const [fieldType, setFieldType] = useState<CustomFieldType>(field?.field_type || "text");
   const [isRequired, setIsRequired] = useState(field?.is_required || false);
@@ -257,32 +269,43 @@ function FieldModal({ field, onClose, onSave, isSaving }: FieldModalProps) {
       });
       onClose();
     } catch (err) {
-      setError(getApiErrorMessage(err, "Failed to save field"));
+      setError(getApiErrorMessage(err, t("fieldModal.saveFailed")));
     }
   };
 
+  // Mounted only while open, so `open` is constant and closing is delegated to
+  // the caller — Escape and a backdrop click take the same path as Cancel.
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-card rounded-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
-        <h3 className="text-xl font-semibold text-foreground mb-4">
-          {field ? "Edit Field" : "Create Field"}
-        </h3>
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent
+        className="max-w-md max-h-[90vh] overflow-y-auto"
+        aria-describedby={undefined}
+      >
+        <DialogHeader>
+          <DialogTitle className="text-xl">
+            {field ? t("fieldModal.editTitle") : t("fieldModal.createTitle")}
+          </DialogTitle>
+        </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm text-muted-foreground mb-1">Name</label>
+              <label className="block text-sm text-muted-foreground mb-1">
+                {t("fieldModal.name")}
+              </label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Sprint Goal"
+                placeholder={t("fieldModal.namePlaceholder")}
                 className="w-full px-4 py-2 bg-muted border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary-500"
               />
             </div>
 
             {!field && (
               <div>
-                <label className="block text-sm text-muted-foreground mb-1">Field Type</label>
+                <label className="block text-sm text-muted-foreground mb-1">
+                  {t("fieldModal.type")}
+                </label>
                 <div className="grid grid-cols-2 gap-2">
                   {FIELD_TYPES.map((ft) => (
                     <button
@@ -308,7 +331,9 @@ function FieldModal({ field, onClose, onSave, isSaving }: FieldModalProps) {
 
             {needsOptions && (
               <div>
-                <label className="block text-sm text-muted-foreground mb-1">Options</label>
+                <label className="block text-sm text-muted-foreground mb-1">
+                  {t("fieldModal.options")}
+                </label>
                 <div className="space-y-2">
                   {options.map((opt, index) => (
                     <div key={index} className="flex items-center gap-2">
@@ -325,6 +350,7 @@ function FieldModal({ field, onClose, onSave, isSaving }: FieldModalProps) {
                       <button
                         type="button"
                         onClick={() => handleRemoveOption(index)}
+                        aria-label={t("fieldModal.removeOption")}
                         className="p-1.5 text-muted-foreground hover:text-red-400 transition"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -336,7 +362,7 @@ function FieldModal({ field, onClose, onSave, isSaving }: FieldModalProps) {
                       type="text"
                       value={newOptionLabel}
                       onChange={(e) => setNewOptionLabel(e.target.value)}
-                      placeholder="Add option..."
+                      placeholder={t("fieldModal.addOptionPlaceholder")}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           e.preventDefault();
@@ -348,6 +374,7 @@ function FieldModal({ field, onClose, onSave, isSaving }: FieldModalProps) {
                     <button
                       type="button"
                       onClick={handleAddOption}
+                      aria-label={t("fieldModal.addOption")}
                       className="p-1.5 text-muted-foreground hover:text-primary-400 transition"
                     >
                       <Plus className="h-4 w-4" />
@@ -359,12 +386,14 @@ function FieldModal({ field, onClose, onSave, isSaving }: FieldModalProps) {
 
             {!needsOptions && (
               <div>
-                <label className="block text-sm text-muted-foreground mb-1">Default Value (optional)</label>
+                <label className="block text-sm text-muted-foreground mb-1">
+                  {t("fieldModal.defaultValue")}
+                </label>
                 <input
                   type={fieldType === "number" ? "number" : fieldType === "date" ? "date" : "text"}
                   value={defaultValue}
                   onChange={(e) => setDefaultValue(e.target.value)}
-                  placeholder="Enter default value..."
+                  placeholder={t("fieldModal.defaultValuePlaceholder")}
                   className="w-full px-4 py-2 bg-muted border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary-500"
                 />
               </div>
@@ -377,7 +406,7 @@ function FieldModal({ field, onClose, onSave, isSaving }: FieldModalProps) {
                 onChange={(e) => setIsRequired(e.target.checked)}
                 className="w-4 h-4 rounded border-border bg-muted text-primary-500 focus:ring-primary-500"
               />
-              <span className="text-foreground text-sm">Required field</span>
+              <span className="text-foreground text-sm">{t("fieldModal.requiredField")}</span>
             </label>
 
             {error && (
@@ -394,7 +423,7 @@ function FieldModal({ field, onClose, onSave, isSaving }: FieldModalProps) {
               onClick={onClose}
               className="flex-1 px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg transition"
             >
-              Cancel
+              {tc("cancel")}
             </button>
             <button
               type="submit"
@@ -404,24 +433,25 @@ function FieldModal({ field, onClose, onSave, isSaving }: FieldModalProps) {
               {isSaving ? (
                 <>
                   <RefreshCw className="h-4 w-4 animate-spin" />
-                  Saving...
+                  {t("fieldModal.saving")}
                 </>
               ) : (
                 <>
                   <Check className="h-4 w-4" />
-                  Save
+                  {tc("save")}
                 </>
               )}
             </button>
           </div>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 export default function TaskConfigPage() {
   const t = useTranslations("settingsTaskConfig");
+  const tc = useTranslations("common");
   const { user } = useAuth();
   const {
     currentWorkspace,
@@ -548,7 +578,7 @@ export default function TaskConfigPage() {
         statusId: deletingStatus.id,
         migrateTo: migrateTo ?? undefined,
       });
-      toast.success("Status deleted");
+      toast.success(t("statuses.deleted"));
       setDeletingStatus(null);
     } catch (error) {
       console.error("Failed to delete status:", error);
@@ -558,13 +588,13 @@ export default function TaskConfigPage() {
   };
 
   const handleDeleteField = async (fieldId: string) => {
-    if (confirm("Are you sure you want to delete this field? Field data will be removed from all tasks.")) {
+    if (confirm(t("fields.confirmDelete"))) {
       try {
         await deleteField(fieldId);
-        toast.success("Field deleted");
+        toast.success(t("fields.deleted"));
       } catch (error) {
         console.error("Failed to delete field:", error);
-        toast.error("Failed to delete field");
+        toast.error(t("fields.deleteFailed"));
       }
     }
   };
@@ -584,7 +614,7 @@ export default function TaskConfigPage() {
           semantics: data.semantics,
         },
       });
-      toast.success("Category updated");
+      toast.success(t("categories.updated"));
     } else {
       await createCategory({
         slug: data.slug!,
@@ -592,7 +622,7 @@ export default function TaskConfigPage() {
         color: data.color,
         semantics: data.semantics,
       });
-      toast.success("Category created");
+      toast.success(t("categories.created"));
     }
     setEditingCategory(null);
   };
@@ -601,21 +631,18 @@ export default function TaskConfigPage() {
     // Advisory only — the server runs the authoritative scope-aware check.
     const inUse = statuses.some((s) => s.category === cat.slug);
     if (inUse) {
-      toast.error(
-        `Can't delete "${cat.label}" — statuses still use it. Reassign them first.`,
-      );
+      toast.error(t("categories.inUse", { label: cat.label }));
       return;
     }
-    if (!confirm(`Delete category "${cat.label}"?`)) return;
+    if (!confirm(t("categories.confirmDelete", { label: cat.label }))) return;
     try {
       await deleteCategory(cat.id);
-      toast.success("Category deleted");
+      toast.success(t("categories.deleted"));
     } catch (err) {
-      const msg = getApiErrorMessage(err, "Failed to delete");
+      const msg = getApiErrorMessage(err, tc("error"));
       toast.error(
-        /category_in_use/i.test(msg)
-          ? "This category is still in use by one or more statuses."
-          : msg,
+        // The API detail is a stable code, so the regex is locale-independent.
+        /category_in_use/i.test(msg) ? t("categories.inUseServer") : msg,
       );
     }
   };
@@ -667,15 +694,17 @@ export default function TaskConfigPage() {
         {!hasWorkspaces ? (
           <div className="bg-card rounded-xl p-12 text-center">
             <List className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-xl font-medium text-foreground mb-2">No Workspace</h3>
+            <h3 className="text-xl font-medium text-foreground mb-2">
+              {t("noWorkspace.title")}
+            </h3>
             <p className="text-muted-foreground mb-6">
-              Create a workspace first to configure task settings.
+              {t("noWorkspace.description")}
             </p>
             <Link
               href="/settings/organization"
               className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition font-medium"
             >
-              Go to Organization Settings
+              {t("noWorkspace.cta")}
             </Link>
           </div>
         ) : (
@@ -692,7 +721,7 @@ export default function TaskConfigPage() {
               >
                 <span className="flex items-center gap-2">
                   <Clock className="h-4 w-4" />
-                  Statuses
+                  {t("tabs.statuses")}
                 </span>
               </button>
               <button
@@ -705,7 +734,7 @@ export default function TaskConfigPage() {
               >
                 <span className="flex items-center gap-2">
                   <List className="h-4 w-4" />
-                  Custom Fields
+                  {t("tabs.fields")}
                 </span>
               </button>
             </div>
@@ -715,9 +744,11 @@ export default function TaskConfigPage() {
               <div>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                   <div>
-                    <h2 className="text-lg font-medium text-foreground">Task Statuses</h2>
+                    <h2 className="text-lg font-medium text-foreground">
+                      {t("statuses.heading")}
+                    </h2>
                     <p className="text-muted-foreground text-sm">
-                      Define the workflow statuses for tasks. Drag to reorder.
+                      {t("statuses.subtitle")}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -730,9 +761,9 @@ export default function TaskConfigPage() {
                           setSelectedProjectId(e.target.value || null)
                         }
                         className="px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary-500/40"
-                        aria-label="Status scope"
+                        aria-label={t("scope.label")}
                       >
-                        <option value="">Workspace defaults</option>
+                        <option value="">{t("scope.workspaceDefaults")}</option>
                         {projects.map((p) => (
                           <option key={p.id} value={p.id}>
                             {p.name}
@@ -749,7 +780,7 @@ export default function TaskConfigPage() {
                         className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition text-sm"
                       >
                         <Plus className="h-4 w-4" />
-                        Add Status
+                        {t("statuses.add")}
                       </button>
                     )}
                   </div>
@@ -762,28 +793,26 @@ export default function TaskConfigPage() {
                     <AlertCircle className="h-5 w-5 text-primary-400 mt-0.5" />
                     <div className="flex-1">
                       <h4 className="text-sm font-medium text-foreground">
-                        This project uses the workspace defaults
+                        {t("statuses.forkTitle")}
                       </h4>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        Customizing here will fork the workspace statuses into a
-                        project-scoped copy. Other projects keep using the
-                        workspace defaults.
+                        {t("statuses.forkDescription")}
                       </p>
                     </div>
                     <button
                       onClick={async () => {
                         try {
                           await cloneFromWorkspace();
-                          toast.success("Statuses copied to project");
+                          toast.success(t("statuses.copied"));
                         } catch (err) {
                           console.error(err);
-                          toast.error("Failed to copy statuses");
+                          toast.error(t("statuses.copyFailed"));
                         }
                       }}
                       disabled={isCloning}
                       className="px-3 py-1.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-md text-sm whitespace-nowrap"
                     >
-                      {isCloning ? "Copying…" : "Customize for this project"}
+                      {isCloning ? t("statuses.forkCopying") : t("statuses.forkCta")}
                     </button>
                   </div>
                 )}
@@ -820,9 +849,11 @@ export default function TaskConfigPage() {
                 ) : (
                   <div className="bg-card rounded-xl p-12 text-center">
                     <Clock className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-foreground mb-2">No Statuses</h3>
+                    <h3 className="text-lg font-medium text-foreground mb-2">
+                      {t("statuses.emptyTitle")}
+                    </h3>
                     <p className="text-muted-foreground mb-4">
-                      Create your first status to define your task workflow.
+                      {t("statuses.emptyDescription")}
                     </p>
                     {isAdmin && (
                       <button
@@ -833,7 +864,7 @@ export default function TaskConfigPage() {
                         className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition"
                       >
                         <Plus className="h-4 w-4" />
-                        Add Status
+                        {t("statuses.add")}
                       </button>
                     )}
                   </div>
@@ -854,12 +885,10 @@ export default function TaskConfigPage() {
                         id="status-categories-heading"
                         className="text-lg font-medium text-foreground"
                       >
-                        Status Categories
+                        {t("categories.heading")}
                       </h2>
                       <p className="text-muted-foreground text-sm">
-                        Buckets that statuses belong to. Each carries a
-                        semantics flag (Open / Active / Done / Cancelled) used
-                        for burndown and velocity.
+                        {t("categories.subtitle")}
                       </p>
                     </div>
                     {isAdmin && (
@@ -871,7 +900,7 @@ export default function TaskConfigPage() {
                         className="flex items-center gap-2 px-3 py-1.5 bg-muted hover:bg-accent text-foreground rounded-lg transition text-sm whitespace-nowrap"
                       >
                         <Plus className="h-4 w-4" />
-                        Add Category
+                        {t("categories.add")}
                       </button>
                     )}
                   </div>
@@ -879,22 +908,13 @@ export default function TaskConfigPage() {
                   {/* Same rule as the project status page: rows shown for a
                       project that hasn't forked are the workspace's, so
                       editing them here would change every other project that
-                      inherits them. Switch the picker to Workspace defaults
-                      to edit them deliberately. */}
+                      inherits them. The notice tells the operator to switch
+                      the picker instead. */}
                   {categoriesInherited && (
                     <div className="mb-4 flex items-start gap-3 rounded-lg border border-border bg-muted/40 p-3">
                       <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                       <p className="text-sm text-muted-foreground">
-                        These categories are inherited from the workspace.
-                        Adding one copies the full set into this project first,
-                        so nothing here disappears — after that the project
-                        keeps its own buckets and workspace changes no longer
-                        reach it. To rename or recolor a shared bucket for
-                        every project, switch the scope above to{" "}
-                        <span className="text-foreground">
-                          Workspace defaults
-                        </span>
-                        .
+                        {t("categories.inherited")}
                       </p>
                     </div>
                   )}
@@ -938,9 +958,9 @@ export default function TaskConfigPage() {
               <div>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                   <div>
-                    <h2 className="text-lg font-medium text-foreground">Custom Fields</h2>
+                    <h2 className="text-lg font-medium text-foreground">{t("fields.heading")}</h2>
                     <p className="text-muted-foreground text-sm">
-                      Add custom metadata fields to your tasks. Drag to reorder.
+                      {t("fields.subtitle")}
                     </p>
                   </div>
                   {isAdmin && (
@@ -952,7 +972,7 @@ export default function TaskConfigPage() {
                       className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition text-sm"
                     >
                       <Plus className="h-4 w-4" />
-                      Add Field
+                      {t("fields.add")}
                     </button>
                   )}
                 </div>
@@ -986,9 +1006,11 @@ export default function TaskConfigPage() {
                 ) : (
                   <div className="bg-card rounded-xl p-12 text-center">
                     <List className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-foreground mb-2">No Custom Fields</h3>
+                    <h3 className="text-lg font-medium text-foreground mb-2">
+                      {t("fields.emptyTitle")}
+                    </h3>
                     <p className="text-muted-foreground mb-4">
-                      Create custom fields to add extra metadata to your tasks.
+                      {t("fields.emptyDescription")}
                     </p>
                     {isAdmin && (
                       <button
@@ -999,7 +1021,7 @@ export default function TaskConfigPage() {
                         className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition"
                       >
                         <Plus className="h-4 w-4" />
-                        Add Field
+                        {t("fields.add")}
                       </button>
                     )}
                   </div>
@@ -1007,7 +1029,9 @@ export default function TaskConfigPage() {
 
                 {/* Field Types Legend */}
                 <div className="mt-6 p-4 bg-card/50 rounded-lg">
-                  <h4 className="text-sm font-medium text-foreground mb-2">Available Field Types</h4>
+                  <h4 className="text-sm font-medium text-foreground mb-2">
+                    {t("fields.availableTypes")}
+                  </h4>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
                     {FIELD_TYPES.map((ft) => (
                       <div key={ft.value} className="flex items-center gap-2">

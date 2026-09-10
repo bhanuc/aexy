@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import {
   Package,
   Plus,
@@ -27,7 +26,7 @@ import { useWorkspace } from "@/hooks/useWorkspace";
 import { useAppAccessTemplates } from "@/hooks/useAppAccess";
 import { getAllApps, AppAccessConfig } from "@/config/appDefinitions";
 import { useTranslations } from "next-intl";
-import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import { SettingsGroupPage } from "@/components/settings/SettingsGroupPage";
 
 // Icon mapping for templates
 const TEMPLATE_ICONS: Record<string, React.ReactNode> = {
@@ -48,6 +47,7 @@ interface TemplateFormData {
 
 export default function AccessTemplatesPage() {
   const t = useTranslations("settingsAccessTemplates");
+  const tc = useTranslations("common");
   const { currentWorkspaceId } = useWorkspace();
   const workspaceId = currentWorkspaceId || "";
 
@@ -86,10 +86,10 @@ export default function AccessTemplatesPage() {
       });
       setShowCreateModal(false);
       resetForm();
-      toast.success("Template created");
+      toast.success(t("created"));
     } catch (error) {
       console.error("Failed to create template:", error);
-      toast.error("Failed to create template");
+      toast.error(t("createFailed"));
     }
   };
 
@@ -108,10 +108,10 @@ export default function AccessTemplatesPage() {
       });
       setEditingTemplate(null);
       resetForm();
-      toast.success("Template updated");
+      toast.success(t("updated"));
     } catch (error) {
       console.error("Failed to update template:", error);
-      toast.error("Failed to update template");
+      toast.error(t("updateFailed"));
     }
   };
 
@@ -120,10 +120,10 @@ export default function AccessTemplatesPage() {
     try {
       await deleteTemplate(deletingTemplate);
       setDeletingTemplate(null);
-      toast.success("Template deleted");
+      toast.success(t("deleted"));
     } catch (error) {
       console.error("Failed to delete template:", error);
-      toast.error("Failed to delete template");
+      toast.error(t("deleteFailed"));
     }
   };
 
@@ -169,7 +169,8 @@ export default function AccessTemplatesPage() {
   const isSaving = isCreating || isUpdating;
 
   return (
-    <SettingsPage
+    <SettingsGroupPage
+      group="access"
       title={t("title")}
       description={t("description")}
       width="wide"
@@ -208,10 +209,10 @@ export default function AccessTemplatesPage() {
           </div>
         ) : (
           <div className="space-y-8">
-            {/* System Templates */}
+            {/* {t("systemTemplates")} */}
             <section>
               <h2 className="text-lg font-semibold text-foreground mb-4">
-                System Templates
+                {t("systemTemplates")}
               </h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 {systemTemplates.map((template) => (
@@ -236,7 +237,7 @@ export default function AccessTemplatesPage() {
                             {template.name}
                           </h3>
                           <span className="px-2 py-0.5 text-xs rounded-full bg-muted text-foreground">
-                            System
+                            {t("system")}
                           </span>
                         </div>
                         <p className="text-sm text-muted-foreground mt-1">
@@ -276,17 +277,17 @@ export default function AccessTemplatesPage() {
               </div>
             </section>
 
-            {/* Custom Templates */}
+            {/* {t("customTemplates")} */}
             <section>
               <h2 className="text-lg font-semibold text-foreground mb-4">
-                Custom Templates
+                {t("customTemplates")}
               </h2>
               {customTemplates.length === 0 ? (
                 <div className="text-center py-12 bg-card border border-border border-dashed rounded-lg">
                   <Package className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-muted-foreground">No custom templates yet</p>
+                  <p className="text-muted-foreground">{t("noCustom")}</p>
                   <p className="text-sm text-muted-foreground">
-                    Create a template to quickly assign app access to members
+                    {t("noCustomHint")}
                   </p>
                 </div>
               ) : (
@@ -374,16 +375,16 @@ export default function AccessTemplatesPage() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              {editingTemplate ? "Edit Template" : "Create Template"}
+              {editingTemplate ? t("editTitle") : t("createTemplate")}
             </DialogTitle>
             <DialogDescription>
-              Configure which apps are included in this template.
+              {t("configureApps")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
             <div>
-              <label className="text-sm font-medium text-foreground">Name</label>
+              <label className="text-sm font-medium text-foreground">{t("name")}</label>
               <input
                 type="text"
                 value={formData.name}
@@ -397,7 +398,7 @@ export default function AccessTemplatesPage() {
 
             <div>
               <label className="text-sm font-medium text-foreground">
-                Description
+                {t("description")}
               </label>
               <input
                 type="text"
@@ -409,12 +410,12 @@ export default function AccessTemplatesPage() {
                   }))
                 }
                 className="mt-1 w-full rounded-md border border-border bg-muted px-3 py-2 text-foreground"
-                placeholder="Optional description"
+                placeholder={t("descriptionPlaceholder")}
               />
             </div>
 
             <div>
-              <label className="text-sm font-medium text-foreground">Color</label>
+              <label className="text-sm font-medium text-foreground">{t("color")}</label>
               <div className="mt-1 flex gap-2">
                 {["#2563eb", "#f43f5e", "#06b6d4", "#9333ea", "#10b981", "#f59e0b"].map(
                   (color) => (
@@ -437,7 +438,7 @@ export default function AccessTemplatesPage() {
 
             <div>
               <label className="text-sm font-medium text-foreground">
-                Included Apps
+                {t("includedApps")}
               </label>
               <div className="mt-2 grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
                 {apps.map((app) => {
@@ -473,14 +474,14 @@ export default function AccessTemplatesPage() {
               }}
               disabled={isSaving}
             >
-              Cancel
+              {tc("cancel")}
             </Button>
             <Button
               onClick={editingTemplate ? handleUpdate : handleCreate}
               disabled={isSaving || !formData.name}
             >
               {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {editingTemplate ? "Save Changes" : "Create Template"}
+              {editingTemplate ? t("saveChanges") : t("createTemplate")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -493,7 +494,7 @@ export default function AccessTemplatesPage() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Template</DialogTitle>
+            <DialogTitle>{t("deleteTemplate")}</DialogTitle>
             <DialogDescription>
               Are you sure you want to delete this template? This action cannot
               be undone. Members who have this template applied will keep their
@@ -506,7 +507,7 @@ export default function AccessTemplatesPage() {
               onClick={() => setDeletingTemplate(null)}
               disabled={isDeleting}
             >
-              Cancel
+              {tc("cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -519,6 +520,6 @@ export default function AccessTemplatesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </SettingsPage>
+    </SettingsGroupPage>
   );
 }

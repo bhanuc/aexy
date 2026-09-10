@@ -13,6 +13,8 @@ import { Ban, Loader2, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { useGmailExclusions } from "@/hooks/useGoogleIntegration";
+import { useTranslations } from "next-intl";
+
 import { getApiErrorMessage } from "@/lib/utils";
 
 export function GmailExclusions({
@@ -35,6 +37,7 @@ export function GmailExclusions({
   integrationId?: string | null;
   isMultiAccount?: boolean;
 }) {
+  const t = useTranslations("gmailExclusions");
   const { rules, isLoading, isManageable, addRule, removeRule } =
     useGmailExclusions(workspaceId, integrationId);
   const [kind, setKind] = useState<"address" | "domain">("domain");
@@ -93,7 +96,7 @@ export function GmailExclusions({
       <div>
         <h4 className="font-medium text-foreground text-sm flex items-center gap-2">
           <Ban className="w-3.5 h-3.5" />
-          Never sync
+          {t("neverSync")}
         </h4>
         <p className="text-xs text-muted-foreground mt-1">
           Mail to or from these addresses stays out of Aexy entirely — it is
@@ -110,12 +113,12 @@ export function GmailExclusions({
         <select
           value={kind}
           onChange={(e) => setKind(e.target.value as "address" | "domain")}
-          aria-label="Exclusion type"
+          aria-label={t("typeLabel")}
           data-testid="exclusion-kind"
           className="rounded-md border border-border bg-background px-2 py-1.5 text-sm"
         >
-          <option value="domain">Domain</option>
-          <option value="address">Address</option>
+          <option value="domain">{t("domain")}</option>
+          <option value="address">{t("address")}</option>
         </select>
         <input
           value={value}
@@ -124,7 +127,7 @@ export function GmailExclusions({
             if (e.key === "Enter") submit();
           }}
           placeholder={kind === "domain" ? "acme.com" : "bob@acme.com"}
-          aria-label="Address or domain to exclude"
+          aria-label={t("valueLabel")}
           data-testid="exclusion-value"
           className="min-w-[200px] flex-1 rounded-md border border-border bg-background px-3 py-1.5 text-sm"
         />
@@ -142,7 +145,7 @@ export function GmailExclusions({
       {isLoading ? (
         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
       ) : rules.length === 0 ? (
-        <p className="text-xs text-muted-foreground">Nothing excluded yet.</p>
+        <p className="text-xs text-muted-foreground">{t("nothingExcluded")}</p>
       ) : (
         <ul className="flex flex-wrap gap-2" data-testid="exclusion-list">
           {rules.map((rule) => (
@@ -206,6 +209,7 @@ export function HideFollowUpPrompt({
   onExclude: (kind: "address" | "domain", value: string) => Promise<void>;
   onDismiss: () => void;
 }) {
+  const t = useTranslations("gmailExclusions");
   const [busy, setBusy] = useState<string | null>(null);
 
   if (!address && !domain) return null;
@@ -224,7 +228,7 @@ export function HideFollowUpPrompt({
       data-testid="hide-followup"
       className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/40 p-3 text-sm"
     >
-      <span className="text-foreground">Hidden. Also stop syncing</span>
+      <span className="text-foreground">{t("alsoStopSyncing")}</span>
       {address && (
         <button
           onClick={() => choose("address", address)}
@@ -251,7 +255,7 @@ export function HideFollowUpPrompt({
         data-testid="followup-dismiss"
         className="ml-auto rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent"
       >
-        No thanks
+        {t("noThanks")}
       </button>
       <p className="w-full text-xs text-amber-600 dark:text-amber-500">
         A rule is visible to workspace admins and notifies your department head.

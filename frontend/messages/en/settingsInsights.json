@@ -1,6 +1,30 @@
 {
   "settingsInsights": {
     "title": "Insights",
-    "description": "Developer insights, team metrics, and the working hours they are measured against."
+    "description": "Developer insights, team metrics, and the working hours they are measured against.",
+    "orgDefaults": "Organization Defaults",
+    "teamOverrides": "Team Overrides",
+    "selectTeam": "Select Team",
+    "chooseTeam": "Choose a team…",
+    "overridesHint": "Team overrides take precedence over organization defaults",
+    "workingHours": "Working Hours",
+    "startHour": "Start Hour",
+    "endHour": "End Hour",
+    "timezone": "Timezone",
+    "lateNight": "Late Night Threshold",
+    "lateNightHint": "Commits after this hour are flagged as late-night",
+    "healthWeights": "Health Score Weights",
+    "bottleneck": "Bottleneck Detection",
+    "bottleneckMultiplier": "Bottleneck Multiplier",
+    "snapshots": "Snapshot Generation",
+    "autoSnapshots": "Auto-generate snapshots",
+    "autoSnapshotsHint": "Automatically compute metrics on a schedule",
+    "frequency": "Frequency",
+    "resetDefaults": "Reset to Defaults",
+    "saved": "Settings saved",
+    "loadFailed": "Failed to load settings. Using defaults.",
+    "saveFailed": "Failed to save settings. Please try again.",
+    "saving": "Saving…",
+    "saveSettings": "Save Settings"
   }
 }

@@ -1,8 +1,28 @@
 {
   "settingsAccessTemplates": {
     "title": "एक्सेस टेम्पलेट",
-    "description": "ऐप और मॉड्यूल एक्सेस के पुनःप्रयोज्य बंडल, जिन्हें सदस्यों पर लागू किया जा सकता है।",
+    "description": "विवरण",
     "breadcrumbParent": "एक्सेस कंट्रोल",
-    "create": "टेम्पलेट बनाएँ"
+    "create": "टेम्पलेट बनाएँ",
+    "systemTemplates": "सिस्टम टेम्पलेट",
+    "system": "सिस्टम",
+    "customTemplates": "कस्टम टेम्पलेट",
+    "noCustom": "अभी कोई कस्टम टेम्पलेट नहीं",
+    "noCustomHint": "सदस्यों को ऐप पहुँच जल्दी सौंपने के लिए एक टेम्पलेट बनाएँ",
+    "configureApps": "चुनें कि इस टेम्पलेट में कौन-से ऐप शामिल हों।",
+    "name": "नाम",
+    "color": "रंग",
+    "includedApps": "शामिल ऐप",
+    "deleteTemplate": "टेम्पलेट हटाएँ",
+    "descriptionPlaceholder": "वैकल्पिक विवरण",
+    "editTitle": "टेम्पलेट संपादित करें",
+    "saveChanges": "बदलाव सहेजें",
+    "created": "टेम्पलेट बनाया गया",
+    "createFailed": "टेम्पलेट नहीं बन सका",
+    "updated": "टेम्पलेट अपडेट हुआ",
+    "updateFailed": "टेम्पलेट अपडेट नहीं हो सका",
+    "deleted": "टेम्पलेट हटाया गया",
+    "deleteFailed": "टेम्पलेट हटाया नहीं जा सका",
+    "createTemplate": "टेम्पलेट बनाएँ"
   }
 }

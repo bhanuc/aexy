@@ -2,14 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { GitMerge, Sparkles } from "lucide-react";
-import Link from "next/link";
 import { useTranslations } from "next-intl";
 
 import { useAuth } from "@/hooks/useAuth";
 import { useMergeGhost, useWorkspaceGhosts } from "@/hooks/useIdentity";
 import { useWorkspace, useWorkspaceMembers } from "@/hooks/useWorkspace";
 import type { WorkspaceGhostDeveloper } from "@/lib/identity-api";
-import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import { SettingsGroupPage } from "@/components/settings/SettingsGroupPage";
 
 export default function AdminGhostsPage() {
   const t = useTranslations("identity.admin");
@@ -53,7 +52,8 @@ export default function AdminGhostsPage() {
   };
 
   return (
-    <SettingsPage
+    <SettingsGroupPage
+      group="identity"
       title={t("title")}
       description={t("intro")}
       width="wide"
@@ -167,6 +167,6 @@ export default function AdminGhostsPage() {
           </table>
         </section>
       )}
-    </SettingsPage>
+    </SettingsGroupPage>
   );
 }

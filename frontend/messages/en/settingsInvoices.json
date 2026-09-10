@@ -1,10 +1,45 @@
 {
   "settingsInvoices": {
     "title": "Invoices",
-    "description": "Create, manage and reconcile invoices for B2B customers.",
+    "description": "Description",
     "denied": {
       "title": "Platform admin access required",
       "body": "Only Aexy platform staff can manage this. Workspace owners and admins do not have access."
-    }
+    },
+    "statusPaid": "Paid",
+    "statusOpen": "Open",
+    "statusVoid": "Void",
+    "statusDraft": "Draft",
+    "methodStripe": "Stripe",
+    "methodBank": "Bank Transfer",
+    "methodManual": "Manual",
+    "createTitle": "Create Invoice",
+    "workspaceId": "Workspace ID",
+    "amountUsd": "Amount (USD)",
+    "dueDate": "Due Date",
+    "paymentMethod": "Payment Method",
+    "generateTitle": "Generate Invoice from Usage",
+    "allInvoices": "All Invoices",
+    "loading": "Loading invoices…",
+    "none": "No invoices found.",
+    "colWorkspace": "Workspace",
+    "colAmount": "Amount",
+    "colStatus": "Status",
+    "colPayment": "Payment",
+    "colDueDate": "Due Date",
+    "colActions": "Actions",
+    "markPaid": "Mark Paid",
+    "void": "Void",
+    "bankReference": "Bank Transfer Reference",
+    "note": "Note",
+    "workspacePlaceholder": "Enter workspace UUID",
+    "descriptionPlaceholder": "Invoice description (optional)",
+    "notePlaceholder": "Optional note",
+    "created": "Invoice created successfully",
+    "markedPaid": "Invoice marked as paid",
+    "voided": "Invoice voided",
+    "generated": "Invoice generated from usage",
+    "invalidAmount": "Please enter a valid amount",
+    "generateFailed": "Failed to generate invoice from usage"
   }
 }

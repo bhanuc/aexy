@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, FolderKanban, Shield, Users, ChevronDown, Check, X, Crown, RefreshCw, UserMinus, Plus, Mail, UserPlus, AlertCircle, CheckCircle, Workflow } from "lucide-react";
+import { ArrowLeft, FolderKanban, Shield, Users, ChevronDown, Check, X, Crown, RefreshCw, UserMinus, Plus, Mail, UserPlus, AlertCircle, CheckCircle } from "lucide-react";
 import { useWorkspace, useWorkspaceMembers } from "@/hooks/useWorkspace";
 import { useProject, useProjectMembers } from "@/hooks/useProjects";
 import { useRoles } from "@/hooks/useRoles";
@@ -13,7 +13,7 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { UpgradeModal } from "@/components/PremiumGate";
 import { ProjectInviteResult } from "@/lib/api";
 import { useTranslations } from "next-intl";
-import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import { ProjectSettingsPage } from "@/components/settings/ProjectSettingsPage";
 
 function getRoleBadgeColor(roleName: string | null) {
   if (!roleName) return "bg-muted text-muted-foreground";
@@ -36,6 +36,7 @@ function getRoleBadgeColor(roleName: string | null) {
 
 export default function ProjectPermissionsPage() {
   const t = useTranslations("settingsProjects");
+  const tc = useTranslations("common");
   const params = useParams();
   const projectId = params.projectId as string;
 
@@ -121,7 +122,7 @@ export default function ProjectPermissionsPage() {
   };
 
   const handleRemoveMember = async (developerId: string) => {
-    if (confirm("Remove this member from the project?")) {
+    if (confirm(t("permissions.confirmRemoveMember"))) {
       try {
         await removeMember(developerId);
       } catch (error) {
@@ -154,7 +155,7 @@ export default function ProjectPermissionsPage() {
       <div className="flex items-center justify-center py-20">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500 mx-auto mb-4"></div>
-          <p className="text-foreground">Loading permissions...</p>
+          <p className="text-foreground">{t("permissions.loading")}</p>
         </div>
       </div>
     );
@@ -165,16 +166,18 @@ export default function ProjectPermissionsPage() {
       <div className="flex items-center justify-center py-20">
         <div className="text-center">
           <FolderKanban className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-xl font-medium text-foreground mb-2">Project Not Found</h3>
+          <h3 className="text-xl font-medium text-foreground mb-2">
+            {t("notFoundTitle")}
+          </h3>
           <p className="text-muted-foreground mb-6">
-            The project you&apos;re looking for doesn&apos;t exist.
+            {t("permissions.notFoundDescription")}
           </p>
           <Link
             href="/settings/projects"
             className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition font-medium"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to Projects
+            {t("notFoundCta")}
           </Link>
         </div>
       </div>
@@ -182,42 +185,12 @@ export default function ProjectPermissionsPage() {
   }
 
   return (
-    <SettingsPage
-      title={project.name}
+    <ProjectSettingsPage
+      projectId={projectId}
       description={t("permissions.subtitle")}
-      width="wide"
-      breadcrumbs={[
-        { label: "Settings", href: "/settings" },
-        { label: "Projects", href: "/settings/projects" },
-        { label: project.name, href: `/settings/projects/${projectId}` },
-        { label: "Permissions" },
-      ]}
     >
 
       <div>
-        {/* Navigation Tabs */}
-        <div className="flex gap-2 mb-8">
-          <Link
-            href={`/settings/projects/${projectId}`}
-            className="px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg text-sm font-medium transition"
-          >
-            General
-          </Link>
-          <Link
-            href={`/settings/projects/${projectId}/permissions`}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium flex items-center gap-2"
-          >
-            <Shield className="h-4 w-4" />
-            Permissions
-          </Link>
-          <Link
-            href={`/settings/projects/${projectId}/statuses`}
-            className="px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg text-sm font-medium transition flex items-center gap-2"
-          >
-            <Workflow className="h-4 w-4" />
-            Statuses
-          </Link>
-        </div>
 
         {/* Members Section */}
         <div className="bg-card rounded-xl">
@@ -225,12 +198,12 @@ export default function ProjectPermissionsPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <h2 className="text-lg font-medium text-foreground flex items-center gap-2">
                 <Users className="h-5 w-5 text-muted-foreground" />
-                Project Members
+                {t("permissions.membersHeading")}
               </h2>
               <span className="text-sm text-muted-foreground">{members.length} members</span>
             </div>
             <p className="text-sm text-muted-foreground mt-1">
-              Assign project-specific roles to override organization roles
+              {t("permissions.membersSubtitle")}
             </p>
           </div>
 
@@ -273,7 +246,7 @@ export default function ProjectPermissionsPage() {
                           onChange={(e) => setEditingRoleId(e.target.value || null)}
                           className="px-3 py-1.5 text-sm rounded bg-muted text-foreground border border-border focus:outline-none focus:border-primary-500"
                         >
-                          <option value="">Use org role (inherited)</option>
+                          <option value="">{t("permissions.useOrgRoleInherited")}</option>
                           {roles.map((role) => (
                             <option key={role.id} value={role.id}>
                               {role.name}
@@ -284,7 +257,7 @@ export default function ProjectPermissionsPage() {
                           onClick={() => handleRoleChange(member.developer_id, editingRoleId)}
                           disabled={isUpdating}
                           className="p-1.5 text-green-400 hover:bg-accent rounded transition"
-                          title="Save"
+                          title={tc("save")}
                         >
                           <Check className="h-4 w-4" />
                         </button>
@@ -294,7 +267,7 @@ export default function ProjectPermissionsPage() {
                             setEditingRoleId(null);
                           }}
                           className="p-1.5 text-muted-foreground hover:bg-accent rounded transition"
-                          title="Cancel"
+                          title={tc("cancel")}
                         >
                           <X className="h-4 w-4" />
                         </button>
@@ -334,7 +307,7 @@ export default function ProjectPermissionsPage() {
                     <button
                       onClick={() => handleRemoveMember(member.developer_id)}
                       className="p-1.5 text-muted-foreground hover:text-red-400 hover:bg-accent rounded transition"
-                      title="Remove from project"
+                      title={t("permissions.removeFromProject")}
                     >
                       <UserMinus className="h-4 w-4" />
                     </button>
@@ -344,7 +317,7 @@ export default function ProjectPermissionsPage() {
             ))}
             {members.length === 0 && (
               <div className="p-8 text-center text-muted-foreground">
-                No members in this project yet
+                {t("permissions.noMembers")}
               </div>
             )}
           </div>
@@ -368,7 +341,7 @@ export default function ProjectPermissionsPage() {
                       }`}
                     >
                       <UserPlus className="h-4 w-4" />
-                      Workspace Members
+                      {t("permissions.addFromWorkspace")}
                     </button>
                     <button
                       onClick={() => {
@@ -382,7 +355,7 @@ export default function ProjectPermissionsPage() {
                       }`}
                     >
                       <Mail className="h-4 w-4" />
-                      Invite by Email
+                      {t("permissions.inviteByEmail")}
                     </button>
                   </div>
 
@@ -390,13 +363,13 @@ export default function ProjectPermissionsPage() {
                     <>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-xs text-muted-foreground mb-1">Member</label>
+                          <label className="block text-xs text-muted-foreground mb-1">{t("permissions.memberLabel")}</label>
                           <select
                             value={selectedDeveloperId}
                             onChange={(e) => setSelectedDeveloperId(e.target.value)}
                             className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground text-sm focus:outline-none focus:border-primary-500"
                           >
-                            <option value="">Select member...</option>
+                            <option value="">{t("permissions.selectMember")}</option>
                             {availableMembers.map((wm) => (
                               <option key={wm.developer_id} value={wm.developer_id}>
                                 {wm.developer_name || wm.developer_email || "Unknown"}
@@ -406,14 +379,14 @@ export default function ProjectPermissionsPage() {
                         </div>
                         <div>
                           <label className="block text-xs text-muted-foreground mb-1">
-                            Project Role (optional)
+                            {t("permissions.projectRoleOptional")}
                           </label>
                           <select
                             value={selectedRoleId}
                             onChange={(e) => setSelectedRoleId(e.target.value)}
                             className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground text-sm focus:outline-none focus:border-primary-500"
                           >
-                            <option value="">Use organization role</option>
+                            <option value="">{t("permissions.useOrganizationRole")}</option>
                             {roles.map((role) => (
                               <option key={role.id} value={role.id}>
                                 {role.name}
@@ -431,12 +404,12 @@ export default function ProjectPermissionsPage() {
                           {isAdding ? (
                             <>
                               <RefreshCw className="h-4 w-4 animate-spin" />
-                              Adding...
+                              {t("permissions.adding")}
                             </>
                           ) : (
                             <>
                               <Plus className="h-4 w-4" />
-                              Add Member
+                              {t("permissions.addMember")}
                             </>
                           )}
                         </button>
@@ -448,7 +421,7 @@ export default function ProjectPermissionsPage() {
                           }}
                           className="px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg text-sm transition"
                         >
-                          Cancel
+                          {tc("cancel")}
                         </button>
                       </div>
                     </>
@@ -457,7 +430,7 @@ export default function ProjectPermissionsPage() {
                       <div className="space-y-3">
                         <div>
                           <label className="block text-xs text-muted-foreground mb-1">
-                            Email addresses (comma or newline separated)
+                            {t("permissions.emailsLabel")}
                           </label>
                           <textarea
                             value={emailInput}
@@ -467,19 +440,19 @@ export default function ProjectPermissionsPage() {
                             className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground text-sm focus:outline-none focus:border-primary-500 placeholder:text-muted-foreground resize-none"
                           />
                           <p className="text-xs text-muted-foreground mt-1">
-                            Users will be added as guests if not already in the workspace
+                            {t("permissions.guestNote")}
                           </p>
                         </div>
                         <div>
                           <label className="block text-xs text-muted-foreground mb-1">
-                            Project Role (optional)
+                            {t("permissions.projectRoleOptional")}
                           </label>
                           <select
                             value={selectedRoleId}
                             onChange={(e) => setSelectedRoleId(e.target.value)}
                             className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground text-sm focus:outline-none focus:border-primary-500"
                           >
-                            <option value="">Use default role</option>
+                            <option value="">{t("permissions.useDefaultRole")}</option>
                             {roles.map((role) => (
                               <option key={role.id} value={role.id}>
                                 {role.name}
@@ -547,12 +520,12 @@ export default function ProjectPermissionsPage() {
                           {isInviting ? (
                             <>
                               <RefreshCw className="h-4 w-4 animate-spin" />
-                              Inviting...
+                              {t("permissions.inviting")}
                             </>
                           ) : (
                             <>
                               <Mail className="h-4 w-4" />
-                              Send Invites
+                              {t("permissions.sendInvites")}
                             </>
                           )}
                         </button>
@@ -565,7 +538,7 @@ export default function ProjectPermissionsPage() {
                           }}
                           className="px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg text-sm transition"
                         >
-                          Cancel
+                          {tc("cancel")}
                         </button>
                       </div>
                     </>
@@ -577,7 +550,7 @@ export default function ProjectPermissionsPage() {
                   className="w-full px-4 py-2 border border-dashed border-border hover:border-border text-muted-foreground hover:text-foreground rounded-lg text-sm transition flex items-center justify-center gap-2"
                 >
                   <Plus className="h-4 w-4" />
-                  Add Member
+                  {t("permissions.addMember")}
                 </button>
               )}
             </div>
@@ -588,7 +561,7 @@ export default function ProjectPermissionsPage() {
         <div className="bg-card rounded-xl p-6 mt-6">
           <h2 className="text-lg font-medium text-foreground mb-4 flex items-center gap-2">
             <Shield className="h-5 w-5 text-muted-foreground" />
-            About Project Roles
+            {t("permissions.aboutRoles")}
           </h2>
           <div className="space-y-3 text-sm text-muted-foreground">
             <p>
@@ -596,11 +569,11 @@ export default function ProjectPermissionsPage() {
               project than a member has at the organization level.
             </p>
             <p>
-              <strong className="text-foreground">Inheritance:</strong> If no project role is
+              <strong className="text-foreground">{t("permissions.inheritanceLabel")}</strong> If no project role is
               assigned, the member uses their organization role permissions.
             </p>
             <p>
-              <strong className="text-foreground">Override:</strong> When a project role is
+              <strong className="text-foreground">{t("permissions.overrideLabel")}</strong> When a project role is
               assigned, it completely replaces the organization role for this project only.
             </p>
           </div>
@@ -609,7 +582,7 @@ export default function ProjectPermissionsPage() {
               href="/settings/organization/roles"
               className="text-sm text-primary-400 hover:text-primary-300 transition"
             >
-              Manage organization roles →
+              {t("permissions.manageOrgRoles")}
             </Link>
           </div>
         </div>
@@ -619,6 +592,6 @@ export default function ProjectPermissionsPage() {
       {showUpgradeModal && (
         <UpgradeModal feature="team_features" onClose={() => setShowUpgradeModal(false)} />
       )}
-    </SettingsPage>
+    </ProjectSettingsPage>
   );
 }

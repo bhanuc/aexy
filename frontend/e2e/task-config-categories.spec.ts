@@ -197,7 +197,8 @@ async function setup(page: Page, options: SetupOptions = {}) {
 
 /** The Status Categories section, scoped so status rows can't match. */
 function categorySection(page: Page) {
-  return page.getByRole("region", { name: "Status Categories" });
+  // The area is named from messages, so match either locale.
+  return page.getByRole("region", { name: /Status Categories|स्थिति श्रेणियाँ/ });
 }
 
 test.describe("workspace status categories", () => {
@@ -259,9 +260,15 @@ test.describe("workspace status categories", () => {
     await expect(section.getByRole("button", { name: "Delete" })).toBeVisible();
 
     await section.getByRole("button", { name: "Edit" }).click();
-    // The edit modal opens on that row, with the slug locked.
+    // The edit modal opens on that row: the label is editable, and the slug
+    // shows the existing value in the same read-only field, with the reason.
     await expect(page.getByRole("heading", { name: "Edit Category" })).toBeVisible();
-    await expect(page.getByText(/locked — statuses reference it/)).toBeVisible();
+    await expect(page.getByLabel("Label")).toHaveValue("Code Review");
+    await expect(page.getByLabel("Slug")).toHaveValue("in_review");
+    await expect(page.getByLabel("Slug")).toHaveAttribute("readonly", "");
+    await expect(
+      page.getByText(/statuses already reference it/),
+    ).toBeVisible();
   });
 
   test("adding a workspace category posts no project scope", async ({ page }) => {
@@ -277,9 +284,24 @@ test.describe("workspace status categories", () => {
       .click();
     await expect(page.getByRole("heading", { name: "Create Category" })).toBeVisible();
 
-    await page.getByPlaceholder("Design Review").fill("Design Review");
-    // The slug is derived and shown before saving.
-    await expect(page.getByText("design_review")).toBeVisible();
+    const labelField = page.getByLabel("Label");
+    const slugField = page.getByLabel("Slug");
+
+    // Empty until something is typed, so it reads as derived rather than as a
+    // second thing to fill in.
+    await expect(slugField).toHaveValue("");
+
+    await labelField.fill("Design Review");
+    // The slug tracks the label live, and is its own field rather than a
+    // caption — the two are identical for one-word buckets, which is what
+    // left people unsure which of them they had just typed.
+    await expect(slugField).toHaveValue("design_review");
+    // Not typeable — the label is the only way to change it. (Asserted, not
+    // attempted: `fill()` waits for editability and would just time out.)
+    await expect(slugField).not.toBeEditable();
+    await expect(slugField).toHaveAttribute("readonly", "");
+    await expect(labelField).toBeEditable();
+
     await page.getByRole("button", { name: /Save|Create/ }).click();
 
     await expect.poll(() => createdCategories.length).toBe(1);
@@ -346,4 +368,98 @@ test.describe("project-scoped status categories", () => {
       section.getByRole("button", { name: /^Manage category/ }),
     ).toHaveCount(7);
   });
+});
+
+test("a label with no letters or digits is refused with the reason", async ({
+  page,
+}) => {
+  const createdCategories: unknown[] = [];
+  await setup(page, { createdCategories });
+  await page.goto("/settings/task-config");
+  await categorySection(page)
+    .getByRole("button", { name: "Add Category" })
+    .click();
+
+  // A Devanagari label now slugifies faithfully — the two `slugify`
+  // implementations agree on marks, so this is a normal, creatable category.
+  await page.getByLabel("Label").fill("डिज़ाइन समीक्षा");
+  await expect(page.getByLabel("Slug")).toHaveValue("डिज़ाइन_समीक्षा");
+
+  // What is actually refused is a label with no letters or digits at all.
+  await page.getByLabel("Label").fill("🎉🎉");
+  await expect(page.getByLabel("Slug")).toHaveValue("");
+  await page.getByRole("button", { name: /Save|Create/ }).click();
+
+  await expect(page.getByText(/at least one letter or digit/i)).toBeVisible();
+  expect(createdCategories).toHaveLength(0);
+
+  // Adding Latin characters clears the way.
+  await page.getByLabel("Label").fill("Design Review 2");
+  await expect(page.getByLabel("Slug")).toHaveValue("design_review_2");
+  await page.getByRole("button", { name: /Save|Create/ }).click();
+  await expect.poll(() => createdCategories.length).toBe(1);
+});
+
+test("the modal is translated, not hardcoded English", async ({ page }) => {
+  await setup(page);
+  // next-intl reads the locale from this cookie (no URL prefix).
+  await page.context().addCookies([
+    { name: "NEXT_LOCALE", value: "hi", url: "http://localhost:3000" },
+  ]);
+  await page.goto("/settings/task-config");
+  // The page itself is translated now, so the button is Hindi too.
+  await categorySection(page)
+    .getByRole("button", { name: "श्रेणी जोड़ें" })
+    .click();
+
+  // Heading, both field labels and the derived-slug hint all come from
+  // messages now. `Slug` stays Latin in hi by design — it is the wire value.
+  await expect(page.getByRole("heading", { name: "श्रेणी बनाएँ" })).toBeVisible();
+  await expect(page.getByLabel("लेबल")).toBeVisible();
+  await expect(page.getByText(/लेबल से बनता है/)).toBeVisible();
+  // Semantics options are translated too.
+  await expect(page.getByRole("button", { name: /खुला/ })).toBeVisible();
+  // And the footer uses the shared common strings.
+  await expect(page.getByRole("button", { name: "रद्द करें" })).toBeVisible();
+});
+
+test("the status dialog shows category semantics as words, translated", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.goto("/settings/task-config");
+  await page.getByRole("button", { name: "Add Status" }).first().click();
+
+  const dialog = page.getByRole("dialog", { name: "Create Status" });
+  await expect(dialog).toBeVisible({ timeout: 20000 });
+
+  // The category cells used to print the raw semantics slug. They read the
+  // same messages the category dialog defines, so the two can't drift.
+  const shipped = dialog.getByRole("button", { name: /Shipped/ });
+  await expect(shipped).toContainText("Done");
+  await expect(shipped).toHaveAttribute(
+    "title",
+    "Completed — counts toward velocity",
+  );
+});
+
+test("the status dialog is translated too", async ({ page }) => {
+  await setup(page);
+  await page.context().addCookies([
+    { name: "NEXT_LOCALE", value: "hi", url: "http://localhost:3000" },
+  ]);
+  await page.goto("/settings/task-config");
+  await page.getByRole("button", { name: "स्थिति जोड़ें" }).first().click();
+
+  const dialog = page.getByRole("dialog", { name: "स्थिति बनाएँ" });
+  await expect(dialog).toBeVisible({ timeout: 20000 });
+  await expect(dialog.getByLabel("नाम")).toBeVisible();
+  await expect(dialog.getByText("श्रेणी", { exact: true })).toBeVisible();
+  await expect(
+    dialog.getByText(/नए टास्क के लिए डिफ़ॉल्ट स्थिति/),
+  ).toBeVisible();
+  // Semantics come through the shared category namespace.
+  await expect(dialog.getByRole("button", { name: /Shipped/ })).toContainText(
+    "पूर्ण",
+  );
 });

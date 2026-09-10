@@ -1,0 +1,20 @@
+{
+  "taskStatuses": {
+    "modal": {
+      "createTitle": "Create Status",
+      "editTitle": "Edit Status",
+      "nameField": "Name",
+      "namePlaceholder": "In Review",
+      "categoryField": "Category",
+      "categoryEmpty": "No categories defined yet — they'll seed automatically when you save your first status.",
+      "categoryHint": "Category semantics drive burndown and velocity calculations.",
+      "colorField": "Color",
+      "defaultToggle": "Set as default status for new tasks",
+      "saving": "Saving…",
+      "errors": {
+        "nameRequired": "Status name is required",
+        "saveFailed": "Failed to save status"
+      }
+    }
+  }
+}

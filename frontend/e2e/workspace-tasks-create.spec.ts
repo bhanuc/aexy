@@ -90,9 +90,10 @@ test.describe("Workspace All-Tasks kanban: inline quick-add", () => {
 
     // Find the inline quick-add button in the "To Do" column. There's one per
     // column; we pick the To Do one to match how the API mock will respond.
-    const todoColumn = page.locator("[class*='w-full md:w-\\[320px\\]']").filter({
-      hasText: /To Do|TO DO/i,
-    }).first();
+    // Held by the column's accessible name, not its layout classes — this
+    // selector used to match on `w-full md:w-[320px]`, which stopped existing
+    // when the column width moved into `BOARD_COLUMN_STACKING`.
+    const todoColumn = page.getByRole("group", { name: /^To Do$/i });
     const quickAdd = todoColumn.getByRole("button", { name: /\+ New task/i });
 
     // Initially collapsed — click to expand into an input.

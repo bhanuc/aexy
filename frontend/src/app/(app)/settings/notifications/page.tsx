@@ -194,6 +194,7 @@ function ChannelToggle({
   icon: React.ElementType;
   isUpdating?: boolean;
 }) {
+  const tc = useTranslations("common");
   return (
     <button
       onClick={onToggle}
@@ -203,7 +204,7 @@ function ChannelToggle({
           ? "border-primary/30 bg-primary/10 text-primary"
           : "border-border bg-transparent text-muted-foreground hover:text-foreground hover:border-foreground/20"
       } ${isUpdating ? "opacity-50 cursor-not-allowed" : ""}`}
-      title={`${enabled ? "Disable" : "Enable"} ${label} notifications`}
+      title={`${enabled ? tc("disable") : tc("enable")} ${label}`}
     >
       {isUpdating ? (
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -238,6 +239,7 @@ function CategorySection({
   slackChannels?: { id: string; name: string }[];
   slackConnected?: boolean;
 }) {
+  const t = useTranslations("settingsNotifications");
   const [isExpanded, setIsExpanded] = useState(true);
   const meta = CATEGORY_LABELS[category];
 
@@ -272,7 +274,7 @@ function CategorySection({
           <div className="flex items-center justify-between px-5 py-3 bg-accent/30">
             <div className="min-w-0 flex-1">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                All in category
+                {t("allInCategory")}
               </p>
             </div>
             <div className="flex items-center gap-2 ml-4">
@@ -293,7 +295,7 @@ function CategorySection({
           {slackConnected && slackChannels && slackChannels.length > 0 && (
             <div className="flex items-center gap-2 px-5 py-2 bg-accent/20 text-xs text-muted-foreground">
               <Hash className="h-3 w-3" />
-              <span>Slack channel:</span>
+              <span>{t("slackChannel")}</span>
               <select
                 value={categoryPref?.slack_channel_id || ""}
                 onChange={(e) => {
@@ -304,7 +306,7 @@ function CategorySection({
                 disabled={updating?.startsWith(`cat:${category}:`)}
                 className="px-2 py-0.5 bg-muted border border-border rounded text-xs text-foreground focus:outline-none focus:border-primary-500"
               >
-                <option value="">DM (default)</option>
+                <option value="">{t("dmDefault")}</option>
                 {slackChannels.map((channel) => (
                   <option key={channel.id} value={channel.id}>
                     #{channel.name}
@@ -389,9 +391,9 @@ export default function NotificationSettingsPage() {
     setUpdating(`${eventType}:${channel}`);
     try {
       await updatePreference(eventType, { [channel]: !currentValue });
-      toast.success("Preference updated");
+      toast.success(t("prefUpdated"));
     } catch {
-      toast.error("Failed to update preference");
+      toast.error(t("prefFailed"));
     } finally {
       setUpdating(null);
     }
@@ -404,9 +406,9 @@ export default function NotificationSettingsPage() {
     setUpdating(`cat:${category}:${channel}`);
     try {
       await updateCategoryPreference(category, { [channel]: !currentValue });
-      toast.success("Category preference updated");
+      toast.success(t("categoryUpdated"));
     } catch {
-      toast.error("Failed to update category preference");
+      toast.error(t("categoryFailed"));
     } finally {
       setUpdating(null);
     }
@@ -418,7 +420,7 @@ export default function NotificationSettingsPage() {
       await updateCategoryPreference(category, { slack_channel_id: channelId, slack_channel_name: channelName });
       toast.success(channelId ? `Slack routed to #${channelName}` : "Reset to DM");
     } catch {
-      toast.error("Failed to update Slack channel");
+      toast.error(t("slackFailed"));
     } finally {
       setUpdating(null);
     }
@@ -427,13 +429,13 @@ export default function NotificationSettingsPage() {
   const handlePushToggle = async () => {
     if (pushSubscribed) {
       const ok = await unsubscribePush();
-      if (ok) toast.success("Web push disabled");
-      else toast.error("Failed to disable web push");
+      if (ok) toast.success(t("pushDisabled"));
+      else toast.error(t("pushDisableFailed"));
     } else {
       const ok = await subscribePush();
-      if (ok) toast.success("Web push enabled");
-      else if (pushPermission === "denied") toast.error("Notifications are blocked in your browser settings");
-      else toast.error("Failed to enable web push");
+      if (ok) toast.success(t("pushEnabled"));
+      else if (pushPermission === "denied") toast.error(t("pushBlocked"));
+      else toast.error(t("pushEnableFailed"));
     }
   };
 

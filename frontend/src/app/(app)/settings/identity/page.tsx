@@ -9,7 +9,8 @@ import { useClaimGhostCommits, useGhostClaimPreview } from "@/hooks/useIdentity"
 import { useWorkspace, useWorkspaceMembers } from "@/hooks/useWorkspace";
 
 import { EmailAliasesSection } from "./EmailAliasesSection";
-import { SettingsPage, SettingsSection } from "@/components/settings/SettingsPrimitives";
+import { SettingsSection } from "@/components/settings/SettingsPrimitives";
+import { SettingsGroupPage } from "@/components/settings/SettingsGroupPage";
 
 function MetricChip({
   icon: Icon,
@@ -50,7 +51,8 @@ export default function IdentitySettingsPage() {
     : 0;
 
   return (
-    <SettingsPage
+    <SettingsGroupPage
+      group="identity"
       title={t("title")}
       description={t("intro")}
       actions={
@@ -181,6 +183,6 @@ export default function IdentitySettingsPage() {
       )}
 
       {hasGithub && !isLoading && <EmailAliasesSection />}
-    </SettingsPage>
+    </SettingsGroupPage>
   );
 }

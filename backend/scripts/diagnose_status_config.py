@@ -10,7 +10,8 @@ removed the existing categories":
     of them truncated — i.e. missing buckets the workspace defines?
   * same question for statuses, plus whether each scope still has an
     is_default status and a status in a `done`-semantics bucket (the two
-    things whose absence breaks task creation and velocity).
+    things whose absence leaves the status admin unable to nominate a
+    starting column or file work as finished).
 
 The usual cause of the "everything vanished" report is masking, not
 deletion: `get_categories_for_project` returns the project's own rows *or*
@@ -181,7 +182,8 @@ async def diagnose(workspace_id: str) -> int:
                 if not r.is_active:
                     marks.append("DELETED")
                 # A status whose category isn't resolvable in its own scope
-                # renders without a bucket and breaks burndown.
+                # renders without a bucket: the status admin and the bucket
+                # dropdown both build their list from this scope's rows.
                 scope_cat_slugs = {
                     c.slug for c in cats_by_scope.get(scope, [])
                 } or ws_cat_slugs
@@ -198,13 +200,20 @@ async def diagnose(workspace_id: str) -> int:
                     "tasks fall back to the resolver instead of an explicit "
                     "default column."
                 )
-            # Does this scope have anywhere to put finished work?
+            # Does this scope have anywhere to put finished work? This is a
+            # UI fact, not an analytics one: burndown and velocity match the
+            # literal `done` / `in_progress` status slugs and never read this
+            # table, and `_resolve_done_status_slug` doesn't filter by scope
+            # either. What breaks is filing work as finished — the bucket
+            # dropdown offers only this scope's categories.
             scope_cats = cats_by_scope.get(scope) or ws_cats
             done_slugs = {c.slug for c in scope_cats if c.semantics == "done"}
             if active and not any(r.category in done_slugs for r in active):
                 print(
-                    "    WARNING: no active status in a done-semantics "
-                    "category — velocity and burndown will read zero here."
+                    "    WARNING: no active status sits in a done-semantics "
+                    "category in this scope — the status admin and the bucket "
+                    "dropdown have nowhere to file finished work. Existing "
+                    "boards and burndown are unaffected."
                 )
             if scope is None:
                 gone = CANONICAL_STATUS_SLUGS - {r.slug for r in rows}

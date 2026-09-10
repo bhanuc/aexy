@@ -391,10 +391,7 @@ class OrganizationService:
             await self.set_access_profile(
                 workspace_id,
                 department_id,
-                DepartmentAccessProfileUpdate(
-                    profile_slug=spec["profile_slug"],
-                    default_persona=spec["persona"],
-                ),
+                DepartmentAccessProfileUpdate(profile_slug=spec["profile_slug"]),
             )
             counts = await self._member_counts(workspace_id)
             results.append(
@@ -499,8 +496,6 @@ class OrganizationService:
         if app_config is not None:
             dept.app_config = app_config
         dept.access_profile_slug = slug
-        if "default_persona" in payload:
-            dept.default_persona = payload["default_persona"] or None
 
         await self.db.flush()
         await self.db.refresh(dept)
@@ -519,7 +514,6 @@ class OrganizationService:
             department_name=dept.name,
             access_profile_slug=dept.access_profile_slug,
             app_config=app_config,
-            default_persona=dept.default_persona,
             enabled_app_ids=sorted(
                 app_id
                 for app_id, cfg in app_config.items()

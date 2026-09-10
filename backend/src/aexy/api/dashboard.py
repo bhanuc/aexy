@@ -304,7 +304,6 @@ def project_surface(
         checklist_dismissed=preferences.checklist_dismissed,
         sidebar_page_visits=preferences.sidebar_page_visits,
         sidebar_pinned_items=preferences.sidebar_pinned_items,
-        sidebar_persona=preferences.sidebar_persona,
         created_at=preferences.created_at,
         updated_at=preferences.updated_at,
         **layout,
@@ -472,12 +471,6 @@ async def update_preferences(
 
     # Update fields that are provided
     update_data = data.model_dump(exclude_unset=True)
-    # "" is how the client says "stop pinning my sidebar view and derive it from
-    # my department again". It has to become NULL in the column, because that is
-    # what the resolver reads as "not chosen" — storing "" would be a persona
-    # that matches nothing and would empty the sidebar.
-    if update_data.get("sidebar_persona") == "":
-        update_data["sidebar_persona"] = None
     # A non-default surface keeps its layout in `surfaces`; what comes back is
     # the shared fields, which still belong on the row itself.
     update_data = apply_surface_update(preferences, surface, update_data)

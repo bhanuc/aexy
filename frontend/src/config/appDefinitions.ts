@@ -527,17 +527,6 @@ export const CATEGORY_LABELS: Record<AppCategory | "other", string> = {
   other: "Other",
 };
 
-export const PERSONA_LABELS: Record<string, string> = {
-  developer: "Developer",
-  manager: "Manager",
-  product: "Product",
-  hr: "HR",
-  support: "Support",
-  sales: "Sales",
-  admin: "Admin",
-  custom: "Custom",
-};
-
 // Get app definition by ID
 export function getAppById(appId: string): AppDefinition | undefined {
   return APP_CATALOG[appId];
@@ -603,6 +592,14 @@ export const SYSTEM_BUNDLES: AppBundleTemplate[] = [
       // not remove it from anyone. Omitting them here meant "Start from
       // Engineering" in the department editor silently revoked all four.
       chat: { enabled: true },
+      // Catalogued after these bundles were written and never added to them,
+      // so every department profile silently revoked both — the same trap the
+      // four above fell into. Enabled everywhere for the same reason.
+      drive: { enabled: true, modules: { files: true, smart_views: true, search: true } },
+      reports: {
+        enabled: true,
+        modules: { custom_reports: true, monthly_engineering: true, exports: true },
+      },
       gtm: { enabled: true },
       leave: { enabled: true },
       community: { enabled: true },
@@ -643,6 +640,14 @@ export const SYSTEM_BUNDLES: AppBundleTemplate[] = [
       // not remove it from anyone. Omitting them here meant "Start from
       // Engineering" in the department editor silently revoked all four.
       chat: { enabled: true },
+      // Catalogued after these bundles were written and never added to them,
+      // so every department profile silently revoked both — the same trap the
+      // four above fell into. Enabled everywhere for the same reason.
+      drive: { enabled: true, modules: { files: true, smart_views: true, search: true } },
+      reports: {
+        enabled: true,
+        modules: { custom_reports: true, monthly_engineering: true, exports: true },
+      },
       gtm: { enabled: true },
       leave: { enabled: true },
       community: { enabled: true },
@@ -686,6 +691,14 @@ export const SYSTEM_BUNDLES: AppBundleTemplate[] = [
       // not remove it from anyone. Omitting them here meant "Start from
       // Engineering" in the department editor silently revoked all four.
       chat: { enabled: true },
+      // Catalogued after these bundles were written and never added to them,
+      // so every department profile silently revoked both — the same trap the
+      // four above fell into. Enabled everywhere for the same reason.
+      drive: { enabled: true, modules: { files: true, smart_views: true, search: true } },
+      reports: {
+        enabled: true,
+        modules: { custom_reports: true, monthly_engineering: true, exports: true },
+      },
       gtm: { enabled: true },
       leave: { enabled: true },
       community: { enabled: true },
@@ -729,6 +742,14 @@ export const SYSTEM_BUNDLES: AppBundleTemplate[] = [
       // not remove it from anyone. Omitting them here meant "Start from
       // Engineering" in the department editor silently revoked all four.
       chat: { enabled: true },
+      // Catalogued after these bundles were written and never added to them,
+      // so every department profile silently revoked both — the same trap the
+      // four above fell into. Enabled everywhere for the same reason.
+      drive: { enabled: true, modules: { files: true, smart_views: true, search: true } },
+      reports: {
+        enabled: true,
+        modules: { custom_reports: true, monthly_engineering: true, exports: true },
+      },
       gtm: { enabled: true },
       leave: { enabled: true },
       community: { enabled: true },

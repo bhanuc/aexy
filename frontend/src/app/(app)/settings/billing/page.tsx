@@ -74,7 +74,7 @@ function BillingContent() {
       window.location.href = portal_url;
     } catch (error) {
       console.error("Failed to open billing portal:", error);
-      alert("Failed to open billing portal. Please try again.");
+      alert(t("portalFailed"));
     } finally {
       setPortalLoading(false);
     }
@@ -156,7 +156,7 @@ function BillingContent() {
           <div className="p-4 bg-green-100 dark:bg-green-900/30 border border-green-700 rounded-lg flex items-center gap-3">
             <Check className="h-5 w-5 text-green-400" />
             <p className="text-green-400">
-              Subscription activated successfully! Thank you for upgrading.
+              {t("activated")}
             </p>
           </div>
         )}
@@ -174,10 +174,10 @@ function BillingContent() {
                 </div>
                 <div>
                   <h2 className="text-xl font-semibold text-foreground">
-                    {plan?.name || "Free"} Plan
+                    {plan?.name || t("free")} Plan
                   </h2>
                   <p className="text-foreground/80 text-sm">
-                    {currentWorkspace?.name || "Personal"}
+                    {currentWorkspace?.name || t("personal")}
                   </p>
                 </div>
               </div>
@@ -195,7 +195,7 @@ function BillingContent() {
                         <span className="text-sm font-normal text-foreground/80">/mo + usage</span>
                       </>
                     ) : isPostpaid ? (
-                      <span className="text-sm font-normal text-foreground/80">Pay after use</span>
+                      <span className="text-sm font-normal text-foreground/80">{t("payAfterUse")}</span>
                     ) : (
                       <>
                         ${(plan?.price_monthly_cents || 0) / 100}
@@ -217,21 +217,21 @@ function BillingContent() {
             {subscriptionStatus?.subscription ? (
               <div className="grid md:grid-cols-3 gap-6">
                 <div>
-                  <p className="text-muted-foreground text-sm mb-1">Status</p>
+                  <p className="text-muted-foreground text-sm mb-1">{t("status")}</p>
                   <p className="text-foreground font-medium capitalize flex items-center gap-2">
                     <span className="w-2 h-2 bg-green-400 rounded-full" />
                     {subscriptionStatus.subscription.status}
                   </p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground text-sm mb-1">Current Period</p>
+                  <p className="text-muted-foreground text-sm mb-1">{t("currentPeriod")}</p>
                   <p className="text-foreground font-medium">
                     {formatDate(subscriptionStatus.subscription.current_period_start)} -{" "}
                     {formatDate(subscriptionStatus.subscription.current_period_end)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground text-sm mb-1">Next Billing</p>
+                  <p className="text-muted-foreground text-sm mb-1">{t("nextBilling")}</p>
                   <p className="text-foreground font-medium">
                     {formatDate(subscriptionStatus.subscription.current_period_end)}
                   </p>
@@ -242,7 +242,7 @@ function BillingContent() {
                 <div className="flex items-center gap-3">
                   <span className="w-2 h-2 bg-green-400 rounded-full" />
                   <p className="text-slate-300">
-                    Your workspace is on the <span className="text-white font-medium">{plan?.name}</span> plan.
+                    {t("workspaceOnPlan")} <span className="text-white font-medium">{plan?.name}</span> plan.
                     Billing is managed by the workspace owner.
                   </p>
                 </div>
@@ -261,7 +261,7 @@ function BillingContent() {
                       className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition font-medium"
                     >
                       <Sparkles className="h-4 w-4" />
-                      See Plans
+                      {t("seePlans")}
                       <ArrowRight className="h-4 w-4" />
                     </Link>
                   </div>
@@ -275,15 +275,15 @@ function BillingContent() {
                         <Sparkles className="h-5 w-5 text-primary-400" />
                       </div>
                       <div>
-                        <p className="text-foreground font-medium">Upgrade for more AI and capacity</p>
-                        <p className="text-muted-foreground text-sm">Choose per-seat, flat+usage, or postpaid billing</p>
+                        <p className="text-foreground font-medium">{t("upgradeBlurb")}</p>
+                        <p className="text-muted-foreground text-sm">{t("billingModesBlurb")}</p>
                       </div>
                     </div>
                     <Link
                       href="/settings/plans"
                       className="text-primary-400 hover:text-primary-300 text-sm font-medium transition"
                     >
-                      Compare plans
+                      {t("comparePlans")}
                     </Link>
                   </div>
                 </div>
@@ -295,22 +295,22 @@ function BillingContent() {
         {/* Billing Model Specific Info */}
         {isPerSeat && seatSummary && (
           <div className="bg-card rounded-xl border border-border p-6">
-            <h3 className="text-lg font-semibold text-foreground mb-4">Seat Management</h3>
+            <h3 className="text-lg font-semibold text-foreground mb-4">{t("seats.heading")}</h3>
             <div className="grid md:grid-cols-4 gap-4">
               <div>
-                <p className="text-muted-foreground text-sm mb-1">Total Seats</p>
+                <p className="text-muted-foreground text-sm mb-1">{t("seats.total")}</p>
                 <p className="text-2xl font-bold text-foreground">{seatSummary.total_seats}</p>
               </div>
               <div>
-                <p className="text-muted-foreground text-sm mb-1">Base Seats</p>
+                <p className="text-muted-foreground text-sm mb-1">{t("seats.base")}</p>
                 <p className="text-2xl font-bold text-foreground">{seatSummary.base_seats}</p>
               </div>
               <div>
-                <p className="text-muted-foreground text-sm mb-1">Additional Seats</p>
+                <p className="text-muted-foreground text-sm mb-1">{t("seats.additional")}</p>
                 <p className="text-2xl font-bold text-foreground">{seatSummary.additional_seats}</p>
               </div>
               <div>
-                <p className="text-muted-foreground text-sm mb-1">Per Seat Price</p>
+                <p className="text-muted-foreground text-sm mb-1">{t("seats.perSeat")}</p>
                 <p className="text-2xl font-bold text-foreground">${seatSummary.per_seat_price_cents / 100}/mo</p>
               </div>
             </div>
@@ -319,16 +319,16 @@ function BillingContent() {
 
         {isFlatPlusUsage && (
           <div className="bg-card rounded-xl border border-border p-6">
-            <h3 className="text-lg font-semibold text-foreground mb-4">Billing Breakdown</h3>
+            <h3 className="text-lg font-semibold text-foreground mb-4">{t("breakdown.heading")}</h3>
             <div className="grid md:grid-cols-2 gap-4">
               <div>
-                <p className="text-muted-foreground text-sm mb-1">Base Fee</p>
+                <p className="text-muted-foreground text-sm mb-1">{t("breakdown.baseFee")}</p>
                 <p className="text-2xl font-bold text-foreground">${(plan?.base_fee_monthly_cents || 0) / 100}/mo</p>
-                <p className="text-xs text-muted-foreground mt-1">Fixed monthly charge</p>
+                <p className="text-xs text-muted-foreground mt-1">{t("breakdown.baseFeeHint")}</p>
               </div>
               <div>
-                <p className="text-muted-foreground text-sm mb-1">AI Usage</p>
-                <p className="text-2xl font-bold text-foreground">Metered</p>
+                <p className="text-muted-foreground text-sm mb-1">{t("breakdown.aiUsage")}</p>
+                <p className="text-2xl font-bold text-foreground">{t("breakdown.metered")}</p>
                 <p className="text-xs text-muted-foreground mt-1">
                   ${(plan?.llm_input_cost_per_1k_cents || 0) / 100}/1K input,{" "}
                   ${(plan?.llm_output_cost_per_1k_cents || 0) / 100}/1K output
@@ -340,20 +340,20 @@ function BillingContent() {
 
         {isPostpaid && postpaidSummary && (
           <div className="bg-card rounded-xl border border-border p-6">
-            <h3 className="text-lg font-semibold text-foreground mb-4">Postpaid Billing</h3>
+            <h3 className="text-lg font-semibold text-foreground mb-4">{t("breakdown.postpaid")}</h3>
             <div className="grid md:grid-cols-3 gap-4">
               <div>
-                <p className="text-muted-foreground text-sm mb-1">Accrued This Period</p>
+                <p className="text-muted-foreground text-sm mb-1">{t("breakdown.accrued")}</p>
                 <p className="text-2xl font-bold text-foreground">${postpaidSummary.accrued_cents / 100}</p>
               </div>
               <div>
-                <p className="text-muted-foreground text-sm mb-1">Estimated Total</p>
+                <p className="text-muted-foreground text-sm mb-1">{t("breakdown.estimatedTotal")}</p>
                 <p className="text-2xl font-bold text-foreground">${postpaidSummary.estimated_total_cents / 100}</p>
               </div>
               <div>
-                <p className="text-muted-foreground text-sm mb-1">Last Settled</p>
+                <p className="text-muted-foreground text-sm mb-1">{t("breakdown.lastSettled")}</p>
                 <p className="text-foreground font-medium">
-                  {postpaidSummary.last_settled_at ? formatDate(postpaidSummary.last_settled_at) : "Not yet"}
+                  {postpaidSummary.last_settled_at ? formatDate(postpaidSummary.last_settled_at) : t("notYet")}
                 </p>
               </div>
             </div>
@@ -365,7 +365,7 @@ function BillingContent() {
 
         {/* Usage Stats Cards */}
         <div>
-          <h3 className="text-lg font-semibold text-foreground mb-4">Current Usage</h3>
+          <h3 className="text-lg font-semibold text-foreground mb-4">{t("breakdown.currentUsage")}</h3>
           <UsageStatsCards />
           <div className="mt-4">
             <StorageUsageCard />
@@ -380,29 +380,29 @@ function BillingContent() {
         {/* Usage Trend Chart */}
         <UsageTrendChart months={6} />
 
-        {/* Two Column Layout: Plan Features and Invoice History */}
+        {/* Two Column Layout: {t("features.heading")} and Invoice History */}
         <div className="grid lg:grid-cols-2 gap-8">
-          {/* Plan Features */}
+          {/* {t("features.heading")} */}
           {plan && (
             <div className="bg-card rounded-xl border border-border p-6">
-              <h3 className="text-lg font-semibold text-foreground mb-4">Plan Features</h3>
+              <h3 className="text-lg font-semibold text-foreground mb-4">{t("features.heading")}</h3>
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
                   <Check className={`h-5 w-5 ${plan.max_repos === -1 ? "text-green-400" : "text-primary-400"}`} />
                   <span className="text-foreground">
-                    {plan.max_repos === -1 ? "Unlimited" : plan.max_repos} repositories
+                    {plan.max_repos === -1 ? t("unlimited") : plan.max_repos} repositories
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
                   <Check className={`h-5 w-5 ${plan.sync_history_days === -1 ? "text-green-400" : "text-primary-400"}`} />
                   <span className="text-foreground">
-                    {plan.sync_history_days === -1 ? "Unlimited" : `${plan.sync_history_days} days`} sync history
+                    {plan.sync_history_days === -1 ? t("unlimited") : `${plan.sync_history_days} days`} sync history
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
                   <Check className={`h-5 w-5 ${plan.llm_requests_per_day === -1 ? "text-green-400" : "text-primary-400"}`} />
                   <span className="text-foreground">
-                    {plan.llm_requests_per_day === -1 ? "Unlimited" : plan.llm_requests_per_day} AI requests/day
+                    {plan.llm_requests_per_day === -1 ? t("unlimited") : plan.llm_requests_per_day} AI requests/day
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
@@ -412,7 +412,7 @@ function BillingContent() {
                     <span className="h-5 w-5 text-muted-foreground">-</span>
                   )}
                   <span className={plan.enable_real_time_sync ? "text-foreground" : "text-muted-foreground"}>
-                    Real-time sync
+                    {t("features.realtimeSync")}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
@@ -422,7 +422,7 @@ function BillingContent() {
                     <span className="h-5 w-5 text-muted-foreground">-</span>
                   )}
                   <span className={plan.enable_advanced_analytics ? "text-foreground" : "text-muted-foreground"}>
-                    Advanced analytics
+                    {t("features.advancedAnalytics")}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
@@ -432,7 +432,7 @@ function BillingContent() {
                     <span className="h-5 w-5 text-muted-foreground">-</span>
                   )}
                   <span className={plan.enable_team_features ? "text-foreground" : "text-muted-foreground"}>
-                    Team features
+                    {t("features.team")}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
@@ -442,7 +442,7 @@ function BillingContent() {
                     <span className="h-5 w-5 text-muted-foreground">-</span>
                   )}
                   <span className={plan.enable_exports ? "text-foreground" : "text-muted-foreground"}>
-                    Data exports
+                    {t("features.exports")}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
@@ -452,7 +452,7 @@ function BillingContent() {
                     <span className="h-5 w-5 text-muted-foreground">-</span>
                   )}
                   <span className={plan.enable_webhooks ? "text-foreground" : "text-muted-foreground"}>
-                    Webhooks
+                    {t("features.webhooks")}
                   </span>
                 </div>
               </div>
@@ -463,10 +463,10 @@ function BillingContent() {
           <InvoiceList limit={5} />
         </div>
 
-        {/* Payment Method */}
+        {/* {t("payment.heading")} */}
         {subscriptionStatus?.customer && (
           <div className="bg-card rounded-xl border border-border p-6">
-            <h3 className="text-lg font-semibold text-foreground mb-4">Payment Method</h3>
+            <h3 className="text-lg font-semibold text-foreground mb-4">{t("payment.heading")}</h3>
             {subscriptionStatus.customer.stripe_customer_id ? (
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
@@ -474,15 +474,15 @@ function BillingContent() {
                     <CreditCard className="h-5 w-5 text-foreground" />
                   </div>
                   <div>
-                    <p className="text-foreground">Managed via Stripe</p>
+                    <p className="text-foreground">{t("payment.viaStripe")}</p>
                     <p className="text-muted-foreground text-sm">
-                      Click &quot;Manage Billing&quot; to update your payment method
+                      {t("payment.manageHint")}
                     </p>
                   </div>
                 </div>
               </div>
             ) : (
-              <p className="text-muted-foreground">No payment method on file</p>
+              <p className="text-muted-foreground">{t("payment.none")}</p>
             )}
           </div>
         )}
@@ -510,7 +510,7 @@ function BillingContent() {
                 className="flex items-center gap-2 px-6 py-2.5 bg-card hover:bg-accent border border-border text-foreground rounded-lg transition"
               >
                 <RefreshCw className="h-4 w-4" />
-                Change Plan
+                {t("changePlan")}
               </Link>
             </>
           )}
@@ -521,7 +521,7 @@ function BillingContent() {
               className="flex items-center gap-2 px-6 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition"
             >
               <Sparkles className="h-4 w-4" />
-              Upgrade Plan
+              {t("upgradePlan")}
             </Link>
           )}
         </div>
@@ -534,7 +534,7 @@ function BillingContent() {
               href="mailto:billing@aexy.io"
               className="text-primary-400 hover:text-primary-300 transition"
             >
-              Contact our billing support
+              {t("contactSupport")}
             </a>
           </p>
         </div>

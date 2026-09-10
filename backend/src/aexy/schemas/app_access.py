@@ -151,7 +151,6 @@ class EffectiveAccessResponse(BaseModel):
     baseline: str = "role_fallback"
     departments: list[AccessDepartmentInfo] = Field(default_factory=list)
     # Sidebar view implied by the primary department; a personal choice wins.
-    suggested_persona: str | None = None
 
 
 class MemberAppAccessUpdate(BaseModel):
@@ -211,7 +210,6 @@ class AccessPreviewResponse(BaseModel):
 
     baseline: str
     baseline_detail: str | None = None
-    suggested_persona: str | None = None
     apps: list[AccessPreviewApp] = Field(default_factory=list)
     enabled_app_names: list[str] = Field(default_factory=list)
 

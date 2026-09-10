@@ -2,14 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import Link from "next/link";
-import { Activity, Shield, FolderGit2, Workflow, AlertTriangle, Loader2 } from "lucide-react";
+import { AlertTriangle, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { usePermissions, PERMISSIONS } from "@/hooks/usePermissions";
 import { useProjectTrackerConfig, useUpdateProjectTrackerConfig, useTargetHours, useUpsertTargetHours, useDeleteTargetHours, DEFAULT_CAPTURE_CONFIG, TrackerCaptureConfig } from "@/hooks/useTrackerAdmin";
-import { SettingsPage, SettingsSection, SettingsSkeleton, SettingsEmptyState } from "@/components/settings/SettingsPrimitives";
+import { SettingsSection, SettingsSkeleton, SettingsEmptyState } from "@/components/settings/SettingsPrimitives";
+import { ProjectSettingsPage } from "@/components/settings/ProjectSettingsPage";
 
 export default function ProjectTrackerSettingsPage() {
   const t = useTranslations("settings.tracker");
@@ -86,38 +86,8 @@ export default function ProjectTrackerSettingsPage() {
     );
   };
 
-  const tab = (href: string, label: string, icon?: React.ReactNode, active = false) => (
-    <Link
-      href={href}
-      className={
-        active
-          ? "px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium flex items-center gap-2"
-          : "px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg text-sm font-medium transition flex items-center gap-2"
-      }
-    >
-      {icon}
-      {label}
-    </Link>
-  );
-
   return (
-    <SettingsPage
-      title={t("title")}
-      description={t("projectSubtitle")}
-      width="wide"
-      breadcrumbs={[
-        { label: "Settings", href: "/settings" },
-        { label: "Projects", href: "/settings/projects" },
-        { label: t("title") },
-      ]}
-    >
-      <div className="flex flex-wrap gap-2">
-        {tab(`/settings/projects/${projectId}`, "General")}
-        {tab(`/settings/projects/${projectId}/permissions`, "Permissions", <Shield className="h-4 w-4" />)}
-        {tab(`/settings/projects/${projectId}/repositories`, "Repositories", <FolderGit2 className="h-4 w-4" />)}
-        {tab(`/settings/projects/${projectId}/statuses`, "Statuses", <Workflow className="h-4 w-4" />)}
-        {tab(`/settings/projects/${projectId}/tracker`, t("title"), <Activity className="h-4 w-4" />, true)}
-      </div>
+    <ProjectSettingsPage projectId={projectId} description={t("projectSubtitle")}>
 
       {permsLoading || isLoading ? (
         <SettingsSkeleton rows={2} />
@@ -292,6 +262,6 @@ export default function ProjectTrackerSettingsPage() {
           </div>
         </div>
       )}
-    </SettingsPage>
+    </ProjectSettingsPage>
   );
 }

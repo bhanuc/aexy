@@ -18,6 +18,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { CustomRole, RoleTemplateInfo, PermissionInfo } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 function getRoleBadgeColor(roleName: string) {
   const name = roleName.toLowerCase();
@@ -40,6 +41,7 @@ interface RoleCardProps {
 }
 
 function RoleCard({ role, isAdmin, onEdit, onDelete }: RoleCardProps) {
+  const t = useTranslations("settingsRoles");
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -61,7 +63,7 @@ function RoleCard({ role, isAdmin, onEdit, onDelete }: RoleCardProps) {
                 <span className="text-foreground font-medium">{role.name}</span>
                 {role.is_system && (
                   <span className="px-2 py-0.5 bg-muted text-muted-foreground text-xs rounded">
-                    System
+                    {t("system")}
                   </span>
                 )}
               </div>
@@ -78,14 +80,14 @@ function RoleCard({ role, isAdmin, onEdit, onDelete }: RoleCardProps) {
               <button
                 onClick={onEdit}
                 className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition"
-                title="Edit role"
+                title={t("editRole")}
               >
                 <Edit2 className="h-4 w-4" />
               </button>
               <button
                 onClick={onDelete}
                 className="p-2 text-muted-foreground hover:text-red-400 hover:bg-accent rounded-lg transition"
-                title="Delete role"
+                title={t("deleteRole")}
               >
                 <Trash2 className="h-4 w-4" />
               </button>
@@ -141,6 +143,8 @@ function CreateRoleModal({
   onCreate,
   isCreating,
 }: CreateRoleModalProps) {
+  const t = useTranslations("settingsRoles");
+  const tc = useTranslations("common");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [color, setColor] = useState("#6366f1");
@@ -194,12 +198,14 @@ function CreateRoleModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-card rounded-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col p-0">
         <div className="p-6 border-b border-border">
-          <h3 className="text-xl font-semibold text-foreground">Create Custom Role</h3>
+          <DialogTitle className="text-xl font-semibold text-foreground">
+            {t("createTitle")}
+          </DialogTitle>
           <p className="text-muted-foreground text-sm mt-1">
-            Define a new role with specific permissions
+            {t("createSubtitle")}
           </p>
         </div>
 
@@ -208,14 +214,14 @@ function CreateRoleModal({
             {/* Template Selector */}
             <div>
               <label className="block text-sm text-muted-foreground mb-2">
-                Start from template (optional)
+                {t("fromTemplate")}
               </label>
               <select
                 value={selectedTemplate}
                 onChange={(e) => handleTemplateChange(e.target.value)}
                 className="w-full px-4 py-2 bg-muted border border-border rounded-lg text-foreground focus:outline-none focus:border-primary-500"
               >
-                <option value="">Start from scratch</option>
+                <option value="">{t("fromScratch")}</option>
                 {templates.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name} - {t.description}
@@ -227,7 +233,7 @@ function CreateRoleModal({
             {/* Name & Description */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm text-muted-foreground mb-1">Role Name</label>
+                <label className="block text-sm text-muted-foreground mb-1">{t("roleName")}</label>
                 <input
                   type="text"
                   value={name}
@@ -237,7 +243,7 @@ function CreateRoleModal({
                 />
               </div>
               <div>
-                <label className="block text-sm text-muted-foreground mb-1">Color</label>
+                <label className="block text-sm text-muted-foreground mb-1">{t("color")}</label>
                 <div className="flex gap-2">
                   {colors.map((c) => (
                     <button
@@ -255,11 +261,11 @@ function CreateRoleModal({
             </div>
 
             <div>
-              <label className="block text-sm text-muted-foreground mb-1">Description</label>
+              <label className="block text-sm text-muted-foreground mb-1">{t("description")}</label>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="What is this role for?"
+                placeholder={t("descriptionPlaceholder")}
                 rows={2}
                 className="w-full px-4 py-2 bg-muted border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary-500"
               />
@@ -307,7 +313,7 @@ function CreateRoleModal({
             onClick={onClose}
             className="flex-1 px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg transition"
           >
-            Cancel
+            {tc("cancel")}
           </button>
           <button
             onClick={handleSubmit}
@@ -317,18 +323,18 @@ function CreateRoleModal({
             {isCreating ? (
               <>
                 <RefreshCw className="h-4 w-4 animate-spin" />
-                Creating...
+                {t("creating")}
               </>
             ) : (
               <>
                 <Plus className="h-4 w-4" />
-                Create Role
+                {t("createRole")}
               </>
             )}
           </button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -363,7 +369,7 @@ export default function RolesSettingsPage() {
       <div className="py-20 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500 mx-auto mb-4"></div>
-          <p className="text-foreground">Loading roles...</p>
+          <p className="text-foreground">{t("loading")}</p>
         </div>
       </div>
     );
@@ -382,7 +388,7 @@ export default function RolesSettingsPage() {
           <div>
             <h2 className="text-lg font-medium text-foreground flex items-center gap-2">
               <Shield className="h-5 w-5 text-muted-foreground" />
-              Roles
+              {t("heading")}
             </h2>
             <p className="text-muted-foreground text-sm">{roles.length} roles defined</p>
           </div>
@@ -392,15 +398,15 @@ export default function RolesSettingsPage() {
               className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition text-sm"
             >
               <Plus className="h-4 w-4" />
-              Create Role
+              {t("createRole")}
             </button>
           )}
         </div>
 
-        {/* System Roles */}
+        {/* {t("systemRoles")} */}
         <div className="mb-8">
           <h3 className="text-sm font-medium text-muted-foreground mb-3 uppercase tracking-wider">
-            System Roles
+            {t("systemRoles")}
           </h3>
           <div className="space-y-3">
             {roles
@@ -417,10 +423,10 @@ export default function RolesSettingsPage() {
           </div>
         </div>
 
-        {/* Custom Roles */}
+        {/* {t("customRoles")} */}
         <div>
           <h3 className="text-sm font-medium text-muted-foreground mb-3 uppercase tracking-wider">
-            Custom Roles
+            {t("customRoles")}
           </h3>
           {roles.filter((r) => !r.is_system).length > 0 ? (
             <div className="space-y-3">
@@ -439,9 +445,9 @@ export default function RolesSettingsPage() {
           ) : (
             <div className="bg-card rounded-xl p-8 text-center border border-border">
               <Shield className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-foreground mb-2">No Custom Roles</h3>
+              <h3 className="text-lg font-medium text-foreground mb-2">{t("noCustomRoles")}</h3>
               <p className="text-muted-foreground mb-4">
-                Create custom roles to define specific permission sets for your team.
+                {t("noCustomRolesHint")}
               </p>
               {isAdmin && (
                 <button
@@ -449,7 +455,7 @@ export default function RolesSettingsPage() {
                   className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition"
                 >
                   <Plus className="h-4 w-4" />
-                  Create First Role
+                  {t("createFirst")}
                 </button>
               )}
             </div>
@@ -458,25 +464,25 @@ export default function RolesSettingsPage() {
 
         {/* Info Card */}
         <div className="bg-card rounded-xl p-6 mt-8 border border-border">
-          <h3 className="text-foreground font-medium mb-3">About Roles & Permissions</h3>
+          <h3 className="text-foreground font-medium mb-3">{t("aboutHeading")}</h3>
           <div className="space-y-2 text-sm text-muted-foreground">
             <p>
-              <strong className="text-foreground">System roles</strong> are predefined and cannot be modified.
+              <strong className="text-foreground">{t("aboutSystem")}</strong> are predefined and cannot be modified.
               They serve as templates for common use cases.
             </p>
             <p>
-              <strong className="text-foreground">Custom roles</strong> can be created from scratch or based
+              <strong className="text-foreground">{t("aboutCustom")}</strong> can be created from scratch or based
               on a template. You can customize permissions to fit your needs.
             </p>
             <p>
-              <strong className="text-foreground">Project overrides</strong> allow you to assign different
+              <strong className="text-foreground">{t("aboutProject")}</strong> allow you to assign different
               roles at the project level, overriding the organization role.
             </p>
           </div>
         </div>
       </div>
 
-      {/* Create Role Modal */}
+      {/* {t("createRole")} Modal */}
       {showCreateModal && (
         <CreateRoleModal
           templates={templates}

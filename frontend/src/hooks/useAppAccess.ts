@@ -83,7 +83,14 @@ export function useAppAccess(workspaceId: string | null, developerId: string | n
     [effectiveAccess]
   );
 
-  /** Which layer decided an app — for explaining access, not gating it. */
+  /**
+   * Which layer decided an app: workspace_disabled | role_fallback |
+   * department | member_template | member_override.
+   *
+   * Used for explaining access, and by the sidebar to decide whether a
+   * grant outranks a persona the person chose — a `member_override` was
+   * made about them specifically, so it does.
+   */
   const getAccessSource = useCallback(
     (appId: string) => {
       const appAccess = effectiveAccess?.apps[appId];
@@ -152,7 +159,6 @@ export function useAppAccess(workspaceId: string | null, developerId: string | n
     baseline: effectiveAccess?.baseline ?? null,
     departments: effectiveAccess?.departments ?? [],
     /** Sidebar view implied by the primary department; a personal choice wins. */
-    suggestedPersona: effectiveAccess?.suggested_persona ?? null,
 
     // Loading state
     isLoading,

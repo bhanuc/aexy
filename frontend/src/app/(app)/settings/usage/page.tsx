@@ -25,6 +25,7 @@ import {
 } from "@/components/settings/SettingsPrimitives";
 
 function ProviderBreakdown() {
+  const t = useTranslations("settingsUsage");
   const { data: usageSummary, isLoading } = useUsageSummary();
 
   if (isLoading || !usageSummary?.by_provider) {
@@ -63,10 +64,10 @@ function ProviderBreakdown() {
       <div className="rounded-xl border border-border bg-surface p-6">
         <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
           <Server className="h-4 w-4 text-muted-foreground" />
-          Usage by Provider
+          {t("byProvider")}
         </h3>
         <p className="text-sm text-muted-foreground text-center py-4">
-          No usage data yet. Start using AI features to see provider breakdown.
+          {t("noData")}
         </p>
       </div>
     );
@@ -76,7 +77,7 @@ function ProviderBreakdown() {
     <div className="rounded-xl border border-border bg-surface p-6">
       <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
         <Server className="h-4 w-4 text-muted-foreground" />
-        Usage by Provider
+        {t("byProvider")}
       </h3>
       <div className="space-y-4">
         {providerEntries.map(([provider, data]) => {
@@ -113,6 +114,7 @@ function ProviderBreakdown() {
 }
 
 function PlanLimitsOverview() {
+  const t = useTranslations("settingsUsage");
   const { data: limitsData, isLoading } = useLimitsUsage();
 
   if (isLoading || !limitsData) {
@@ -162,10 +164,10 @@ function PlanLimitsOverview() {
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
           <BarChart3 className="h-4 w-4 text-muted-foreground" />
-          Plan Limits
+          {t("planLimits")}
         </h3>
         <span className="text-xs font-medium px-2 py-1 rounded-full bg-primary/10 text-primary">
-          {limitsData.plan?.name || "Free"}
+          {limitsData.plan?.name || t("free")}
         </span>
       </div>
 
@@ -200,7 +202,7 @@ function PlanLimitsOverview() {
       </div>
 
       <div className="border-t border-border pt-4">
-        <h4 className="text-xs font-medium text-muted-foreground mb-2 uppercase">Features</h4>
+        <h4 className="text-xs font-medium text-muted-foreground mb-2 uppercase">{t("features")}</h4>
         <div className="grid grid-cols-2 gap-2">
           {features.map((f) => (
             <div key={f.label} className="flex items-center gap-2 text-sm">
@@ -218,7 +220,7 @@ function PlanLimitsOverview() {
         className="mt-4 flex items-center justify-center gap-2 w-full px-3 py-2 text-sm font-medium text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors"
       >
         <Crown className="h-4 w-4" />
-        Compare Plans
+        {t("comparePlans")}
         <ArrowUpRight className="h-3.5 w-3.5" />
       </Link>
     </div>

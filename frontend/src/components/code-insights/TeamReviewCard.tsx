@@ -63,9 +63,18 @@ export function TeamReviewCard({
     limit: 10,
   });
 
+  // The snapshots list isn't filtered server-side by period_type, so we pick
+  // the most recent snapshot whose payload's period_type matches.
+  // `Array.isArray` rather than a bare `!data`, for the reason `ReviewDigestCard`
+  // gives: a truthy response without a `snapshots` array — a proxy, a stale
+  // cache, an error envelope returned with a 200 — makes `.find` throw, and
+  // both places this card renders (the Organization settings page and the team
+  // detail page) put that throw into a *page-level* boundary. The whole page
+  // goes to "Settings encountered an error" over one card's data.
   const snapshot = useMemo(() => {
-    if (!data) return undefined;
-    return data.snapshots.find((s) => {
+    const snapshots = data?.snapshots;
+    if (!Array.isArray(snapshots)) return undefined;
+    return snapshots.find((s) => {
       const p = (s.payload as TeamReviewPayload | undefined)?.period_type;
       return p === period;
     });

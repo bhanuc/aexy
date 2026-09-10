@@ -60,6 +60,8 @@ The compose file mounts:
 postgres:
   build: ./postgres
   image: aexy-postgres:18-alpine-pgvector
+  environment:
+    PGDATA: /var/lib/postgresql/data/pgdata
   volumes:
     - postgres_data:/var/lib/postgresql/data
 ```
@@ -67,6 +69,21 @@ postgres:
 `docker-compose build postgres` produces a new image. `docker-compose up -d
 postgres` starts a fresh container that mounts the same volume and reads
 the existing PGDATA. Your data is intact.
+
+**Why PGDATA points one level below the mount.** The postgres 18+ images keep
+their data under a major-version directory and reject a volume mounted straight
+at `/var/lib/postgresql/data`; without the override a fresh `docker-compose up`
+fails with *"there appears to be PostgreSQL data in: /var/lib/postgresql/data
+(unused mount/volume)"* and the backend never starts. Keeping the mount point
+and moving PGDATA into `pgdata/` satisfies the image without renaming anyone's
+existing volume.
+
+A non-default PGDATA also turns off the stock entrypoint's "an older cluster is
+here, run pg_upgrade" check, which would let a volume written by a pre-18 image
+get a new empty cluster beside its real data — the server comes up with no rows
+and the data sits unreferenced. `postgres/legacy-pgdata-guard.sh` reinstates
+that check: the container refuses to start and prints the dump-and-restore
+steps instead.
 
 ### What WOULD destroy data
 

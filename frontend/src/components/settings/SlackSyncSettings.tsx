@@ -17,6 +17,9 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { slackSyncApi, SlackChannel, SlackConfiguredChannel, SlackUserMappingStats } from "@/lib/api";
+import { useTranslations } from "next-intl";
+
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 interface SlackSyncSettingsProps {
   integrationId: string;
@@ -26,6 +29,8 @@ interface SlackSyncSettingsProps {
 }
 
 export function SlackSyncSettings({ integrationId, teamId, slackTeamId = "", isConnected }: SlackSyncSettingsProps) {
+  const t = useTranslations("slackSync");
+  const tc = useTranslations("common");
   const [channels, setChannels] = useState<SlackChannel[]>([]);
   const [configuredChannels, setConfiguredChannels] = useState<SlackConfiguredChannel[]>([]);
   const [isLoadingChannels, setIsLoadingChannels] = useState(false);
@@ -161,10 +166,10 @@ export function SlackSyncSettings({ integrationId, teamId, slackTeamId = "", isC
       <div className="bg-muted rounded-xl p-6 border border-border">
         <div className="flex items-center gap-3 mb-4">
           <Slack className="h-6 w-6 text-purple-400" />
-          <h3 className="text-lg font-semibold text-foreground">Slack Sync</h3>
+          <h3 className="text-lg font-semibold text-foreground">{t("title")}</h3>
         </div>
         <p className="text-muted-foreground">
-          Connect your Slack workspace to enable message sync and tracking.
+          {t("connectPrompt")}
         </p>
       </div>
     );
@@ -177,12 +182,12 @@ export function SlackSyncSettings({ integrationId, teamId, slackTeamId = "", isC
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <Slack className="h-6 w-6 text-purple-400" />
-            <h3 className="text-lg font-semibold text-foreground">Slack Sync Settings</h3>
+            <h3 className="text-lg font-semibold text-foreground">{t("settingsTitle")}</h3>
           </div>
           <div className="flex items-center gap-2">
             <span className="flex items-center gap-1.5 text-sm text-green-400">
               <CheckCircle2 className="h-4 w-4" />
-              Connected
+              {tc("status.active")}
             </span>
           </div>
         </div>
@@ -217,7 +222,7 @@ export function SlackSyncSettings({ integrationId, teamId, slackTeamId = "", isC
             className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition disabled:opacity-50"
           >
             <RefreshCw className={`h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
-            {isSyncing ? "Syncing..." : "Sync Now"}
+            {isSyncing ? t("syncing") : t("syncNow")}
           </button>
           <button
             onClick={handleAutoMapUsers}
@@ -225,33 +230,33 @@ export function SlackSyncSettings({ integrationId, teamId, slackTeamId = "", isC
             className="flex items-center gap-2 px-4 py-2 bg-accent text-foreground rounded-lg hover:bg-muted transition disabled:opacity-50"
           >
             <Users className={`h-4 w-4 ${isMappingUsers ? "animate-pulse" : ""}`} />
-            {isMappingUsers ? "Mapping..." : "Auto-Map Users"}
+            {isMappingUsers ? t("mapping") : t("autoMapUsers")}
           </button>
         </div>
 
         {/* User Mapping Stats */}
         {mappingStats && (
           <div className="mt-4 p-4 bg-accent/50 rounded-lg">
-            <h4 className="text-sm font-medium text-foreground mb-2">User Mapping Results</h4>
+            <h4 className="text-sm font-medium text-foreground mb-2">{t("mappingHeading")}</h4>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
               <div>
-                <span className="text-muted-foreground">Slack Users:</span>
+                <span className="text-muted-foreground">{t("slackUsers")}</span>
                 <span className="ml-2 text-foreground">{mappingStats.total_slack_users}</span>
               </div>
               <div>
-                <span className="text-muted-foreground">Developers:</span>
+                <span className="text-muted-foreground">{t("developers")}</span>
                 <span className="ml-2 text-foreground">{mappingStats.total_developers}</span>
               </div>
               <div>
-                <span className="text-muted-foreground">Newly Mapped:</span>
+                <span className="text-muted-foreground">{t("newlyMapped")}</span>
                 <span className="ml-2 text-green-400">{mappingStats.newly_mapped}</span>
               </div>
               <div>
-                <span className="text-muted-foreground">Already Mapped:</span>
+                <span className="text-muted-foreground">{t("alreadyMapped")}</span>
                 <span className="ml-2 text-foreground">{mappingStats.already_mapped}</span>
               </div>
               <div>
-                <span className="text-muted-foreground">Unmapped:</span>
+                <span className="text-muted-foreground">{t("unmapped")}</span>
                 <span className="ml-2 text-yellow-400">{mappingStats.unmapped}</span>
               </div>
             </div>
@@ -264,7 +269,7 @@ export function SlackSyncSettings({ integrationId, teamId, slackTeamId = "", isC
         <div className="flex items-center justify-between mb-4">
           <h4 className="text-lg font-semibold text-foreground flex items-center gap-2">
             <Hash className="h-5 w-5 text-muted-foreground" />
-            Monitored Channels
+            {t("monitoredChannels")}
           </h4>
           <button
             onClick={() => {
@@ -274,15 +279,15 @@ export function SlackSyncSettings({ integrationId, teamId, slackTeamId = "", isC
             className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
           >
             <Plus className="h-4 w-4" />
-            Add Channel
+            {t("addChannel")}
           </button>
         </div>
 
         {configuredChannels.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <Hash className="h-12 w-12 mx-auto mb-3 opacity-50" />
-            <p>No channels configured for monitoring</p>
-            <p className="text-sm mt-1">Add channels to start syncing Slack messages</p>
+            <p>{t("noChannels")}</p>
+            <p className="text-sm mt-1">{t("noChannelsHint")}</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -300,19 +305,19 @@ export function SlackSyncSettings({ integrationId, teamId, slackTeamId = "", isC
                       {config.auto_parse_standups && (
                         <span className="flex items-center gap-1">
                           <MessageSquare className="h-3 w-3" />
-                          Standups
+                          {t("standups")}
                         </span>
                       )}
                       {config.auto_parse_task_refs && (
                         <span className="flex items-center gap-1">
                           <Clock className="h-3 w-3" />
-                          Tasks
+                          {t("tasks")}
                         </span>
                       )}
                       {config.auto_parse_blockers && (
                         <span className="flex items-center gap-1">
                           <AlertTriangle className="h-3 w-3" />
-                          Blockers
+                          {t("blockers")}
                         </span>
                       )}
                     </div>
@@ -320,6 +325,7 @@ export function SlackSyncSettings({ integrationId, teamId, slackTeamId = "", isC
                 </div>
                 <button
                   onClick={() => handleRemoveChannel(config.id)}
+                  aria-label={t("removeChannel")}
                   className="p-2 text-muted-foreground hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -330,11 +336,11 @@ export function SlackSyncSettings({ integrationId, teamId, slackTeamId = "", isC
         )}
       </div>
 
-      {/* Import History */}
+      {/* {t("importHistory")} */}
       <div className="bg-muted rounded-xl p-6 border border-border">
         <h4 className="text-lg font-semibold text-foreground flex items-center gap-2 mb-4">
           <Download className="h-5 w-5 text-muted-foreground" />
-          Import History
+          {t("importHistory")}
         </h4>
         <p className="text-muted-foreground mb-4">
           Import existing Slack messages from configured channels. This is a one-time operation
@@ -342,7 +348,7 @@ export function SlackSyncSettings({ integrationId, teamId, slackTeamId = "", isC
         </p>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <label className="text-sm text-muted-foreground">Days to import:</label>
+            <label className="text-sm text-muted-foreground">{t("daysToImport")}</label>
             <select
               value={importDays}
               onChange={(e) => setImportDays(Number(e.target.value))}
@@ -361,30 +367,35 @@ export function SlackSyncSettings({ integrationId, teamId, slackTeamId = "", isC
             className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
           >
             <Download className={`h-4 w-4 ${isImporting ? "animate-bounce" : ""}`} />
-            {isImporting ? "Importing..." : "Import History"}
+            {isImporting ? t("importing") : t("importHistory")}
           </button>
         </div>
         {configuredChannels.length === 0 && (
           <p className="text-sm text-yellow-400 mt-2">
-            Configure channels above before importing history.
+            {t("configureFirst")}
           </p>
         )}
       </div>
 
-      {/* Add Channel Modal */}
+      {/* {t("addChannel")} Modal */}
       {showAddChannel && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-muted rounded-xl p-6 w-full max-w-md mx-4 border border-border">
-            <h3 className="text-lg font-semibold text-foreground mb-4">Add Channel to Monitor</h3>
+        <Dialog
+          open
+          onOpenChange={(next) => {
+            if (!next) setShowAddChannel(false);
+          }}
+        >
+          <DialogContent className="max-w-md" aria-describedby={undefined}>
+            <DialogTitle className="text-lg font-semibold text-foreground mb-4">{t("addChannelTitle")}</DialogTitle>
 
             <div className="space-y-4">
               {/* Channel Select */}
               <div>
-                <label className="block text-sm text-muted-foreground mb-2">Select Channel</label>
+                <label className="block text-sm text-muted-foreground mb-2">{t("selectChannel")}</label>
                 {isLoadingChannels ? (
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <RefreshCw className="h-4 w-4 animate-spin" />
-                    Loading channels...
+                    {t("loadingChannels")}
                   </div>
                 ) : (
                   <select
@@ -392,7 +403,7 @@ export function SlackSyncSettings({ integrationId, teamId, slackTeamId = "", isC
                     onChange={(e) => setSelectedChannel(e.target.value)}
                     className="w-full px-3 py-2 bg-accent border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="">Select a channel...</option>
+                    <option value="">{t("chooseChannel")}</option>
                     {channels
                       .filter((c) => !configuredChannels.some((cc) => cc.channel_id === c.id))
                       .map((channel) => (
@@ -404,9 +415,9 @@ export function SlackSyncSettings({ integrationId, teamId, slackTeamId = "", isC
                 )}
               </div>
 
-              {/* Channel Type */}
+              {/* {t("channelType")} */}
               <div>
-                <label className="block text-sm text-muted-foreground mb-2">Channel Type</label>
+                <label className="block text-sm text-muted-foreground mb-2">{t("channelType")}</label>
                 <div className="flex gap-2">
                   {(["team", "standup", "project"] as const).map((type) => (
                     <button
@@ -427,7 +438,7 @@ export function SlackSyncSettings({ integrationId, teamId, slackTeamId = "", isC
 
               {/* Auto Parse Options */}
               <div>
-                <label className="block text-sm text-muted-foreground mb-2">Auto-Parse Options</label>
+                <label className="block text-sm text-muted-foreground mb-2">{t("autoParse")}</label>
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
                     <input
@@ -436,7 +447,7 @@ export function SlackSyncSettings({ integrationId, teamId, slackTeamId = "", isC
                       onChange={(e) => setAutoParseStandups(e.target.checked)}
                       className="rounded bg-accent border-border text-blue-500 focus:ring-blue-500"
                     />
-                    Parse standups automatically
+                    {t("parseStandups")}
                   </label>
                   <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
                     <input
@@ -445,7 +456,7 @@ export function SlackSyncSettings({ integrationId, teamId, slackTeamId = "", isC
                       onChange={(e) => setAutoParseTaskRefs(e.target.checked)}
                       className="rounded bg-accent border-border text-blue-500 focus:ring-blue-500"
                     />
-                    Parse task references (TASK-123, etc.)
+                    {t("parseTasks")}
                   </label>
                   <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
                     <input
@@ -454,7 +465,7 @@ export function SlackSyncSettings({ integrationId, teamId, slackTeamId = "", isC
                       onChange={(e) => setAutoParseBlockers(e.target.checked)}
                       className="rounded bg-accent border-border text-blue-500 focus:ring-blue-500"
                     />
-                    Detect blockers and impediments
+                    {t("detectBlockers")}
                   </label>
                 </div>
               </div>
@@ -468,18 +479,18 @@ export function SlackSyncSettings({ integrationId, teamId, slackTeamId = "", isC
                 }}
                 className="px-4 py-2 bg-accent text-foreground rounded-lg hover:bg-muted transition"
               >
-                Cancel
+                {tc("cancel")}
               </button>
               <button
                 onClick={handleAddChannel}
                 disabled={!selectedChannel}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
               >
-                Add Channel
+                {t("addChannel")}
               </button>
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

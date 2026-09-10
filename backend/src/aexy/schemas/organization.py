@@ -74,11 +74,6 @@ class DepartmentAccessProfileUpdate(BaseModel):
         None,
         description="Explicit profile: {app_id: {enabled: bool, modules: {module_id: bool}}}",
     )
-    default_persona: str | None = Field(
-        None,
-        max_length=32,
-        description="Default sidebar view for people whose primary department this is",
-    )
 
 
 class DepartmentAccessProfileResponse(BaseModel):
@@ -88,7 +83,6 @@ class DepartmentAccessProfileResponse(BaseModel):
     department_name: str
     access_profile_slug: str | None = None
     app_config: dict = Field(default_factory=dict)
-    default_persona: str | None = None
     # Apps the profile grants, for a one-line summary in the UI.
     enabled_app_ids: list[str] = Field(default_factory=list)
     member_count: int = 0
@@ -147,7 +141,6 @@ class DepartmentResponse(BaseModel):
     # department list is rendered in places that have no use for it.
     access_profile_slug: str | None = None
     has_access_profile: bool = False
-    default_persona: str | None = None
     created_at: datetime
     updated_at: datetime
 

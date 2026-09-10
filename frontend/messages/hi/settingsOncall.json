@@ -3,6 +3,26 @@
     "title": "ऑन-कॉल",
     "description": "{team} के लिए इंसिडेंट पर कौन और कब प्रतिक्रिया देता है। शिफ़्ट शुरू होने से पहले सूचना दी जाती है।",
     "fallbackTeam": "इस टीम",
-    "configure": "कॉन्फ़िगर करें"
+    "configure": "कॉन्फ़िगर करें",
+    "loading": "लोड हो रहा है…",
+    "noWorkspace": "कोई वर्कस्पेस चयनित नहीं",
+    "orgSettingsCta": "संगठन सेटिंग्स पर जाएँ",
+    "notEnabled": "ऑन-कॉल सक्षम नहीं",
+    "timezonePrefix": "समय क्षेत्र:",
+    "currentStatus": "वर्तमान स्थिति",
+    "googleCalendar": "Google Calendar",
+    "configuration": "कॉन्फ़िगरेशन",
+    "timezone": "समय क्षेत्र",
+    "notifyBefore": "शिफ़्ट से पहले सूचित करें (मिनट)",
+    "syncToCalendar": "कैलेंडर से सिंक करें",
+    "selectCalendar": "एक कैलेंडर चुनें…",
+    "pendingSwaps": "लंबित स्वैप अनुरोध",
+    "schedule": "शेड्यूल",
+    "syncNow": "अभी सिंक करें",
+    "disconnect": "डिस्कनेक्ट करें",
+    "confirmDisable": "क्या आप वाकई इस टीम के लिए ऑन-कॉल बंद करना चाहते हैं? सभी शेड्यूल सुरक्षित रहेंगे।",
+    "enableOnCall": "ऑन-कॉल सक्षम करें",
+    "disableOnCall": "ऑन-कॉल अक्षम करें",
+    "connectGoogleCalendar": "Google Calendar कनेक्ट करें"
   }
 }

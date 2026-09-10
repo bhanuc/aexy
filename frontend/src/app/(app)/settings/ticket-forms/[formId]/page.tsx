@@ -36,6 +36,7 @@ import {
 } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 const PRIORITY_OPTIONS: { value: TicketPriority; label: string }[] = [
   { value: "low", label: "Low" },
@@ -93,6 +94,7 @@ function FieldEditor({
   isExpanded,
   onToggleExpand,
 }: FieldEditorProps) {
+  const t = useTranslations("settingsFormBuilder");
   const [localField, setLocalField] = useState(field);
   const [hasChanges, setHasChanges] = useState(false);
   const [optionInput, setOptionInput] = useState("");
@@ -159,7 +161,7 @@ function FieldEditor({
         </div>
         {hasChanges && (
           <span className="text-yellow-600 dark:text-yellow-400 text-xs px-2 py-1 bg-yellow-100 dark:bg-yellow-900/30 rounded">
-            Unsaved
+            {t("unsaved")}
           </span>
         )}
         {isExpanded ? (
@@ -174,7 +176,7 @@ function FieldEditor({
         <div className="border-t border-border p-4 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-muted-foreground mb-1">Label</label>
+              <label className="block text-sm text-muted-foreground mb-1">{t("label")}</label>
               <input
                 type="text"
                 value={localField.name}
@@ -183,7 +185,7 @@ function FieldEditor({
               />
             </div>
             <div>
-              <label className="block text-sm text-muted-foreground mb-1">Field Key</label>
+              <label className="block text-sm text-muted-foreground mb-1">{t("fieldKey")}</label>
               <input
                 type="text"
                 value={field.field_key}
@@ -194,23 +196,23 @@ function FieldEditor({
           </div>
 
           <div>
-            <label className="block text-sm text-muted-foreground mb-1">Placeholder</label>
+            <label className="block text-sm text-muted-foreground mb-1">{t("placeholder")}</label>
             <input
               type="text"
               value={localField.placeholder || ""}
               onChange={(e) => handleChange("placeholder", e.target.value)}
-              placeholder="Enter placeholder text..."
+              placeholder={t("placeholderPlaceholder")}
               className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:border-purple-500"
             />
           </div>
 
           <div>
-            <label className="block text-sm text-muted-foreground mb-1">Help Text</label>
+            <label className="block text-sm text-muted-foreground mb-1">{t("helpText")}</label>
             <input
               type="text"
               value={localField.help_text || ""}
               onChange={(e) => handleChange("help_text", e.target.value)}
-              placeholder="Additional instructions for this field..."
+              placeholder={t("helpTextPlaceholder")}
               className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:border-purple-500"
             />
           </div>
@@ -224,14 +226,14 @@ function FieldEditor({
               className="w-4 h-4 rounded border-border bg-muted text-purple-500 focus:ring-purple-500"
             />
             <label htmlFor={`required-${field.id}`} className="text-foreground text-sm">
-              Required field
+              {t("requiredField")}
             </label>
           </div>
 
           {/* Options for select/multiselect */}
           {(field.field_type === "select" || field.field_type === "multiselect") && (
             <div>
-              <label className="block text-sm text-muted-foreground mb-2">Options</label>
+              <label className="block text-sm text-muted-foreground mb-2">{t("options")}</label>
               <div className="space-y-2 mb-3">
                 {(localField.options || []).map((option, index) => (
                   <div key={index} className="flex items-center gap-2">
@@ -247,6 +249,7 @@ function FieldEditor({
                     />
                     <button
                       onClick={() => handleRemoveOption(index)}
+                      aria-label={t("removeOption")}
                       className="p-2 text-muted-foreground hover:text-red-400 hover:bg-accent rounded-lg transition"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -260,11 +263,12 @@ function FieldEditor({
                   value={optionInput}
                   onChange={(e) => setOptionInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleAddOption()}
-                  placeholder="Add option..."
+                  placeholder={t("addOptionPlaceholder")}
                   className="flex-1 px-3 py-2 bg-muted border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:border-purple-500"
                 />
                 <button
                   onClick={handleAddOption}
+                  aria-label={t("addOption")}
                   className="px-3 py-2 bg-muted hover:bg-accent text-foreground rounded-lg transition"
                 >
                   <Plus className="h-4 w-4" />
@@ -310,6 +314,7 @@ function FieldEditor({
 
 export default function FormBuilderPage() {
   const t = useTranslations("settingsFormBuilder");
+  const tc = useTranslations("common");
   const router = useRouter();
   const params = useParams();
   const formId = params.formId as string;
@@ -434,12 +439,12 @@ export default function FormBuilderPage() {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="text-center">
-          <p className="text-foreground mb-4">Form not found</p>
+          <p className="text-foreground mb-4">{t("notFound")}</p>
           <Link
             href="/settings/ticket-forms"
             className="text-purple-400 hover:text-purple-300"
           >
-            Back to Forms
+            {t("backToForms")}
           </Link>
         </div>
       </div>
@@ -489,7 +494,7 @@ export default function FormBuilderPage() {
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            Fields
+            {t("tabFields")}
           </button>
           <button
             onClick={() => setActiveTab("settings")}
@@ -500,7 +505,7 @@ export default function FormBuilderPage() {
             }`}
           >
             <Settings className="h-4 w-4" />
-            Settings
+            {t("tabSettings")}
           </button>
         </div>
 
@@ -527,17 +532,17 @@ export default function FormBuilderPage() {
                 ))
             ) : (
               <div className="bg-card rounded-xl p-8 text-center border border-border">
-                <p className="text-muted-foreground mb-4">No fields yet. Add your first field to get started.</p>
+                <p className="text-muted-foreground mb-4">{t("noFields")}</p>
               </div>
             )}
 
-            {/* Add Field Button */}
+            {/* {t("addField")} Button */}
             <button
               onClick={() => setShowAddField(true)}
               className="w-full p-4 border-2 border-dashed border-border rounded-xl text-muted-foreground hover:text-foreground hover:border-border transition flex items-center justify-center gap-2"
             >
               <Plus className="h-5 w-5" />
-              Add Field
+              {t("addField")}
             </button>
           </div>
         )}
@@ -546,7 +551,7 @@ export default function FormBuilderPage() {
         {activeTab === "settings" && (
           <div className="bg-card rounded-xl border border-border p-6 space-y-6">
             <div>
-              <label className="block text-sm text-muted-foreground mb-1">Form Name</label>
+              <label className="block text-sm text-muted-foreground mb-1">{t("formName")}</label>
               <input
                 type="text"
                 value={formSettings.name}
@@ -556,7 +561,7 @@ export default function FormBuilderPage() {
             </div>
 
             <div>
-              <label className="block text-sm text-muted-foreground mb-1">Description</label>
+              <label className="block text-sm text-muted-foreground mb-1">{t("description")}</label>
               <textarea
                 value={formSettings.description}
                 onChange={(e) => handleSettingsChange("description", e.target.value)}
@@ -574,12 +579,12 @@ export default function FormBuilderPage() {
                 className="w-4 h-4 rounded border-border bg-muted text-purple-500 focus:ring-purple-500"
               />
               <label htmlFor="is_active" className="text-foreground">
-                Form is active and accepting submissions
+                {t("isActive")}
               </label>
             </div>
 
             <div>
-              <label className="block text-sm text-muted-foreground mb-2">Authentication Mode</label>
+              <label className="block text-sm text-muted-foreground mb-2">{t("authMode")}</label>
               <div className="space-y-2">
                 <label className="flex items-center gap-3 p-3 bg-muted rounded-lg cursor-pointer hover:bg-accent transition">
                   <input
@@ -591,8 +596,8 @@ export default function FormBuilderPage() {
                     className="text-purple-500 focus:ring-purple-500"
                   />
                   <div>
-                    <p className="text-foreground font-medium">Anonymous</p>
-                    <p className="text-muted-foreground text-sm">Anyone can submit without verification</p>
+                    <p className="text-foreground font-medium">{t("anonymous")}</p>
+                    <p className="text-muted-foreground text-sm">{t("anonymousHint")}</p>
                   </div>
                 </label>
                 <label className="flex items-center gap-3 p-3 bg-muted rounded-lg cursor-pointer hover:bg-accent transition">
@@ -605,8 +610,8 @@ export default function FormBuilderPage() {
                     className="text-purple-500 focus:ring-purple-500"
                   />
                   <div>
-                    <p className="text-foreground font-medium">Email Verification</p>
-                    <p className="text-muted-foreground text-sm">Submitters must verify their email before submission</p>
+                    <p className="text-foreground font-medium">{t("emailVerification")}</p>
+                    <p className="text-muted-foreground text-sm">{t("emailVerificationHint")}</p>
                   </div>
                 </label>
               </div>
@@ -621,23 +626,23 @@ export default function FormBuilderPage() {
                 className="w-4 h-4 rounded border-border bg-muted text-purple-500 focus:ring-purple-500"
               />
               <label htmlFor="require_email" className="text-foreground">
-                Require email address (even in anonymous mode)
+                {t("requireEmail")}
               </label>
             </div>
 
-            {/* Ticket Defaults Section */}
+            {/* {t("ticketDefaults")} Section */}
             <div className="pt-4 border-t border-border">
-              <h3 className="text-foreground font-medium mb-4">Ticket Defaults</h3>
+              <h3 className="text-foreground font-medium mb-4">{t("ticketDefaults")}</h3>
 
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
-                  <label className="block text-sm text-muted-foreground mb-1">Default Priority</label>
+                  <label className="block text-sm text-muted-foreground mb-1">{t("defaultPriority")}</label>
                   <select
                     value={formSettings.default_priority || ""}
                     onChange={(e) => handleSettingsChange("default_priority", e.target.value || undefined)}
                     className="w-full px-4 py-2 bg-muted border border-border rounded-lg text-foreground focus:outline-none focus:border-purple-500"
                   >
-                    <option value="">No default</option>
+                    <option value="">{t("noDefault")}</option>
                     {PRIORITY_OPTIONS.map((opt) => (
                       <option key={opt.value} value={opt.value}>
                         {opt.label}
@@ -646,13 +651,13 @@ export default function FormBuilderPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm text-muted-foreground mb-1">Default Severity</label>
+                  <label className="block text-sm text-muted-foreground mb-1">{t("defaultSeverity")}</label>
                   <select
                     value={formSettings.default_severity || ""}
                     onChange={(e) => handleSettingsChange("default_severity", e.target.value || undefined)}
                     className="w-full px-4 py-2 bg-muted border border-border rounded-lg text-foreground focus:outline-none focus:border-purple-500"
                   >
-                    <option value="">No default</option>
+                    <option value="">{t("noDefault")}</option>
                     {SEVERITY_OPTIONS.map((opt) => (
                       <option key={opt.value} value={opt.value}>
                         {opt.label}
@@ -671,10 +676,10 @@ export default function FormBuilderPage() {
                   className="w-4 h-4 rounded border-border bg-card text-purple-500 focus:ring-purple-500"
                 />
                 <label htmlFor="auto_assign_oncall" className="text-foreground">
-                  Auto-assign to on-call person
+                  {t("autoAssignOncall")}
                 </label>
                 <span className="text-muted-foreground text-sm ml-2">
-                  Tickets will be automatically assigned to whoever is currently on-call
+                  {t("autoAssignHint")}
                 </span>
               </div>
 
@@ -687,27 +692,27 @@ export default function FormBuilderPage() {
                   className="w-4 h-4 rounded border-border bg-card text-purple-500 focus:ring-purple-500"
                 />
                 <label htmlFor="default_share_enabled" className="text-foreground">
-                  Create a public share link for new tickets
+                  {t("publicShareLink")}
                 </label>
                 <span className="text-muted-foreground text-sm ml-2">
-                  Every ticket from this form gets a shareable read-only link automatically
+                  {t("publicShareHint")}
                 </span>
               </div>
             </div>
 
             <div>
-              <label className="block text-sm text-muted-foreground mb-1">Success Message</label>
+              <label className="block text-sm text-muted-foreground mb-1">{t("successMessage")}</label>
               <textarea
                 value={formSettings.success_message}
                 onChange={(e) => handleSettingsChange("success_message", e.target.value)}
                 rows={2}
-                placeholder="Thank you for your submission!"
+                placeholder={t("successPlaceholder")}
                 className="w-full px-4 py-2 bg-muted border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:border-purple-500 resize-none"
               />
             </div>
 
             <div>
-              <label className="block text-sm text-muted-foreground mb-1">Public URL</label>
+              <label className="block text-sm text-muted-foreground mb-1">{t("publicUrl")}</label>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -717,6 +722,7 @@ export default function FormBuilderPage() {
                 />
                 <button
                   onClick={handleCopyUrl}
+                  aria-label={t("copyFormUrl")}
                   className="px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg transition"
                 >
                   <Copy className="h-4 w-4" />
@@ -752,11 +758,16 @@ export default function FormBuilderPage() {
         )}
       </div>
 
-      {/* Add Field Modal */}
+      {/* {t("addField")} Modal */}
       {showAddField && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-card rounded-xl p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto">
-            <h3 className="text-lg font-medium text-foreground mb-4">Add Field</h3>
+        <Dialog
+          open
+          onOpenChange={(next) => {
+            if (!next) setShowAddField(false);
+          }}
+        >
+          <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto" aria-describedby={undefined}>
+            <DialogTitle className="text-lg font-medium text-foreground mb-4">{t("addField")}</DialogTitle>
             <div className="grid grid-cols-2 gap-3">
               {(Object.keys(FIELD_TYPE_CONFIG) as TicketFieldType[]).map((type) => {
                 const config = FIELD_TYPE_CONFIG[type];
@@ -783,11 +794,11 @@ export default function FormBuilderPage() {
                 onClick={() => setShowAddField(false)}
                 className="px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg transition"
               >
-                Cancel
+                {tc("cancel")}
               </button>
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
     </SettingsPage>
   );

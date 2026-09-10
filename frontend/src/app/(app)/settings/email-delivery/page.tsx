@@ -45,6 +45,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function DeliveryRateBar({ rate }: { rate: number }) {
+  const t = useTranslations("settingsEmailDelivery");
   const percentage = Math.round(rate * 100);
   const getColor = () => {
     if (percentage >= 95) return "bg-emerald-500";
@@ -55,7 +56,7 @@ function DeliveryRateBar({ rate }: { rate: number }) {
   return (
     <div className="space-y-2">
       <div className="flex justify-between text-sm">
-        <span className="text-muted-foreground">Delivery Rate</span>
+        <span className="text-muted-foreground">{t("deliveryRate")}</span>
         <span className="text-foreground font-medium">{percentage}%</span>
       </div>
       <div className="h-2 bg-muted rounded-full overflow-hidden">
@@ -90,8 +91,8 @@ function StatCard({
 
 
 function EnterpriseUpgradePrompt() {
-  const router = useRouter();
   const t = useTranslations("settingsEmailDelivery");
+  const router = useRouter();
 
   return (
     <SettingsPage title={t("title")} description={t("description")}>
@@ -100,7 +101,7 @@ function EnterpriseUpgradePrompt() {
           <div className="p-4 bg-amber-500/20 rounded-full mb-6">
             <Crown className="h-12 w-12 text-amber-500" />
           </div>
-          <h2 className="text-2xl font-bold text-foreground mb-3">Enterprise Feature</h2>
+          <h2 className="text-2xl font-bold text-foreground mb-3">{t("enterpriseFeature")}</h2>
           <p className="text-muted-foreground mb-8 max-w-md">
             Email Delivery monitoring is available on the Enterprise plan. Upgrade to monitor
             email delivery status, view logs, and track deliverability metrics.
@@ -110,7 +111,7 @@ function EnterpriseUpgradePrompt() {
               onClick={() => router.push("/settings/billing")}
               className="px-6 py-3 bg-amber-500 hover:bg-amber-400 text-black font-medium rounded-lg transition"
             >
-              Upgrade to Enterprise
+              {t("upgrade")}
             </button>
             <p className="text-muted-foreground text-sm">
               Or{" "}
@@ -123,31 +124,31 @@ function EnterpriseUpgradePrompt() {
           {/* Feature Preview */}
           <div className="mt-12 w-full max-w-lg">
             <h3 className="text-sm font-medium text-muted-foreground mb-4">
-              What you&apos;ll get with Enterprise:
+              {t("enterpriseIntro")}
             </h3>
             <ul className="text-left space-y-3">
               <li className="flex items-start gap-3">
                 <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
                 <span className="text-foreground">
-                  Real-time email delivery monitoring and status tracking
+                  {t("benefit1")}
                 </span>
               </li>
               <li className="flex items-start gap-3">
                 <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
                 <span className="text-foreground">
-                  Delivery rate analytics and bounce tracking
+                  {t("benefit2")}
                 </span>
               </li>
               <li className="flex items-start gap-3">
                 <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
                 <span className="text-foreground">
-                  Email log history for all workspace notifications
+                  {t("benefit3")}
                 </span>
               </li>
               <li className="flex items-start gap-3">
                 <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
                 <span className="text-foreground">
-                  Filter and search by status, recipient, and type
+                  {t("benefit4")}
                 </span>
               </li>
             </ul>
@@ -322,7 +323,7 @@ export default function EmailDeliverySettingsPage() {
               className="flex items-center gap-2 px-3 py-2 bg-card border border-border rounded-lg text-foreground hover:text-foreground hover:bg-accent transition"
             >
               <RefreshCw className="h-4 w-4" />
-              Refresh
+              {t("refresh")}
             </button>
           </div>
         </>
@@ -343,11 +344,11 @@ export default function EmailDeliverySettingsPage() {
         ) : statsError ? (
           <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 text-red-400 flex items-center gap-2">
             <AlertCircle className="h-5 w-5" />
-            Failed to load email statistics
+            {t("statsFailed")}
           </div>
         ) : stats ? (
           <>
-            {/* Delivery Rate */}
+            {/* {t("deliveryRate")} */}
             <div className="bg-card rounded-xl border border-border p-5">
               <DeliveryRateBar rate={stats.delivery_rate} />
               <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -378,32 +379,32 @@ export default function EmailDeliverySettingsPage() {
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <div className="bg-card rounded-lg p-4 border border-border">
                 <p className="text-emerald-400 text-2xl font-bold">{stats.total_delivered}</p>
-                <p className="text-muted-foreground text-sm">Delivered</p>
+                <p className="text-muted-foreground text-sm">{t("delivered")}</p>
               </div>
               <div className="bg-card rounded-lg p-4 border border-border">
                 <p className="text-blue-400 text-2xl font-bold">{stats.total_sent}</p>
-                <p className="text-muted-foreground text-sm">Sent</p>
+                <p className="text-muted-foreground text-sm">{t("sent")}</p>
               </div>
               <div className="bg-card rounded-lg p-4 border border-border">
                 <p className="text-yellow-400 text-2xl font-bold">{stats.total_pending}</p>
-                <p className="text-muted-foreground text-sm">Pending</p>
+                <p className="text-muted-foreground text-sm">{t("pending")}</p>
               </div>
               <div className="bg-card rounded-lg p-4 border border-border">
                 <p className="text-orange-400 text-2xl font-bold">{stats.total_bounced}</p>
-                <p className="text-muted-foreground text-sm">Bounced</p>
+                <p className="text-muted-foreground text-sm">{t("bounced")}</p>
               </div>
               <div className="bg-card rounded-lg p-4 border border-border">
                 <p className="text-red-400 text-2xl font-bold">{stats.total_failed}</p>
-                <p className="text-muted-foreground text-sm">Failed</p>
+                <p className="text-muted-foreground text-sm">{t("failed")}</p>
               </div>
             </div>
           </>
         ) : null}
 
-        {/* Email Logs */}
+        {/* {t("logsHeading")} */}
         <div className="bg-card rounded-xl border border-border overflow-hidden">
           <div className="px-5 py-4 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <h2 className="text-lg font-semibold text-foreground">Email Logs</h2>
+            <h2 className="text-lg font-semibold text-foreground">{t("logsHeading")}</h2>
             <div className="flex items-center gap-2">
               <Filter className="h-4 w-4 text-muted-foreground" />
               <select
@@ -426,7 +427,7 @@ export default function EmailDeliverySettingsPage() {
           {logsError ? (
             <div className="flex items-center justify-center h-64 text-red-400">
               <AlertCircle className="h-5 w-5 mr-2" />
-              Failed to load email logs
+              {t("logsFailed")}
             </div>
           ) : (
             <DataTable<WorkspaceEmailLog>
@@ -437,7 +438,7 @@ export default function EmailDeliverySettingsPage() {
               skeletonRows={5}
               emptyIcon={<Mail className="h-12 w-12" />}
               emptyTitle="No email logs found"
-              emptyDescription={statusFilter ? "Try clearing the status filter" : undefined}
+              emptyDescription={statusFilter ? t("clearFilterHint") : undefined}
               currentPage={page}
               totalPages={emailLogs ? Math.ceil(emailLogs.total / 25) : 1}
               totalItems={emailLogs?.total}
