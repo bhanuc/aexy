@@ -7,6 +7,15 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: aexy
+      # postgres:18 keeps its data under a major-version directory and refuses
+      # a volume mounted directly at the legacy /var/lib/postgresql/data — a
+      # fresh `docker-compose up` used to fail outright with "there appears to
+      # be PostgreSQL data in: /var/lib/postgresql/data (unused mount/volume)".
+      # Keeping the mount point (existing volumes are named for it) and putting
+      # PGDATA one level down satisfies it. The image's entrypoint wrapper
+      # restores the older-cluster check that a non-default PGDATA would
+      # otherwise switch off — see postgres/legacy-pgdata-guard.sh.
+      PGDATA: /var/lib/postgresql/data/pgdata
     ports:
       - "5432:5432"
     volumes:

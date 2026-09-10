@@ -120,7 +120,7 @@ export function TaskTableView({
                     <span
                       className="h-2 w-2 rounded-full"
                       style={{
-                        backgroundColor: status?.color ?? "var(--muted-foreground)",
+                        backgroundColor: status?.color ?? "hsl(var(--muted-foreground))",
                       }}
                     />
                     <span className="text-foreground text-xs">

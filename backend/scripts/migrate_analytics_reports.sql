@@ -4,6 +4,22 @@
 -- These models were registered in models/__init__.py but never had a
 -- migration, so every /api/v1/reports and /api/v1/exports call 500'd with
 -- "relation ... does not exist". This creates them idempotently.
+--
+-- `custom_reports.organization_id` below is the shape this table had when this
+-- migration was written. It has since been replaced by `workspace_id`
+-- (migrate_reports_workspace_scope.sql) and dropped
+-- (migrate_drop_reports_organization_id.sql), both of which run after this one
+-- alphabetically. So on an existing database this still describes the table it
+-- created, and its column is removed two migrations later.
+--
+-- On a *fresh* database it never gets that far. `main.py` runs create_all at
+-- startup, so by the time the runner reaches this file `custom_reports`
+-- already exists in the current model's shape — with `workspace_id`, without
+-- `organization_id`. The CREATE TABLE below is then a no-op, and the index on
+-- `organization_id` used to fail with `column "organization_id" does not
+-- exist`, which stopped the runner dead at migration 29 of 185. Its index is
+-- therefore guarded on the column being present. Nothing is lost by skipping
+-- it: the column it indexes is dropped before this run finishes.
 
 -- 1. Custom reports ---------------------------------------------------------
 CREATE TABLE IF NOT EXISTS custom_reports (
@@ -27,8 +43,16 @@ CREATE TABLE IF NOT EXISTS custom_reports (
 
 CREATE INDEX IF NOT EXISTS idx_custom_reports_creator_id
     ON custom_reports(creator_id);
-CREATE INDEX IF NOT EXISTS idx_custom_reports_organization_id
-    ON custom_reports(organization_id);
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'custom_reports' AND column_name = 'organization_id'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_custom_reports_organization_id
+            ON custom_reports(organization_id);
+    END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_custom_reports_is_template
     ON custom_reports(is_template);
 

@@ -329,6 +329,10 @@ class ProjectTaskCreate(BaseModel):
     status: TaskStatus = "backlog"
     epic_id: str | None = None
     sprint_id: str | None = None  # Optional - can assign to sprint later
+    # Subtask parent. Absent from this schema until 0.37.3, so a caller that
+    # sent one got a sibling task and no error — Pydantic drops unknown fields
+    # by default. SprintTaskCreate and WorkspaceTaskCreate both had it.
+    parent_task_id: str | None = None
     mentioned_user_ids: list[str] = Field(default_factory=list)  # @mentions
     mentioned_file_paths: list[str] = Field(default_factory=list)  # #mentions
     start_date: datetime | None = None

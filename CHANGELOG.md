@@ -5,6 +5,169 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.37.3] - 2026-09-10
+
+A fresh `docker-compose up` starts, all 185 migrations apply, chart gridlines
+and status dots are visible again, and a subtask can no longer be parented to a
+task on another board.
+
+### Fixed: a fresh `docker-compose up` could not start the database
+
+Cloning the repository and running `docker-compose up -d` never got a database.
+Postgres exited immediately with
+
+    Error: in 18+, these Docker images are configured to store database data in
+           a format which is compatible with "pg_ctlcluster" ...
+           there appears to be PostgreSQL data in:
+             /var/lib/postgresql/data (unused mount/volume)
+
+and the backend, the Temporal worker and everything behind them never came up.
+The postgres 18 images keep their data under a major-version directory and
+reject a volume mounted straight at the old path, which is exactly what the
+compose file did. Nothing downstream of the database could be run or tested on
+a new machine.
+
+`PGDATA` now points one level below the mount, at `pgdata/`, which the image
+accepts. The mount point is unchanged, so existing volumes keep their name.
+
+That change had a trap of its own worth describing, because it is the kind that
+looks like data loss. Moving `PGDATA` off the image default also switches off
+the entrypoint's "there is an older cluster here, run pg_upgrade" check — it
+only looks when `PGDATA` is where the image put it. On a volume written by a
+pre-18 image the server would have found nothing at the new path, created a
+fresh empty cluster beside the real data, and come up with an empty database.
+Nothing would have been deleted, but it would read as total loss, and re-seeding
+to "fix" it would have made that true. The image now reinstates that check
+itself: it refuses to start, leaves the old cluster untouched, and prints the
+backup and dump/restore steps. Verified against a fabricated PostgreSQL 17
+volume — with the guard the container exits and the data is intact; without it,
+an empty cluster appears alongside it.
+
+### Fixed: the migration runner stopped at 29 of 185 on a new database
+
+`migrate_analytics_reports.sql` failed with `column "organization_id" does not
+exist`, and because the runner stops at the first failure, the 156 migrations
+after it never ran.
+
+The file creates `custom_reports` and indexes `organization_id`, which was that
+table's tenant column when it was written. It has since been replaced by
+`workspace_id` and dropped, by two migrations that run later in the same pass.
+On an existing database the sequence is fine. On a new one it never gets there:
+the app creates its tables from the models at startup, so by the time the runner
+reaches this file the table already exists in its modern shape, the
+`CREATE TABLE IF NOT EXISTS` does nothing, and the index names a column that was
+never there. That index is now conditional on the column existing — and nothing
+is lost by skipping it, since the column it indexes is dropped before the same
+run finishes.
+
+### Fixed: chart gridlines, axis labels and two status dots were invisible
+
+The theme palette is stored as HSL *components* — `--border: 140 8% 85%` — to
+be read as `hsl(var(--border))`. Five places read them bare, and a bare
+`var(--border)` is invalid the moment the browser computes it, so it paints
+nothing at all. The docs `/` menu was one (fixed in 0.37.2, where it made
+arrow-key navigation look broken); the rest were quieter:
+
+- **Reports** and **CRM pipeline analytics** lost their chart gridlines, both
+  axis labels and the tooltip background — the tooltip drew its text over
+  whatever was behind it.
+- The status dot in the **task table** and on the **agent detail** page
+  rendered invisible whenever it fell back to the token, leaving a status
+  label with nothing beside it.
+
+All five are wrapped now, and a test walks the source to keep it that way,
+naming the file, the line and the replacement. It is checked rather than
+remembered because the mistake is invisible in review: `bg-accent` works, so
+`var(--accent)` looks like it should.
+
+### Fixed: a subtask could be parented to a task on another board
+
+`POST /teams/{id}/tasks` had no `parent_task_id` field, so a caller that sent
+one got a top-level sibling and no error to say the field had been ignored. The
+other two create paths accepted a parent but never checked it, writing whatever
+id they were handed onto the row — so a subtree could straddle two projects, or
+two workspaces, which is the same inconsistency a cross-project move refuses
+outright, and the board owning the parent would show a child on a board it does
+not own.
+
+All three paths now share one guard: a parent must be a live, top-level task in
+the same workspace and on the same board. A parent that records no board is
+still accepted, because the sprint create path has never written one and
+rejecting those would break adding a subtask to an ordinary sprint task.
+
+### The docs editor's selection test now checks what was actually decided
+
+`docs-editor-bubble-menu.spec.ts` asserted a floating B/I bar near the
+selection. One was built and then deliberately removed: it wrapped Tippy.js,
+which appends its DOM into `document.body` outside the React tree, and every
+selection change left React trying to remove a node from a parent that no
+longer owned it — `removeChild: The node to be removed is not a child of this
+node` — taking the editor down. The toolbar is sticky, so the formatting it
+replaced never scrolls out of reach. The test could only ever be red.
+
+It now checks the things that matter: that a selection can be bolded and
+italicised, that the toolbar is still on screen sixty paragraphs down, and that
+churning the selection raises no reconciler error and portals nothing under
+`<body>` — which is what breaks if anyone reintroduces the crash.
+
+## [0.37.2] - 2026-09-10
+
+The `/` menu can be driven with the arrow keys, and a table or inline database
+can be taken back out of a document.
+
+### Fixed: the `/` block menu looked like it ignored the arrow keys
+
+Typing `/` in a document opens a menu of blocks to insert. Pressing Down or Up
+appeared to do nothing at all, so the only way to choose a block was to reach
+for the mouse. In the same menu the document's own text showed through from
+behind, because the menu had no background.
+
+The arrow keys were working the entire time. The menu is drawn with plain DOM
+and inline styles, and every colour in it was written as a bare
+`var(--popover)`, `var(--accent)`, `var(--muted-foreground)`. Those theme
+tokens hold HSL *components* — `--accent: 75 14% 89%` — and are meant to be
+read as `hsl(var(--accent))`. Used bare, each declaration is invalid the moment
+the browser computes it, so it paints nothing: no menu background, and no
+highlight on the row the arrow keys had just moved to. The selection was moving
+under an invisible highlight.
+
+The menu now paints its background and its highlight, and the highlighted row
+also carries `aria-selected`, so a screen reader announces the same movement a
+sighted reader can now see. Home and End jump to the ends of the list, Tab
+accepts the highlighted block the way Enter does, and when a query matches
+nothing the arrow keys fall through to the document instead of being swallowed.
+
+### Fixed: an inserted table or inline database could not be removed
+
+Both were one-way doors. The editor toolbar offered Insert Table and nothing to
+undo it with; the floating selection menu that would normally carry row and
+column controls had been removed earlier to fix a crash, and ProseMirror will
+not delete a table from inside a cell with Backspace. An inline database was
+worse: its node offered Collapse and, for a linked module table, Open in
+module, but no way out — and its "Add an inline database" placeholder led only
+forward, since every Cancel and Back inside it returned to that same prompt. A
+table or database inserted by accident stayed in the document for good.
+
+The toolbar now grows a table group whenever the caret is inside a table — add
+row, add column, delete row, delete column, delete table — and disappears again
+when it isn't. An inline database has a remove control in all three of its
+states: the placeholder, the collapsed card and the full table.
+
+Removing an inline database is a document edit, not a data deletion: the embed
+goes and the underlying table and all its rows stay, which is what the linked
+CRM and project cases require. It is undoable with the editor's own undo.
+
+### Docs editor and cross-project task moves now have end-to-end coverage
+
+Twenty-seven new end-to-end tests run against a real backend. They cover the
+`/` menu's keyboard path and the visibility of its highlight; removing tables,
+rows, columns and inline databases; every block the `/` menu can insert
+surviving a save and a reload, including an inline database keeping its table
+link and collapsed state; and moving a task from one project to another through
+the board and task detail, with the destination picker, the "Moved from"
+breadcrumb, the refusal to move a task that has subtasks, and the cascade that
+carries the subtree across.
+
 ## [0.37.1] - 2026-09-07
 
 Adding a status category to a project no longer empties the project's category

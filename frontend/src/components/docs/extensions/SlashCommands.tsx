@@ -3,8 +3,6 @@
 import { Extension } from "@tiptap/core";
 import Suggestion, { SuggestionProps, SuggestionKeyDownProps } from "@tiptap/suggestion";
 import tippy, { Instance as TippyInstance } from "tippy.js";
-import { createRoot, Root } from "react-dom/client";
-import { createElement } from "react";
 
 // ─── Command Definitions ───────────────────────────────────────────
 
@@ -157,8 +155,11 @@ class CommandListDOM {
 
   constructor() {
     this.element = document.createElement("div");
+    this.element.setAttribute("role", "listbox");
+    this.element.setAttribute("aria-label", "Insert block");
+    this.element.dataset.slashMenu = "";
     this.element.style.cssText =
-      "background:var(--popover);border:1px solid var(--border);border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,0.4);overflow:hidden;width:260px;max-height:320px;overflow-y:auto;";
+      "background:hsl(var(--popover));color:hsl(var(--popover-foreground));border:1px solid hsl(var(--border));border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,0.25);overflow:hidden;width:260px;max-height:320px;overflow-y:auto;";
   }
 
   update(items: SlashCommand[], onSelect: (item: SlashCommand) => void) {
@@ -174,7 +175,8 @@ class CommandListDOM {
 
     if (this.items.length === 0) {
       const empty = document.createElement("div");
-      empty.style.cssText = "padding:12px;font-size:13px;color:var(--muted-foreground);";
+      empty.style.cssText = "padding:12px;font-size:13px;color:hsl(var(--muted-foreground));";
+      empty.dataset.slashMenuEmpty = "";
       empty.textContent = "No commands found";
       this.element.appendChild(empty);
       return;
@@ -187,7 +189,7 @@ class CommandListDOM {
         lastCategory = item.category;
         const header = document.createElement("div");
         header.style.cssText =
-          "padding:10px 12px 4px;font-size:10px;font-weight:600;color:var(--muted-foreground);text-transform:uppercase;letter-spacing:0.05em;";
+          "padding:10px 12px 4px;font-size:10px;font-weight:600;color:hsl(var(--muted-foreground));text-transform:uppercase;letter-spacing:0.05em;";
         header.textContent = item.category;
         this.element.appendChild(header);
       }
@@ -196,21 +198,24 @@ class CommandListDOM {
       btn.style.cssText =
         "width:100%;display:flex;align-items:center;gap:10px;padding:8px 12px;text-align:left;border:none;background:transparent;cursor:pointer;transition:background 0.1s;font-family:inherit;";
       btn.dataset.index = String(idx);
+      btn.dataset.slashItem = item.id;
+      btn.type = "button";
+      btn.setAttribute("role", "option");
 
       const iconWrap = document.createElement("div");
       iconWrap.style.cssText =
-        "padding:6px;border-radius:6px;background:var(--muted);color:var(--muted-foreground);flex-shrink:0;display:flex;align-items:center;justify-content:center;";
+        "padding:6px;border-radius:6px;background:hsl(var(--muted));color:hsl(var(--muted-foreground));flex-shrink:0;display:flex;align-items:center;justify-content:center;";
       iconWrap.appendChild(createIcon(item.iconSvg));
 
       const textWrap = document.createElement("div");
       textWrap.style.cssText = "min-width:0;overflow:hidden;";
 
       const label = document.createElement("div");
-      label.style.cssText = "font-size:13px;font-weight:500;color:var(--foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+      label.style.cssText = "font-size:13px;font-weight:500;color:hsl(var(--foreground));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
       label.textContent = item.label;
 
       const desc = document.createElement("div");
-      desc.style.cssText = "font-size:11px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+      desc.style.cssText = "font-size:11px;color:hsl(var(--muted-foreground));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
       desc.textContent = item.description;
 
       textWrap.appendChild(label);
@@ -236,21 +241,64 @@ class CommandListDOM {
 
   private highlightSelected() {
     this.buttons.forEach((btn, i) => {
-      btn.style.background = i === this.selectedIndex ? "var(--accent)" : "transparent";
+      const selected = i === this.selectedIndex;
+      // `data-selected` is the source of truth: the background alone was
+      // painted with a raw `var(--accent)`, and because the theme tokens are
+      // bare HSL triplets (`--accent: 75 14% 89%`) that resolved to a
+      // guaranteed-invalid value and painted nothing. Arrow keys were moving
+      // the selection the whole time with no way to see it, which reads
+      // exactly like "arrow keys don't work". Keeping the attribute means the
+      // state is also assertable from a test without sampling pixels.
+      btn.dataset.selected = selected ? "true" : "false";
+      btn.setAttribute("aria-selected", selected ? "true" : "false");
+      btn.style.background = selected ? "hsl(var(--accent))" : "transparent";
+      btn.style.color = selected ? "hsl(var(--accent-foreground))" : "";
     });
   }
 
+  private moveSelection(delta: number) {
+    if (this.items.length === 0) return;
+    const count = this.items.length;
+    this.selectedIndex = (this.selectedIndex + delta + count) % count;
+    this.highlightSelected();
+    this.buttons[this.selectedIndex]?.scrollIntoView({ block: "nearest" });
+  }
+
   onKeyDown(event: KeyboardEvent): boolean {
+    // With no matches there is nothing to move through or accept. Returning
+    // false lets the keystroke fall through to the editor instead of being
+    // swallowed — and stops `% 0` turning selectedIndex into NaN.
+    if (this.items.length === 0) return false;
+
     if (event.key === "ArrowUp") {
-      this.selectedIndex = (this.selectedIndex + this.items.length - 1) % this.items.length;
+      this.moveSelection(-1);
+      return true;
+    }
+    if (event.key === "ArrowDown") {
+      this.moveSelection(1);
+      return true;
+    }
+    if (event.key === "Home") {
+      this.selectedIndex = 0;
+      this.highlightSelected();
+      this.buttons[0]?.scrollIntoView({ block: "nearest" });
+      return true;
+    }
+    if (event.key === "End") {
+      this.selectedIndex = this.items.length - 1;
       this.highlightSelected();
       this.buttons[this.selectedIndex]?.scrollIntoView({ block: "nearest" });
       return true;
     }
-    if (event.key === "ArrowDown") {
-      this.selectedIndex = (this.selectedIndex + 1) % this.items.length;
-      this.highlightSelected();
-      this.buttons[this.selectedIndex]?.scrollIntoView({ block: "nearest" });
+    // Tab accepts the highlighted item, matching the editors people arrive
+    // from; Shift+Tab steps backwards rather than leaving the menu.
+    if (event.key === "Tab") {
+      if (event.shiftKey) {
+        this.moveSelection(-1);
+        return true;
+      }
+      const tabItem = this.items[this.selectedIndex];
+      if (tabItem) this.onSelect?.(tabItem);
       return true;
     }
     if (event.key === "Enter") {

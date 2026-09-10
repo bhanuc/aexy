@@ -772,11 +772,9 @@ export default function AgentDetailPage() {
                         ? statusToneClass[lastExec.status] ?? "text-muted-foreground"
                         : "text-muted-foreground",
                     )}
-                    style={{
-                      backgroundColor: lastExec
-                        ? "currentColor"
-                        : "var(--muted-foreground)",
-                    }}
+                    // Both branches of the className above set a text colour,
+                    // so currentColor covers the no-execution case as well.
+                    style={{ backgroundColor: "currentColor" }}
                   />
                   {isRunning ? (
                     // motion-safe: gate the always-on ping so users with

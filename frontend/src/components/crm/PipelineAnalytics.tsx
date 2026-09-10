@@ -122,13 +122,13 @@ export function PipelineAnalytics({ workspaceId, pipeline }: PipelineAnalyticsPr
         ) : (
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={barData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
-              <XAxis dataKey="name" tick={{ fontSize: 12, fill: "var(--muted-foreground)" }} />
-              <YAxis tick={{ fontSize: 12, fill: "var(--muted-foreground)" }} />
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+              <XAxis dataKey="name" tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
+              <YAxis tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
               <Tooltip
                 contentStyle={{
-                  background: "var(--background)",
-                  border: "1px solid var(--border)",
+                  background: "hsl(var(--background))",
+                  border: "1px solid hsl(var(--border))",
                   borderRadius: 8,
                   fontSize: 12,
                 }}

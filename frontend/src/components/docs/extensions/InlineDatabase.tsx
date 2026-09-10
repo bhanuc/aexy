@@ -25,6 +25,7 @@ import {
   Mail,
   Star,
   X,
+  Trash2,
 } from "lucide-react";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useTables, useTableFields, useTableRecords } from "@/hooks/useTables";
@@ -82,9 +83,15 @@ export const InlineDatabase = Node.create({
 function CreateTablePrompt({
   onCreated,
   onLink,
+  onRemove,
 }: {
   onCreated: (id: string, scope?: string) => void;
   onLink: (id: string, scope?: string) => void;
+  /** Drops the whole node out of the document. The placeholder had no way
+   *  out before: every mode's Cancel/Back returned to "choose", and "choose"
+   *  offered only the three ways forward, so an inline database inserted by
+   *  accident was permanent. */
+  onRemove: () => void;
 }) {
   const { currentWorkspace } = useWorkspace();
   const workspaceId = currentWorkspace?.id || null;
@@ -213,7 +220,20 @@ function CreateTablePrompt({
   }
 
   return (
-    <div className="bg-muted/50 border border-dashed border-border rounded-lg p-6 flex flex-col items-center gap-3">
+    <div
+      className="relative bg-muted/50 border border-dashed border-border rounded-lg p-6 flex flex-col items-center gap-3"
+      data-inline-database-placeholder
+    >
+      <button
+        type="button"
+        onClick={onRemove}
+        title="Remove this database from the document"
+        aria-label="Remove this database from the document"
+        data-testid="inline-db-remove"
+        className="absolute right-2 top-2 p-1 rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+      >
+        <X className="h-4 w-4" />
+      </button>
       <Table2 className="h-8 w-8 text-muted-foreground" />
       <p className="text-sm text-muted-foreground">Add an inline database</p>
       <div className="flex gap-2">
@@ -248,10 +268,12 @@ function CollapsedTableCard({
   tableId,
   scope,
   onExpand,
+  onRemove,
 }: {
   tableId: string;
   scope?: string | null;
   onExpand: () => void;
+  onRemove: () => void;
 }) {
   const { currentWorkspace } = useWorkspace();
   const { tables } = useTables(currentWorkspace?.id || null);
@@ -259,21 +281,41 @@ function CollapsedTableCard({
   const scopeMeta = SCOPE_META[scope || table?.scope || "standalone"] || SCOPE_META.standalone;
   const Icon = table ? getObjectIcon(table.name) : scopeMeta.icon;
 
+  // A div rather than a button: the remove control has to live inside the
+  // card, and a button nested in a button is invalid HTML (React warns and
+  // the inner click target behaves inconsistently across browsers).
   return (
-    <button
-      onClick={onExpand}
-      className="w-full bg-muted/50 border border-border rounded-lg p-3 flex items-center gap-3 hover:border-purple-500/50 transition-colors"
-    >
-      <Icon className={`h-5 w-5 ${scopeMeta.color}`} />
-      <span className="font-medium text-foreground text-sm">{table?.name || "Database"}</span>
-      {scope && scope !== "standalone" && scope !== "document" && (
-        <span className={`text-[10px] px-1.5 py-0.5 rounded-full bg-accent ${scopeMeta.color}`}>
-          {scopeMeta.label}
+    <div className="w-full bg-muted/50 border border-border rounded-lg flex items-center gap-3 hover:border-purple-500/50 transition-colors">
+      <button
+        type="button"
+        onClick={onExpand}
+        className="flex flex-1 items-center gap-3 p-3 text-left min-w-0"
+      >
+        <Icon className={`h-5 w-5 ${scopeMeta.color} flex-shrink-0`} />
+        <span className="font-medium text-foreground text-sm truncate">
+          {table?.name || "Database"}
         </span>
-      )}
-      <span className="text-xs text-muted-foreground">{table?.record_count || 0} records</span>
-      <ChevronDown className="h-4 w-4 text-muted-foreground ml-auto" />
-    </button>
+        {scope && scope !== "standalone" && scope !== "document" && (
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-full bg-accent ${scopeMeta.color}`}>
+            {scopeMeta.label}
+          </span>
+        )}
+        <span className="text-xs text-muted-foreground whitespace-nowrap">
+          {table?.record_count || 0} records
+        </span>
+        <ChevronDown className="h-4 w-4 text-muted-foreground ml-auto flex-shrink-0" />
+      </button>
+      <button
+        type="button"
+        onClick={onRemove}
+        title="Remove this database from the document"
+        aria-label="Remove this database from the document"
+        data-testid="inline-db-remove"
+        className="mr-2 p-1.5 rounded text-muted-foreground hover:bg-accent hover:text-foreground flex-shrink-0"
+      >
+        <Trash2 className="h-4 w-4" />
+      </button>
+    </div>
   );
 }
 
@@ -539,7 +581,7 @@ function InlineTableView({ tableId }: { tableId: string }) {
 
 // Node View Component
 function InlineDatabaseView(props: ReactNodeViewProps) {
-  const { node, updateAttributes } = props;
+  const { node, updateAttributes, deleteNode } = props;
   const tableId = node.attrs.tableId as string | null;
   const scope = node.attrs.scope as string | null;
   const height = (node.attrs.height as number) || 400;
@@ -550,10 +592,11 @@ function InlineDatabaseView(props: ReactNodeViewProps) {
 
   if (!tableId) {
     return (
-      <NodeViewWrapper>
+      <NodeViewWrapper data-inline-database="" data-testid="inline-database-node">
         <CreateTablePrompt
           onCreated={(id, s) => updateAttributes({ tableId: id, scope: s || "document" })}
           onLink={(id, s) => updateAttributes({ tableId: id, scope: s || "standalone" })}
+          onRemove={deleteNode}
         />
       </NodeViewWrapper>
     );
@@ -561,11 +604,12 @@ function InlineDatabaseView(props: ReactNodeViewProps) {
 
   if (collapsed) {
     return (
-      <NodeViewWrapper>
+      <NodeViewWrapper data-inline-database="" data-testid="inline-database-node">
         <CollapsedTableCard
           tableId={tableId}
           scope={scope}
           onExpand={() => updateAttributes({ collapsed: false })}
+          onRemove={deleteNode}
         />
       </NodeViewWrapper>
     );
@@ -577,7 +621,7 @@ function InlineDatabaseView(props: ReactNodeViewProps) {
   const isModuleEmbed = effectiveScope === "crm" || effectiveScope === "project";
 
   return (
-    <NodeViewWrapper>
+    <NodeViewWrapper data-inline-database="" data-testid="inline-database-node">
       <div className="border border-border rounded-lg overflow-hidden my-4">
         {/* Toolbar */}
         <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 border-b border-border">
@@ -602,10 +646,28 @@ function InlineDatabaseView(props: ReactNodeViewProps) {
             </a>
           )}
           <button
+            type="button"
             onClick={() => updateAttributes({ collapsed: true })}
+            title="Collapse"
+            aria-label="Collapse database"
             className="p-1 hover:bg-accent rounded text-muted-foreground"
           >
             <ChevronUp className="h-4 w-4" />
+          </button>
+          {/* Removes the embed, not the table. A linked CRM/project table is
+              shared with its module, and a document-scoped one keeps its rows
+              — so this is a document edit, undoable with the editor's own
+              history. Without it there was no way to take an inline database
+              back out of a document at all. */}
+          <button
+            type="button"
+            onClick={deleteNode}
+            title="Remove this database from the document"
+            aria-label="Remove this database from the document"
+            data-testid="inline-db-remove"
+            className="p-1 hover:bg-accent rounded text-muted-foreground hover:text-destructive"
+          >
+            <Trash2 className="h-4 w-4" />
           </button>
         </div>
         {/* Table content */}

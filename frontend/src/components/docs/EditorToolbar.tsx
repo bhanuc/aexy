@@ -24,6 +24,11 @@ import {
   Image as ImageIcon,
   Table as TableIcon,
   Database,
+  Trash2,
+  Rows3,
+  Columns3,
+  BetweenHorizonalStart,
+  BetweenVerticalStart,
   Undo,
   Redo,
   Save,
@@ -85,6 +90,13 @@ export function EditorToolbar({ editor, onComment, onSave, editorMode = "rich", 
   const addInlineDatabase = useCallback(() => {
     editor.chain().focus().insertContent({ type: "inlineDatabase" }).run();
   }, [editor]);
+
+  // A table could be inserted but never taken out again: the toolbar offered
+  // only "Insert Table", the BubbleMenu that would normally carry row/column
+  // controls was removed (see the note in DocumentEditor.tsx), and ProseMirror
+  // will not let Backspace delete a table from a cell selection. So the whole
+  // table group lives here, shown only while the caret is actually inside one.
+  const inTable = editor.isActive("table");
 
   return (
     <div className="flex items-center gap-1 px-4 py-2">
@@ -268,6 +280,50 @@ export function EditorToolbar({ editor, onComment, onSave, editorMode = "rich", 
         </ToolbarButton>
       </ToolbarGroup>
 
+      {inTable && (
+        <>
+          <ToolbarDivider />
+          <ToolbarGroup>
+            <ToolbarButton
+              onClick={() => editor.chain().focus().addRowAfter().run()}
+              disabled={!editor.can().addRowAfter()}
+              tooltip="Add row below"
+            >
+              <BetweenHorizonalStart className="h-4 w-4" />
+            </ToolbarButton>
+            <ToolbarButton
+              onClick={() => editor.chain().focus().addColumnAfter().run()}
+              disabled={!editor.can().addColumnAfter()}
+              tooltip="Add column right"
+            >
+              <BetweenVerticalStart className="h-4 w-4" />
+            </ToolbarButton>
+            <ToolbarButton
+              onClick={() => editor.chain().focus().deleteRow().run()}
+              disabled={!editor.can().deleteRow()}
+              tooltip="Delete row"
+            >
+              <Rows3 className="h-4 w-4" />
+            </ToolbarButton>
+            <ToolbarButton
+              onClick={() => editor.chain().focus().deleteColumn().run()}
+              disabled={!editor.can().deleteColumn()}
+              tooltip="Delete column"
+            >
+              <Columns3 className="h-4 w-4" />
+            </ToolbarButton>
+            <ToolbarButton
+              onClick={() => editor.chain().focus().deleteTable().run()}
+              disabled={!editor.can().deleteTable()}
+              tooltip="Delete table"
+              testId="delete-table"
+            >
+              <Trash2 className="h-4 w-4" />
+            </ToolbarButton>
+          </ToolbarGroup>
+        </>
+      )}
+
       {onComment && (
         <ToolbarGroup>
           {/* Deliberately here and not a TipTap BubbleMenu — see the note further
@@ -389,6 +445,8 @@ interface ToolbarButtonProps {
   disabled?: boolean;
   tooltip?: string;
   shortcut?: string;
+  /** Stable hook for tests; tooltip text is presentation and can be reworded. */
+  testId?: string;
   children: React.ReactNode;
 }
 
@@ -398,6 +456,7 @@ function ToolbarButton({
   disabled = false,
   tooltip,
   shortcut,
+  testId,
   children,
 }: ToolbarButtonProps) {
   const [showTooltip, setShowTooltip] = useState(false);
@@ -407,6 +466,8 @@ function ToolbarButton({
       <button
         onClick={onClick}
         disabled={disabled}
+        data-testid={testId}
+        aria-label={tooltip}
         onMouseEnter={() => setShowTooltip(true)}
         onMouseLeave={() => setShowTooltip(false)}
         className={cn(

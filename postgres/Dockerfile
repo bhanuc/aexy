@@ -30,3 +30,18 @@ RUN LLVM_MAJOR="$(pg_config --configure | grep -oE 'llvm[0-9]+' | grep -oE '[0-9
  && cd / \
  && rm -rf /tmp/pgvector \
  && apk del .build-deps
+
+# postgres:18+ stores data under a major-version directory and rejects a volume
+# mounted straight at the legacy /var/lib/postgresql/data. `docker-compose.yml`
+# keeps that mount point (existing volumes are named for it) and sets PGDATA to
+# the pgdata/ subdirectory instead, which the entrypoint accepts.
+#
+# The catch is that a non-default PGDATA also disables the stock entrypoint's
+# "there is an older cluster here, run pg_upgrade" check, so a volume written by
+# an earlier image would quietly get a new empty cluster beside its real data.
+# This wrapper reinstates that check and then hands off to the real entrypoint.
+COPY legacy-pgdata-guard.sh /usr/local/bin/legacy-pgdata-guard.sh
+RUN chmod +x /usr/local/bin/legacy-pgdata-guard.sh
+
+ENTRYPOINT ["legacy-pgdata-guard.sh"]
+CMD ["postgres"]
