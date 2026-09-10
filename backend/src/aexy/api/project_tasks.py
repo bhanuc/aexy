@@ -247,6 +247,20 @@ async def create_project_task(
     """Create a new task at the project level (without sprint)."""
     team = await get_team_and_check_permission(team_id, current_user, db, "member")
 
+    # A subtask's parent has to be a live top-level task on this same board.
+    # `parent_task_id` was missing from ProjectTaskCreate until 0.37.3, so a
+    # caller that sent one silently got a sibling instead of a child.
+    try:
+        parent_task_id = await SprintTaskService(db).resolve_parent_task(
+            parent_task_id=data.parent_task_id,
+            workspace_id=str(team.workspace_id),
+            team_id=team_id,
+        )
+    except TaskValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=exc.code
+        )
+
     # Create the task
     task = SprintTask(
         id=str(uuid4()),
@@ -264,6 +278,7 @@ async def create_project_task(
         assignee_id=data.assignee_id,
         status=data.status,
         epic_id=data.epic_id,
+        parent_task_id=parent_task_id,
         mentioned_user_ids=data.mentioned_user_ids or [],
         mentioned_file_paths=data.mentioned_file_paths or [],
         start_date=data.start_date,

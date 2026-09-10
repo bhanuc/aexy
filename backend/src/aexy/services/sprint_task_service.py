@@ -221,6 +221,15 @@ class SprintTaskService:
         sprint = sprint_result.scalar_one_or_none()
         workspace_id = sprint.workspace_id if sprint else None
 
+        # Same parent guard the other two create paths use. Only checkable once
+        # the sprint has resolved, since that is what names the board.
+        if sprint is not None:
+            parent_task_id = await self.resolve_parent_task(
+                parent_task_id=parent_task_id,
+                workspace_id=str(sprint.workspace_id),
+                team_id=str(sprint.team_id),
+            )
+
         task = SprintTask(
             id=str(uuid4()),
             sprint_id=sprint_id,
@@ -1154,6 +1163,52 @@ class SprintTaskService:
         )
         row = (await self.db.execute(stmt)).first()
         return row[0] if row else "done"
+
+    async def resolve_parent_task(
+        self,
+        *,
+        parent_task_id: str | None,
+        workspace_id: str,
+        team_id: str,
+    ) -> str | None:
+        """Validate a subtask's parent and return it, or None if there is none.
+
+        A parent has to be a live task on the same board. Neither create path
+        checked this: the project-level create dropped `parent_task_id` from
+        its schema entirely (so a caller got a sibling task and no error), and
+        the workspace-level create accepted whatever id it was handed and wrote
+        it straight onto the row. That let a subtree straddle two projects —
+        the same inconsistency `move_to_project` refuses outright — and the
+        board that owns the parent would render a child it cannot reach.
+
+        Raises `TaskValidationError` with a stable code:
+          parent_task_not_found  — no such task, or archived
+          parent_task_other_project / parent_task_other_workspace
+          parent_task_is_subtask — no grandchildren; the move and rollup paths
+                                   only handle one level
+
+        A parent whose own `team_id` is NULL is accepted without a board
+        comparison. `add_task` (the /sprints/{id}/tasks path) has never set
+        `team_id` — it derives the board from the sprint at read time — so
+        those rows genuinely do not record one, and there is nothing for a
+        board check to contradict. Rejecting them would break the ordinary
+        case of a subtask added to a sprint task. The workspace, archived and
+        depth checks still apply.
+        """
+        if not parent_task_id:
+            return None
+
+        stmt = select(SprintTask).where(SprintTask.id == parent_task_id)
+        parent = (await self.db.execute(stmt)).scalar_one_or_none()
+        if parent is None or parent.is_archived:
+            raise TaskValidationError("parent_task_not_found")
+        if str(parent.workspace_id) != str(workspace_id):
+            raise TaskValidationError("parent_task_other_workspace")
+        if parent.team_id is not None and str(parent.team_id) != str(team_id):
+            raise TaskValidationError("parent_task_other_project")
+        if parent.parent_task_id:
+            raise TaskValidationError("parent_task_is_subtask")
+        return str(parent.id)
 
     async def _is_project_member(
         self, project_id: str, developer_id: str
@@ -2464,6 +2519,13 @@ class SprintTaskService:
                 raise TaskValidationError("status_not_found")
             if status_row.project_id and str(status_row.project_id) != str(project_id):
                 raise TaskValidationError("status_belongs_to_other_project")
+
+        # 4. A parent, if given, has to be a live top-level task on this board.
+        parent_task_id = await self.resolve_parent_task(
+            parent_task_id=parent_task_id,
+            workspace_id=workspace_id,
+            team_id=str(team_id),
+        )
 
         task = SprintTask(
             id=str(uuid4()),

@@ -86,7 +86,7 @@ function WidgetCard({ id, widget }: { id: string; widget: WidgetResult }) {
         <ResponsiveContainer width="100%" height={200}>
           {isBar ? (
             <BarChart data={series.rows}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey={series.labelKey} tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 11 }} />
               <Tooltip />
@@ -96,7 +96,7 @@ function WidgetCard({ id, widget }: { id: string; widget: WidgetResult }) {
             </BarChart>
           ) : (
             <LineChart data={series.rows}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey={series.labelKey} tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 11 }} />
               <Tooltip />

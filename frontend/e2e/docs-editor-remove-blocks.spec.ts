@@ -22,7 +22,7 @@
  * Live backend, no LLM.
  */
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
 
 import {
   API_BASE,
@@ -39,7 +39,7 @@ const MENU = "[data-slash-menu]";
 test.describe("Docs editor / removing tables and databases (live)", () => {
   let docId: string | null = null;
 
-  async function createDoc(request: Parameters<typeof authHeaders> extends never ? never : any) {
+  async function createDoc(request: APIRequestContext) {
     const resp = await request.post(
       `${API_BASE}/workspaces/${REAL_BACKEND_WORKSPACE_ID}/documents`,
       {

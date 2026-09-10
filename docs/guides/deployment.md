@@ -103,6 +103,10 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     environment:
+      # postgres:18 rejects a volume mounted at the legacy path; PGDATA one
+      # level down keeps the mount name and satisfies the image. See
+      # docs/guides/database-operations.md.
+      - PGDATA=/var/lib/postgresql/data/pgdata
       - POSTGRES_DB=aexy
       - POSTGRES_USER=aexy
       - POSTGRES_PASSWORD=${DB_PASSWORD}

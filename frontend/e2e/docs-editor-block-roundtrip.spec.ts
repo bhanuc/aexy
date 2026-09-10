@@ -29,6 +29,22 @@ const MENU = "[data-slash-menu]";
 /** Autosave is debounced; give it room to fire and land. */
 const SAVE_SETTLE_MS = 3_500;
 
+/**
+ * A reload lands on the Next dev server, which recompiles the route on demand.
+ * Under a full suite run that has taken well over the 20s the other specs use
+ * after a first `goto`, so the post-reload wait is deliberately looser — a
+ * slow compile is not the thing being tested here, and the assertion that
+ * matters comes after.
+ */
+const RELOAD_EDITOR_TIMEOUT_MS = 60_000;
+
+async function reloadAndWaitForEditor(page: Page) {
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.locator(".ProseMirror")).toBeVisible({
+    timeout: RELOAD_EDITOR_TIMEOUT_MS,
+  });
+}
+
 /** Inserts a block through the `/` menu, keyboard only, then types text. */
 async function insertBlock(page: Page, commandId: string, text?: string) {
   const editor = page.locator(".ProseMirror");
@@ -147,8 +163,7 @@ test.describe("Docs editor / slash-menu blocks survive a reload (live)", () => {
         ).toContain(block.text);
       }
 
-      await page.reload({ waitUntil: "domcontentloaded" });
-      await expect(page.locator(".ProseMirror")).toBeVisible({ timeout: 20_000 });
+      await reloadAndWaitForEditor(page);
       await expect(
         block.text
           ? page.locator(block.expect, { hasText: block.text })
@@ -199,7 +214,7 @@ test.describe("Docs editor / slash-menu blocks survive a reload (live)", () => {
       },
     );
 
-    await page.reload({ waitUntil: "domcontentloaded" });
+    await reloadAndWaitForEditor(page);
     await expect(page.getByTestId("inline-database-node")).toBeVisible({
       timeout: 25_000,
     });

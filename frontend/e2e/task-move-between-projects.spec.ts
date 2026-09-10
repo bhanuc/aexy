@@ -52,9 +52,10 @@ async function createTask(
 }
 
 /**
- * Subtasks go through the workspace-scoped create: `ProjectTaskCreate` (the
- * body of POST /teams/{id}/tasks) has no `parent_task_id` field at all, so a
- * parent passed there is dropped without complaint and you get a sibling.
+ * Subtask via the project-level create. `ProjectTaskCreate` had no
+ * `parent_task_id` field before 0.37.3, so a parent sent here was dropped
+ * without complaint and the caller got a top-level sibling — which is why the
+ * parent link is asserted on the way back rather than assumed.
  */
 async function createSubtask(
   request: APIRequestContext,
@@ -62,11 +63,10 @@ async function createSubtask(
   parentTaskId: string,
   title: string,
 ) {
-  const resp = await request.post(`${API_BASE}/workspaces/${WS()}/tasks`, {
+  const resp = await request.post(`${API_BASE}/teams/${projectId}/tasks`, {
     headers: authHeaders(),
     data: {
       title,
-      project_id: projectId,
       parent_task_id: parentTaskId,
       description: "subtask by e2e",
     },
@@ -75,9 +75,23 @@ async function createSubtask(
   const created = await resp.json();
   expect(
     String(created.parent_task_id),
-    "the subtask was created without its parent link",
+    "the subtask came back with no parent link — parent_task_id was dropped",
   ).toBe(String(parentTaskId));
   return created;
+}
+
+/** A parent on a different board must be refused, not silently accepted. */
+async function expectForeignParentRefused(
+  request: APIRequestContext,
+  projectId: string,
+  foreignParentId: string,
+) {
+  const resp = await request.post(`${API_BASE}/teams/${projectId}/tasks`, {
+    headers: authHeaders(),
+    data: { title: "child of a foreign parent", parent_task_id: foreignParentId },
+  });
+  expect(resp.status(), await resp.text()).toBe(400);
+  expect(await resp.text()).toContain("parent_task_other_project");
 }
 
 async function listTasks(request: APIRequestContext, projectId: string) {
@@ -245,6 +259,10 @@ test.describe("Move a task between projects (live)", () => {
 
     const parent = await createTask(request, source.id, `Parent ${stamp}`);
     await createSubtask(request, source.id, parent.id, `Child ${stamp}`);
+
+    // A parent on the *other* board is refused rather than written through,
+    // which is what stops a subtree straddling two projects.
+    await expectForeignParentRefused(request, target.id, parent.id);
 
     // Default strategy is "block" — the guard that keeps a subtree from being
     // split across two projects.
