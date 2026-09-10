@@ -97,9 +97,12 @@ async function setup(page: Page, options: SetupOptions = {}) {
     }),
   );
 
-  // `TeamReviewCard` renders in this shell and reads `data.snapshots` behind
-  // only a `!data` guard, so the catch-all's `{}` is truthy, `.snapshots` is
-  // undefined, and the whole page lands in its error boundary.
+  // `TeamReviewCard` renders in this shell. It used to read `data.snapshots`
+  // behind only a `!data` guard, so the catch-all's `{}` took the whole page
+  // into its error boundary; that is fixed and covered by
+  // `src/test/teamReviewCard.test.tsx`. The realistic shape stays here anyway
+  // — these tests are about the Apps tab, and they should fail for reasons
+  // that are about the Apps tab.
   await page.route(`${API_BASE}/code-insights/**`, (route) =>
     route.fulfill({
       status: 200,
