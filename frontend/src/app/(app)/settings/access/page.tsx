@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { useWorkspace } from "@/hooks/useWorkspace";
+import { useWorkspace, useIsWorkspaceOwner } from "@/hooks/useWorkspace";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useMemberAppAccess, useAppAccessTemplates } from "@/hooks/useAppAccess";
 import { useAdminAccessRequests } from "@/hooks/useAccessRequests";
@@ -30,9 +30,16 @@ import { getAllApps } from "@/config/appDefinitions";
 import { useTranslations } from "next-intl";
 import { SettingsGroupPage } from "@/components/settings/SettingsGroupPage";
 import { DepartmentProfilesPanel } from "@/components/access/DepartmentProfilesPanel";
+import { WorkspaceAppsPanel } from "@/components/access/WorkspaceAppsPanel";
 
-/** Departments first in the URL contract, since that is where access is decided. */
-type Tab = "matrix" | "requests" | "departments";
+/**
+ * The tabs are ordered by how access actually resolves — the workspace switch,
+ * then department defaults, then the per-member matrix — so reading the page
+ * left to right reads the layers broadest-first. The landing tab stays the
+ * matrix: it is what admins come here to do, and moving it would change what
+ * every existing bookmark opens on.
+ */
+type Tab = "apps" | "departments" | "matrix" | "requests";
 
 export default function AccessControlPage() {
   const t = useTranslations("settingsAccess");
@@ -40,11 +47,14 @@ export default function AccessControlPage() {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab");
   const initialTab: Tab =
-    tabParam === "requests" || tabParam === "departments" ? tabParam : "matrix";
+    tabParam === "requests" || tabParam === "departments" || tabParam === "apps"
+      ? tabParam
+      : "matrix";
 
   const { currentWorkspaceId } = useWorkspace();
   const workspaceId = currentWorkspaceId || "";
   const { isEnterprise } = useSubscription(currentWorkspaceId);
+  const { isWorkspaceOwner } = useIsWorkspaceOwner(currentWorkspaceId);
 
   const {
     members,
@@ -233,14 +243,14 @@ export default function AccessControlPage() {
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-border">
         <button
-          onClick={() => setActiveTab("matrix")}
+          onClick={() => setActiveTab("apps")}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === "matrix"
+            activeTab === "apps"
               ? "border-primary text-foreground"
               : "border-transparent text-muted-foreground hover:text-foreground"
           }`}
         >
-          {t("matrixHeading")}
+          {t("workspaceApps.tab")}
         </button>
         <button
           onClick={() => setActiveTab("departments")}
@@ -251,6 +261,16 @@ export default function AccessControlPage() {
           }`}
         >
           {t("departments")}
+        </button>
+        <button
+          onClick={() => setActiveTab("matrix")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === "matrix"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {t("matrixHeading")}
         </button>
         <button
           onClick={() => setActiveTab("requests")}
@@ -269,7 +289,11 @@ export default function AccessControlPage() {
         </button>
       </div>
 
-      {activeTab === "matrix" ? (
+      {activeTab === "apps" ? (
+        <div className="mt-4">
+          <WorkspaceAppsPanel workspaceId={workspaceId} isOwner={isWorkspaceOwner} />
+        </div>
+      ) : activeTab === "matrix" ? (
         <div>
           {/* A narrowed matrix has to say so and offer the way out — otherwise it
               reads as "this workspace has three members". */}

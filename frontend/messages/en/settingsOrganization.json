@@ -63,10 +63,7 @@
     },
     "apps": {
       "heading": "App Settings",
-      "subtitle": "Enable or disable apps for your workspace",
-      "ownerOnly": "Only the workspace owner can change app settings.",
-      "ownerOnlyTitle": "Only owner can change",
-      "toggleTitle": "{action} {label}"
+      "movedToAccess": "Moved to Access Control, next to the department and member settings it overrules."
     },
     "page": {
       "workspaces": "Workspaces",

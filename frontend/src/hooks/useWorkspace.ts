@@ -389,6 +389,29 @@ export function useIsWorkspaceAdmin(workspaceId: string | null) {
   };
 }
 
+/**
+ * Owner, as distinct from admin.
+ *
+ * Almost everything admin-gated is fine for an admin; switching an app off for
+ * the entire workspace is not, because it overrules every department profile
+ * and every personal override at once. Same resolution as
+ * `useIsWorkspaceAdmin` — `owner_id` as the synchronous fast path, the members
+ * list as the answer — minus the admin arm.
+ */
+export function useIsWorkspaceOwner(workspaceId: string | null) {
+  const { user } = useAuth();
+  const { currentWorkspace } = useWorkspace();
+  const { members, isLoading } = useWorkspaceMembers(workspaceId);
+
+  const ownsWorkspace = !!(user?.id && currentWorkspace?.owner_id === user.id);
+  const role = members.find((m) => m.developer_id === user?.id)?.role;
+
+  return {
+    isWorkspaceOwner: ownsWorkspace || role === "owner",
+    isLoading,
+  };
+}
+
 // Hook for workspace billing
 export function useWorkspaceBilling(workspaceId: string | null) {
   const {

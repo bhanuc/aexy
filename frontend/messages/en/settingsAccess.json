@@ -34,6 +34,14 @@
     "approved": "Request approved",
     "approveFailed": "Failed to approve request",
     "rejected": "Request rejected",
-    "rejectFailed": "Failed to reject request"
+    "rejectFailed": "Failed to reject request",
+    "workspaceApps": {
+      "tab": "Apps",
+      "heading": "Workspace apps",
+      "subtitle": "Which apps exist here at all. An app switched off cannot be granted back by a department profile or a personal override.",
+      "ownerOnly": "Only the workspace owner can change which apps are on.",
+      "ownerOnlyTitle": "Only owner can change",
+      "toggleTitle": "{action} {label}"
+    }
   }
 }

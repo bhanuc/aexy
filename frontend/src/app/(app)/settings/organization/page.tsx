@@ -21,12 +21,10 @@ import {
   Check,
   Clock,
   X,
-  ToggleLeft,
-  ToggleRight,
   Layers,
   Globe,
 } from "lucide-react";
-import { useWorkspace, useWorkspaceMembers, useWorkspaceBilling, usePendingInvites, useWorkspaceAppSettings } from "@/hooks/useWorkspace";
+import { useWorkspace, useWorkspaceMembers, useWorkspaceBilling, usePendingInvites } from "@/hooks/useWorkspace";
 import { useAuth } from "@/hooks/useAuth";
 import { useDepartments, usePeople } from "@/hooks/useOrganization";
 import { useAccessPreview } from "@/hooks/useAccessPreview";
@@ -858,7 +856,6 @@ function PendingInviteRow({ invite, onRevoke, onResend, isRevoking }: PendingInv
   );
 }
 
-import { APP_CATALOG } from "@/config/appDefinitions";
 import { useTranslations } from "next-intl";
 import { SettingsPage } from "@/components/settings/SettingsPrimitives";
 import {
@@ -867,80 +864,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-
-const APP_LABELS: Record<string, { label: string; description: string }> = Object.fromEntries(
-  Object.entries(APP_CATALOG)
-    .filter(([id]) => id !== "dashboard")
-    .map(([id, app]) => [id, { label: app.name, description: app.description }])
-);
-
-interface AppSettingsSectionProps {
-  appSettings: Record<string, boolean>;
-  onUpdate: (apps: Record<string, boolean>) => Promise<unknown>;
-  isUpdating: boolean;
-  isOwner: boolean;
-}
-
-function AppSettingsSection({ appSettings, onUpdate, isUpdating, isOwner }: AppSettingsSectionProps) {
-  const t = useTranslations("settingsOrganization");
-  const tc = useTranslations("common");
-  const handleToggle = async (appKey: string) => {
-    if (!isOwner) return;
-    const newSettings = { ...appSettings, [appKey]: !appSettings[appKey] };
-    await onUpdate(newSettings);
-  };
-
-  return (
-    <div className="bg-card rounded-xl overflow-hidden mb-6">
-      <div className="p-4 border-b border-border flex items-center gap-3">
-        <Layers className="h-5 w-5 text-muted-foreground" />
-        <div>
-          <h3 className="text-foreground font-medium">{t("apps.heading")}</h3>
-          <p className="text-muted-foreground text-sm">{t("apps.subtitle")}</p>
-        </div>
-      </div>
-      <div className="p-4 space-y-3">
-        {Object.entries(APP_LABELS).map(([key, { label, description }]) => (
-          <div
-            key={key}
-            className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-3 bg-muted/30 rounded-lg"
-          >
-            <div>
-              <div className="text-foreground font-medium">{label}</div>
-              <div className="text-muted-foreground text-sm">{description}</div>
-            </div>
-            <button
-              onClick={() => handleToggle(key)}
-              disabled={isUpdating || !isOwner}
-              className={`p-1 rounded-full transition ${
-                !isOwner ? "opacity-50 cursor-not-allowed" : "hover:bg-accent"
-              }`}
-              title={
-                  isOwner
-                    ? t("apps.toggleTitle", {
-                        action: appSettings[key] ? tc("disable") : tc("enable"),
-                        label,
-                      })
-                    : t("apps.ownerOnlyTitle")
-                }
-            >
-              {appSettings[key] ? (
-                <ToggleRight className="h-8 w-8 text-green-400" />
-              ) : (
-                <ToggleLeft className="h-8 w-8 text-muted-foreground" />
-              )}
-            </button>
-          </div>
-        ))}
-      </div>
-      {!isOwner && (
-        <div className="px-4 pb-4">
-          <p className="text-xs text-muted-foreground">{t("apps.ownerOnly")}</p>
-        </div>
-      )}
-    </div>
-  );
-}
 
 export default function OrganizationSettingsPage() {
   const t = useTranslations("settingsOrganization");
@@ -978,12 +901,6 @@ export default function OrganizationSettingsPage() {
   } = usePendingInvites(currentWorkspaceId);
 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-
-  const {
-    appSettings,
-    updateAppSettings,
-    isUpdating: isUpdatingAppSettings,
-  } = useWorkspaceAppSettings(currentWorkspaceId);
 
   const { billingStatus, seatUsage } = useWorkspaceBilling(currentWorkspaceId);
 
@@ -1374,13 +1291,24 @@ export default function OrganizationSettingsPage() {
               </div>
             )}
 
-            {/* {t("apps.heading")} Section */}
-            <AppSettingsSection
-              appSettings={appSettings}
-              onUpdate={updateAppSettings}
-              isUpdating={isUpdatingAppSettings}
-              isOwner={isOwner}
-            />
+            {/* The workspace app switch moved to Access Control, next to the
+                department profiles and member overrides it overrules. A link
+                rather than nothing: this is where owners have always gone
+                looking for it. */}
+            <Link
+              href="/settings/access?tab=apps"
+              className="block bg-card rounded-xl p-4 mb-6 hover:bg-accent/50 transition group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-muted rounded-lg group-hover:bg-accent transition">
+                  <Layers className="h-5 w-5 text-foreground" aria-hidden />
+                </div>
+                <div>
+                  <h4 className="text-foreground font-medium">{t("apps.heading")}</h4>
+                  <p className="text-muted-foreground text-sm">{t("apps.movedToAccess")}</p>
+                </div>
+              </div>
+            </Link>
 
             {/* Public Community */}
             <CommunitySettingsCard workspaceId={currentWorkspaceId} canManage={isOwner} />
