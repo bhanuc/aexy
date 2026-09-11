@@ -1672,7 +1672,11 @@ class ServiceDeskService:
                     ),
                 )
         await self._require_unclaimed_link(workspace_id, data.links_to)
-        function_key = self._stakeholder_function(data.semantics, data.function_key)
+        function_key = self._stakeholder_function(
+            data.semantics,
+            data.function_key,
+            known_department_keys=await self._department_function_keys(workspace_id),
+        )
         row = ServiceDeskStakeholder(
             id=str(uuid4()),
             workspace_id=workspace_id,
@@ -1693,9 +1697,31 @@ class ServiceDeskService:
             ) from None
         return row
 
+    async def _department_function_keys(self, workspace_id: str) -> set[str]:
+        """Every function key an active department in this workspace carries.
+
+        A stakeholder's function key is not a new value being invented — it is a
+        reference to a department that already exists, chosen from a list of
+        exactly those departments. So a key one of them actually holds is a valid
+        routing target whatever the registry thinks of its spelling.
+        """
+        from aexy.models.organization import Department
+
+        rows = await self.db.execute(
+            select(Department.function_key).where(
+                Department.workspace_id == workspace_id,
+                Department.function_key.isnot(None),
+                Department.is_active.is_(True),
+            )
+        )
+        return {k for (k,) in rows.all() if k}
+
     @staticmethod
     def _stakeholder_function(
-        semantics: str, raw: str | None, current: str | None = None
+        semantics: str,
+        raw: str | None,
+        current: str | None = None,
+        known_department_keys: set[str] | None = None,
     ) -> str | None:
         """The function key to store, refusing an internal bucket without one.
 
@@ -1719,6 +1745,16 @@ class ServiceDeskService:
         """
         if semantics != "internal":
             return None
+        # A key a department in this workspace actually carries is accepted as
+        # it is. The settings page builds its department picker from these, so
+        # without this a department whose key predates the function registry is
+        # offered and then refused — the admin picks the only department that
+        # owns the work and is told to choose from a list that does not contain
+        # it. The department itself stays editable on its own page (its stored
+        # value is grandfathered there), so the two halves disagreed about
+        # whether the same key was usable.
+        if raw and known_department_keys and raw in known_department_keys:
+            return raw
         try:
             key = canonical_or_grandfathered(raw, current)
         except ValueError as exc:
@@ -1764,6 +1800,7 @@ class ServiceDeskService:
                 payload.get("semantics", row.semantics),
                 payload["function_key"] if "function_key" in payload else row.function_key,
                 current=row.function_key,
+                known_department_keys=await self._department_function_keys(workspace_id),
             )
 
         for k, v in payload.items():

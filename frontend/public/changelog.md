@@ -7,7 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.38.1] - 2026-09-11
 
-The handoff timeline says how a ticket arrived and who from.
+The handoff timeline says how a ticket arrived and who from, and a department
+can be chosen for a stakeholder without being refused.
+
+### Fixed: a department could be offered for a stakeholder and then refused
+
+Choosing a department on `/settings/service-desk/stakeholders` could fail with
+"'tech' is not a known function", listing functions that did not include the
+one just picked — from that page's own department picker.
+
+The picker lists the workspace's departments, filtered only on having a routing
+key at all. A department whose key predates the function registry therefore
+appeared in the list and was rejected on save. The two halves of the product
+disagreed about the same key: the department stayed editable on its own page,
+because a *stored* value is kept valid so a record cannot lock itself, but a
+new stakeholder has no stored value to keep — so it could never be pointed at
+that department. The department was unusable for desk routing, with an error
+blaming the spelling rather than saying so.
+
+A stakeholder's key is a reference, not a new value: it names a department that
+already exists, chosen from a list of exactly those departments. A key an active
+department in the workspace actually carries is now accepted as it is. Anything
+else still has to satisfy the registry, whose purpose is to stop new keys being
+invented that nothing joins to — and the keys are read per workspace, so one
+tenant's legacy spelling cannot make itself valid in another.
 
 ### Fixed: the timeline's first entry said only "Ticket created"
 
