@@ -154,6 +154,68 @@ async def test_registry_keys_still_canonicalise(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
+async def test_a_retired_spelling_on_a_department_still_canonicalises(
+    db_session: AsyncSession,
+):
+    """The order of the two checks matters.
+
+    Accepting any key a department carries, *before* consulting the registry,
+    would let a department still storing `ops_kam` pin a stakeholder to that
+    spelling. Departments rewrite theirs on their next save — the registry
+    resolves retired spellings forward — and the stakeholder would be left
+    pointing at a key nothing holds any more. `canonical_or_grandfathered`'s own
+    docstring calls that out: a stakeholder saved under a spelling a department
+    would have canonicalised "silently joins to nothing, which is
+    indistinguishable from 'routing is off'".
+    """
+    ws = await _ws(db_session, "sd-retired")
+    await _department(db_session, ws, "Ops", "ops_kam")
+
+    service = ServiceDeskService(db_session)
+    keys = await service._department_function_keys(str(ws.id))
+    assert keys == {"ops_kam"}
+
+    stored = service._stakeholder_function(
+        "internal", "ops_kam", None, known_department_keys=keys
+    )
+    assert stored == "operations", (
+        "a retired spelling was pinned to the department's stale value instead "
+        "of resolving forward"
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_case_variant_of_a_department_key_is_accepted(
+    db_session: AsyncSession,
+):
+    """Every other comparison in this area goes through `clean_function_key`,
+    so this one has to as well — a caller that is not the settings page (a
+    seeder, an import, a script) should not be refused over capitalisation.
+
+    The department's own spelling is what gets stored, so the two rows stay
+    byte-identical and every comparison between them holds.
+    """
+    ws = await _ws(db_session, "sd-case")
+    await _department(db_session, ws, "Claims", "tech")
+
+    service = ServiceDeskService(db_session)
+    keys = await service._department_function_keys(str(ws.id))
+
+    assert (
+        service._stakeholder_function(
+            "internal", "Tech", None, known_department_keys=keys
+        )
+        == "tech"
+    )
+    assert (
+        service._stakeholder_function(
+            "internal", "  tech  ", None, known_department_keys=keys
+        )
+        == "tech"
+    )
+
+
+@pytest.mark.asyncio
 async def test_external_buckets_still_carry_no_function(db_session: AsyncSession):
     ws = await _ws(db_session, "sd-ext")
     await _department(db_session, ws, "Claims", "tech")
