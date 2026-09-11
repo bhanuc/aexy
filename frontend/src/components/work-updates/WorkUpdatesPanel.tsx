@@ -6,12 +6,11 @@ import { Loader2, Pencil, Send, Trash2, X, Check, Link2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { formatAbsolute, formatRelative } from "@/lib/datetime";
 import { WorkUpdate, WorkUpdateEntityType, workUpdatesApi } from "@/lib/api";
+import { MentionSuggestions } from "@/components/mentions/MentionSuggestions";
 import {
-  MentionSuggestions,
   filterMentionCandidates,
-  type MentionAnchor,
   type MentionCandidate,
-} from "@/components/mentions/MentionSuggestions";
+} from "@/components/mentions/mentionModel";
 
 // Progress updates for one task or ticket. Shared by the task modal and the
 // ticket detail page so both read and write the same stream — a standup note
@@ -133,7 +132,7 @@ export function WorkUpdatesPanel({
         />
         {mentions.open && (
           <MentionSuggestions
-            anchor={mentions.anchor}
+            reference={mentions.reference}
             candidates={mentions.candidates}
             query={mentions.query}
             activeIndex={mentions.activeIndex}
@@ -358,7 +357,6 @@ function useTextareaMentions(
   const [range, setRange] = useState<{ start: number; end: number } | null>(null);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
-  const [anchor, setAnchor] = useState<MentionAnchor | null>(null);
   const [picked, setPicked] = useState<MentionCandidate[]>([]);
 
   const candidates = useMemo(
@@ -371,7 +369,6 @@ function useTextareaMentions(
     setRange(null);
     setQuery("");
     setActiveIndex(0);
-    setAnchor(null);
   }, []);
 
   // Called on every change: is the caret inside an "@word"?
@@ -389,12 +386,14 @@ function useTextareaMentions(
     // A new query starts the highlight at the top again.
     if (match[2] !== query) setActiveIndex(0);
     setQuery(match[2]);
-    // Read live so the list follows the box if the page scrolls under it.
-    setAnchor(() => () => {
-      const rect = el.getBoundingClientRect();
-      return { left: rect.left, top: rect.top, bottom: rect.bottom };
-    });
   }, [users.length, query, close]);
+
+  // The list attaches to the box itself. Read live, so it follows the box
+  // when the page scrolls under it.
+  const reference = useCallback(
+    () => ref.current?.getBoundingClientRect() ?? null,
+    [ref],
+  );
 
   const pick = useCallback((candidate: MentionCandidate) => {
     if (!range) return;
@@ -440,7 +439,7 @@ function useTextareaMentions(
 
   return {
     open,
-    anchor,
+    reference,
     candidates,
     query,
     activeIndex,

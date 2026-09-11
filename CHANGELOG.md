@@ -65,10 +65,18 @@ Typing "@" in a task description did open the list of people — below the
 editor, with `position: absolute`. On a 1280×720 laptop with a long
 description the list started at y≈660 and was 211px tall: the header row was
 visible and none of the names were, which reads as "mentions don't work".
-The list is now anchored to the caret and flips above it when the space below
-is short, so it stays on screen wherever the cursor is. It also takes
-ArrowUp/ArrowDown/Enter, and the `mention:` links it inserts render with their
-href (the editor's link extension was stripping the unknown protocol).
+The list is now driven by the editor's own suggestion plugin
+(`@tiptap/suggestion`, the same mechanism as the docs slash menu): the query is
+read from the document rather than reconstructed from keystrokes, so it
+survives IME composition, paste and a mouse-moved caret; the list is placed
+next to the caret by tippy and flips above it when the space below is short.
+It takes ArrowUp/ArrowDown/Home/End, Tab and Enter (a bare "@" then Enter is
+still a new line), and the `mention:` links it inserts render with their href
+(the editor's link extension was stripping the unknown protocol). The set of
+mentioned people is read back from the text on every change, so deleting
+"@Ada" un-mentions Ada and a description opened with mentions in it reports
+them. As with most editors, "@" now triggers only at the start of a word — an
+email address typed mid-sentence no longer opens the list.
 
 The updates composer had no mentions at all. It now offers the same list on
 "@", inserts the name, and notifies the people named.

@@ -5,11 +5,10 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
-  useMemo,
   useRef,
   useState,
 } from "react";
-import { useEditor, EditorContent } from "@tiptap/react";
+import { useEditor, useEditorState, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import Link from "@tiptap/extension-link";
@@ -17,14 +16,14 @@ import { Markdown } from "tiptap-markdown";
 import { cn } from "@/lib/utils";
 import { User, File, Code, Type } from "lucide-react";
 
+import { MentionSuggestion, setMentionSources } from "@/components/mentions/MentionSuggestion";
 import {
-  MentionSuggestions,
-  filterMentionCandidates,
-  type MentionAnchor,
-} from "@/components/mentions/MentionSuggestions";
+  MENTION_HREF,
+  collectMentions,
+  type MentionSet,
+} from "@/components/mentions/mentionModel";
 
 type EditorMode = "rich" | "markdown";
-type SuggestionKind = "user" | "file";
 
 export interface MentionUser {
   id: string;
@@ -39,10 +38,7 @@ export interface MentionFile {
 
 interface TaskDescriptionEditorProps {
   content: Record<string, unknown> | null;
-  onChange?: (content: Record<string, unknown>, mentions: {
-    user_ids: string[];
-    file_paths: string[];
-  }) => void;
+  onChange?: (content: Record<string, unknown>, mentions: MentionSet) => void;
   placeholder?: string;
   readOnly?: boolean;
   users?: MentionUser[];
@@ -53,15 +49,11 @@ interface TaskDescriptionEditorProps {
 
 export interface TaskDescriptionEditorRef {
   getContent: () => Record<string, unknown>;
-  getMentions: () => { user_ids: string[]; file_paths: string[] };
+  getMentions: () => MentionSet;
   clearContent: () => void;
 }
 
-// Mentions are stored as link marks with a `mention:` href. tiptap's Link
-// extension only renders hrefs whose protocol it knows, so without this the
-// mark survived in the JSON but rendered as `href=""` — a mention that looked
-// like one and went nowhere.
-const MENTION_HREF = /^mention:(user|file):/;
+const NO_MENTIONS: MentionSet = { user_ids: [], file_paths: [] };
 
 export const TaskDescriptionEditor = forwardRef<
   TaskDescriptionEditorRef,
@@ -79,62 +71,13 @@ export const TaskDescriptionEditor = forwardRef<
   },
   ref
 ) {
-  const [mentionedUserIds, setMentionedUserIds] = useState<Set<string>>(new Set());
-  const [mentionedFilePaths, setMentionedFilePaths] = useState<Set<string>>(new Set());
-  const [suggestion, setSuggestion] = useState<SuggestionKind | null>(null);
-  const [suggestionQuery, setSuggestionQuery] = useState("");
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [anchor, setAnchor] = useState<MentionAnchor | null>(null);
   const [editorMode, setEditorMode] = useState<EditorMode>("rich");
   const [markdownContent, setMarkdownContent] = useState("");
 
-  const userCandidates = useMemo(
-    () => filterMentionCandidates(users, suggestionQuery),
-    [users, suggestionQuery],
-  );
-  const fileCandidates = useMemo(
-    () =>
-      filterMentionCandidates(
-        files.map((f) => ({ id: f.path, name: f.name })),
-        suggestionQuery,
-      ),
-    [files, suggestionQuery],
-  );
-  const candidates = useMemo(
-    () => (suggestion === "user" ? userCandidates : suggestion === "file" ? fileCandidates : []),
-    [suggestion, userCandidates, fileCandidates],
-  );
-
-  // Tiptap's useEditor captures `editorProps` (incl. handleKeyDown) ONCE at
-  // creation — there is no deps array — so the handler would otherwise read
-  // stale copies of this state/props. Mirror everything it needs into refs
-  // and keep them current so the keydown handler always sees live values.
-  const suggestionRef = useRef(suggestion);
-  const queryRef = useRef(suggestionQuery);
-  const usersRef = useRef(users);
-  const filesRef = useRef(files);
-  const candidatesRef = useRef(candidates);
-  const activeIndexRef = useRef(activeIndex);
-  const pickRef = useRef<(index: number) => void>(() => {});
-  useEffect(() => { suggestionRef.current = suggestion; }, [suggestion]);
-  useEffect(() => { queryRef.current = suggestionQuery; }, [suggestionQuery]);
-  useEffect(() => { usersRef.current = users; }, [users]);
-  useEffect(() => { filesRef.current = files; }, [files]);
-  useEffect(() => { candidatesRef.current = candidates; }, [candidates]);
-  useEffect(() => { activeIndexRef.current = activeIndex; }, [activeIndex]);
-
-  // A new query starts the highlight at the top again.
-  const updateQuery = useCallback((next: (q: string) => string) => {
-    setSuggestionQuery(next);
-    setActiveIndex(0);
-  }, []);
-
-  const closeSuggestions = useCallback(() => {
-    setSuggestion(null);
-    setSuggestionQuery("");
-    setActiveIndex(0);
-    setAnchor(null);
-  }, []);
+  // useEditor captures its options once, so the change handler is read
+  // through a ref that follows the latest render.
+  const onChangeRef = useRef(onChange);
+  useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
 
   const editor = useEditor({
     extensions: [
@@ -154,6 +97,9 @@ export const TaskDescriptionEditor = forwardRef<
         openOnClick: readOnly,
         autolink: true,
         linkOnPaste: true,
+        // Mentions are link marks with a `mention:` href. The Link extension
+        // only renders hrefs whose protocol it knows, so without this the
+        // mark survived in the JSON but rendered as `href=""`.
         isAllowedUri: (url, ctx) => MENTION_HREF.test(url) || ctx.defaultValidate(url),
         HTMLAttributes: {
           target: "_blank",
@@ -161,6 +107,7 @@ export const TaskDescriptionEditor = forwardRef<
           class: "text-blue-400 hover:text-blue-300 underline cursor-pointer",
         },
       }),
+      MentionSuggestion,
       Markdown.configure({
         html: true,
         tightLists: true,
@@ -197,163 +144,34 @@ export const TaskDescriptionEditor = forwardRef<
         window.open(href, "_blank", "noopener,noreferrer");
         return true;
       },
-      handleKeyDown: (view, event) => {
-        // Read live values via refs (see note above) — never the stale
-        // closure copies captured when the editor was created.
-        const open = suggestionRef.current;
-        const query = queryRef.current;
-
-        const openAt = (kind: SuggestionKind) => {
-          // The list is placed next to the caret, not under the editor, so a
-          // long description on a short screen cannot push it off the page.
-          // Read live, so the list follows the caret if the editor scrolls.
-          setAnchor(() => () => {
-            const coords = view.coordsAtPos(view.state.selection.from);
-            return { left: coords.left, top: coords.top, bottom: coords.bottom };
-          });
-          setSuggestion(kind);
-          updateQuery(() => "");
-        };
-
-        // Handle @ for user mentions. Typed while the other list is open, it
-        // switches — the character is still inserted and becomes the trigger.
-        if (event.key === "@" && open !== "user" && usersRef.current.length > 0) {
-          openAt("user");
-          return false;
-        }
-
-        // Handle # for file mentions
-        if (event.key === "#" && open !== "file" && filesRef.current.length > 0) {
-          openAt("file");
-          return false;
-        }
-
-        if (!open) return false;
-
-        // Handle escape to close suggestions
-        if (event.key === "Escape") {
-          closeSuggestions();
-          return true;
-        }
-
-        // Keyboard selection. Swallowed, because moving the cursor or breaking
-        // the paragraph is not what these keys mean while the list is open.
-        const list = candidatesRef.current;
-        if (event.key === "ArrowDown" && list.length > 0) {
-          setActiveIndex((i) => (i + 1) % list.length);
-          return true;
-        }
-        if (event.key === "ArrowUp" && list.length > 0) {
-          setActiveIndex((i) => (i - 1 + list.length) % list.length);
-          return true;
-        }
-        // Enter picks once something has been typed. A bare "@" followed by
-        // Enter is somebody starting a new line, not choosing the first name
-        // in the list — that closes the list and lets the newline through.
-        // Tab always picks.
-        if (
-          (event.key === "Tab" || (event.key === "Enter" && query.length > 0)) &&
-          list.length > 0
-        ) {
-          pickRef.current(activeIndexRef.current);
-          return true;
-        }
-
-        // While a suggestion box is open, keep the query in sync but NEVER
-        // swallow the keystroke — every key must still reach ProseMirror so
-        // the field can't get stuck. The typed characters land in the doc
-        // and are what insertMention() later deletes on selection.
-        if (event.key === "Backspace") {
-          if (query.length > 0) {
-            updateQuery((q) => q.slice(0, -1));
-          } else {
-            // Deleting the trigger char itself closes the box.
-            closeSuggestions();
-          }
-          return false;
-        }
-
-        if (event.key === " " || event.key === "Enter") {
-          closeSuggestions();
-          return false;
-        }
-
-        if (event.key.length === 1 && !event.ctrlKey && !event.metaKey) {
-          updateQuery((q) => q + event.key);
-          return false;
-        }
-
-        return false;
-      },
     },
     onUpdate: ({ editor }) => {
       const json = editor.getJSON() as Record<string, unknown>;
-      onChange?.(json, {
-        user_ids: Array.from(mentionedUserIds),
-        file_paths: Array.from(mentionedFilePaths),
-      });
+      onChangeRef.current?.(json, collectMentions(json));
     },
   });
 
-  // Insert mention into editor
-  const insertMention = useCallback((type: "user" | "file", id: string, label: string) => {
+  // The lists offered on "@" and "#" live in the extension's storage, so they
+  // can change without rebuilding the editor.
+  useEffect(() => {
     if (!editor) return;
-
-    // Delete the @ or # trigger character and query
-    const triggerLength = 1 + suggestionQuery.length;
-    editor.commands.deleteRange({
-      from: editor.state.selection.from - triggerLength,
-      to: editor.state.selection.from,
+    setMentionSources(editor, {
+      users,
+      files: files.map((f) => ({ id: f.path, name: f.name })),
     });
+  }, [editor, users, files]);
 
-    // Insert the mention as styled text
-    const mentionClass = type === "user"
-      ? "bg-blue-500/20 text-blue-400 rounded px-1 py-0.5"
-      : "bg-amber-500/20 text-amber-400 rounded px-1 py-0.5";
+  // Who and what the text currently mentions — read from the document on
+  // every change, so it cannot drift from the words on screen.
+  const mentions = useEditorState({
+    editor,
+    selector: ({ editor: e }) => (e ? collectMentions(e.getJSON()) : NO_MENTIONS),
+  }) ?? NO_MENTIONS;
 
-    editor.commands.insertContent({
-      type: "text",
-      marks: [
-        {
-          type: "link",
-          attrs: {
-            href: type === "user" ? `mention:user:${id}` : `mention:file:${id}`,
-            class: mentionClass,
-          },
-        },
-      ],
-      text: type === "user" ? `@${label}` : `#${label}`,
-    });
-
-    editor.commands.insertContent(" ");
-
-    // Track the mention
-    if (type === "user") {
-      setMentionedUserIds((prev) => new Set([...prev, id]));
-    } else {
-      setMentionedFilePaths((prev) => new Set([...prev, id]));
-    }
-
-    closeSuggestions();
-
-    // Notify parent
-    const json = editor.getJSON() as Record<string, unknown>;
-    onChange?.(json, {
-      user_ids: type === "user"
-        ? [...Array.from(mentionedUserIds), id]
-        : Array.from(mentionedUserIds),
-      file_paths: type === "file"
-        ? [...Array.from(mentionedFilePaths), id]
-        : Array.from(mentionedFilePaths),
-    });
-  }, [editor, suggestionQuery, mentionedUserIds, mentionedFilePaths, onChange, closeSuggestions]);
-
-  const pickIndex = useCallback((index: number) => {
-    const candidate = candidates[index];
-    if (!candidate || !suggestion) return;
-    insertMention(suggestion, candidate.id, candidate.name);
-  }, [candidates, suggestion, insertMention]);
-  useEffect(() => { pickRef.current = pickIndex; }, [pickIndex]);
+  const notify = useCallback((target: NonNullable<typeof editor>) => {
+    const json = target.getJSON() as Record<string, unknown>;
+    onChange?.(json, collectMentions(json));
+  }, [onChange]);
 
   // Toggle editor mode
   const handleModeToggle = useCallback(() => {
@@ -371,17 +189,12 @@ export const TaskDescriptionEditor = forwardRef<
       try {
         editor.commands.setContent(markdownContent);
         setEditorMode("rich");
-        // Notify parent with updated JSON
-        const json = editor.getJSON() as Record<string, unknown>;
-        onChange?.(json, {
-          user_ids: Array.from(mentionedUserIds),
-          file_paths: Array.from(mentionedFilePaths),
-        });
+        notify(editor);
       } catch (error) {
         console.error("Failed to parse markdown:", error);
       }
     }
-  }, [editor, editorMode, markdownContent, onChange, mentionedUserIds, mentionedFilePaths]);
+  }, [editor, editorMode, markdownContent, notify]);
 
   // Handle markdown textarea change
   const handleMarkdownChange = useCallback(
@@ -392,14 +205,10 @@ export const TaskDescriptionEditor = forwardRef<
       // Update editor content in background so parent gets valid JSON
       if (editor) {
         editor.commands.setContent(newContent);
-        const json = editor.getJSON() as Record<string, unknown>;
-        onChange?.(json, {
-          user_ids: Array.from(mentionedUserIds),
-          file_paths: Array.from(mentionedFilePaths),
-        });
+        notify(editor);
       }
     },
-    [editor, onChange, mentionedUserIds, mentionedFilePaths]
+    [editor, notify]
   );
 
   // Sync content when it changes externally
@@ -413,21 +222,10 @@ export const TaskDescriptionEditor = forwardRef<
     }
   }, [editor, content]);
 
-  // Losing focus (a click elsewhere) closes the list.
-  useEffect(() => {
-    if (!editor) return;
-    const onBlur = () => closeSuggestions();
-    editor.on("blur", onBlur);
-    return () => { editor.off("blur", onBlur); };
-  }, [editor, closeSuggestions]);
-
   // Expose methods via ref
   useImperativeHandle(ref, () => ({
     getContent: () => editor?.getJSON() as Record<string, unknown> || {},
-    getMentions: () => ({
-      user_ids: Array.from(mentionedUserIds),
-      file_paths: Array.from(mentionedFilePaths),
-    }),
+    getMentions: () => (editor ? collectMentions(editor.getJSON()) : NO_MENTIONS),
     clearContent: () => editor?.commands.clearContent(),
   }));
 
@@ -480,24 +278,10 @@ export const TaskDescriptionEditor = forwardRef<
         </div>
       )}
 
-      {/* @ and # suggestions, placed at the caret and kept on screen */}
-      {suggestion && (
-        <MentionSuggestions
-          anchor={anchor}
-          candidates={candidates}
-          query={suggestionQuery}
-          activeIndex={activeIndex}
-          onPick={(c) => insertMention(suggestion, c.id, c.name)}
-          onHover={setActiveIndex}
-          kind={suggestion}
-          testId={suggestion === "user" ? "mention-suggestions" : "file-suggestions"}
-        />
-      )}
-
       {/* Mentioned items display */}
-      {(mentionedUserIds.size > 0 || mentionedFilePaths.size > 0) && (
+      {(mentions.user_ids.length > 0 || mentions.file_paths.length > 0) && (
         <div className="border-t border-border px-3 py-2 flex flex-wrap gap-1.5">
-          {Array.from(mentionedUserIds).map((userId) => {
+          {mentions.user_ids.map((userId) => {
             const user = users.find((u) => u.id === userId);
             return (
               <span
@@ -509,7 +293,7 @@ export const TaskDescriptionEditor = forwardRef<
               </span>
             );
           })}
-          {Array.from(mentionedFilePaths).map((path) => {
+          {mentions.file_paths.map((path) => {
             const file = files.find((f) => f.path === path);
             return (
               <span
