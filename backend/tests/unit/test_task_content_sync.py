@@ -499,7 +499,161 @@ async def test_work_update_scope_spans_ticket_and_task_both_ways(db_session: Asy
     task = await _task(db_session, ws, src)
     ticket = await _ticket(db_session, ws, task)
     await db_session.commit()
+    from aexy.services.service_desk_config import display_id, ticket_prefix
+
     from_task = await sync.work_update_scope(db_session, "task", task.id)
     from_ticket = await sync.work_update_scope(db_session, "ticket", ticket.id)
-    assert from_task[("ticket", ticket.id)] == "ticket #7"
+    # The same id the desk shows in its queue, prefix included.
+    prefix = await ticket_prefix(db_session, ws.id)
+    assert from_task[("ticket", ticket.id)] == f"ticket {display_id(prefix, 7)}"
     assert from_ticket[("task", task.id)] == f"task #{task.task_key}"
+
+
+# ── review fixes ─────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_keep_without_sync_leaves_the_ticket_on_the_original(db_session: AsyncSession) -> None:
+    ws, dev = await _workspace(db_session)
+    src, dst = await _project(db_session, ws, "Ops"), await _project(db_session, ws, "Tech")
+    task = await _task(db_session, ws, src)
+    ticket = await _ticket(db_session, ws, task)
+    await db_session.commit()
+
+    await _move(db_session, task, dst, dev, source_action="keep", sync_content=False)
+    await db_session.commit()
+    fresh = (
+        await db_session.execute(
+            select(Ticket).where(Ticket.id == ticket.id).execution_options(populate_existing=True)
+        )
+    ).scalar_one()
+    assert fresh.linked_task_id == task.id, "the original is still the live task; the ticket stays with it"
+
+
+@pytest.mark.asyncio
+async def test_keep_with_sync_still_hands_the_ticket_to_the_new_board(db_session: AsyncSession) -> None:
+    ws, dev = await _workspace(db_session)
+    src, dst = await _project(db_session, ws, "Ops"), await _project(db_session, ws, "Tech")
+    task = await _task(db_session, ws, src)
+    ticket = await _ticket(db_session, ws, task)
+    await db_session.commit()
+    copy = await _move(db_session, task, dst, dev, source_action="keep", sync_content=True)
+    await db_session.commit()
+    fresh = (
+        await db_session.execute(
+            select(Ticket).where(Ticket.id == ticket.id).execution_options(populate_existing=True)
+        )
+    ).scalar_one()
+    assert fresh.linked_task_id == copy.id
+
+
+@pytest.mark.asyncio
+async def test_resolving_the_link_stops_the_sync(db_session: AsyncSession) -> None:
+    ws, dev = await _workspace(db_session)
+    src, dst = await _project(db_session, ws, "Ops"), await _project(db_session, ws, "Tech")
+    task = await _task(db_session, ws, src)
+    copy = await _move(db_session, task, dst, dev)
+    await db_session.commit()
+    link = (
+        await db_session.execute(select(TaskDependency).where(TaskDependency.dependent_task_id == copy.id))
+    ).scalar_one()
+    link.status = "resolved"
+    await db_session.commit()
+    assert await sync.synced_task_peers(db_session, task.id) == []
+
+
+@pytest.mark.asyncio
+async def test_deleting_a_conversion_copy_keeps_the_tickets_own_file(db_session: AsyncSession) -> None:
+    """A ticket-owned entry (no source_task_id) is not a mirror: the task's copy
+    going must not take the requester's file or its object."""
+    ws, dev = await _workspace(db_session)
+    src = await _project(db_session, ws, "Ops")
+    task = await _task(db_session, ws, src)
+    ticket = await _ticket(db_session, ws, task)
+    key = f"ticket-attachments/{ticket.id}/contract.pdf"
+    ticket.attachments = [{"id": str(uuid.uuid4()), "filename": "contract.pdf", "size": 5, "type": "application/pdf", "key": key}]
+    row = TaskAttachment(
+        id=str(uuid.uuid4()), task_id=task.id, file_name="contract.pdf",
+        file_url="http://s/contract.pdf", storage_key=key,
+    )
+    db_session.add(row)
+    await db_session.commit()
+
+    assert await attachment_object_still_referenced(db_session, row) is True
+    await SprintTaskService(db_session).delete_attachment(row.id, actor_id=dev.id)
+    await db_session.commit()
+    fresh = (
+        await db_session.execute(
+            select(Ticket).where(Ticket.id == ticket.id).execution_options(populate_existing=True)
+        )
+    ).scalar_one()
+    assert [e["key"] for e in fresh.attachments] == [key]
+
+
+@pytest.mark.asyncio
+async def test_object_kept_while_a_sent_reply_carries_it(db_session: AsyncSession) -> None:
+    ws, dev = await _workspace(db_session)
+    src = await _project(db_session, ws, "Ops")
+    task = await _task(db_session, ws, src)
+    ticket = await _ticket(db_session, ws, task)
+    key = f"ticket-attachments/{ticket.id}/form.pdf"
+    # Uploaded on the ticket, mirrored to the task, then sent: the entry now
+    # lives on the message, not on the ticket.
+    db_session.add(TicketResponse(
+        id=str(uuid.uuid4()), ticket_id=ticket.id, author_id=dev.id, content="sent",
+        is_internal=False, attachments=[{"id": str(uuid.uuid4()), "filename": "form.pdf", "key": key}],
+    ))
+    row = TaskAttachment(
+        id=str(uuid.uuid4()), task_id=task.id, file_name="form.pdf",
+        file_url="http://s/form.pdf", storage_key=key, uploaded_by_id=dev.id,
+    )
+    db_session.add(row)
+    await db_session.commit()
+    assert await attachment_object_still_referenced(db_session, row) is True
+
+
+@pytest.mark.asyncio
+async def test_task_mirrors_on_a_ticket_are_internal(db_session: AsyncSession) -> None:
+    from aexy.services.service_desk_ticket_service import ServiceDeskTicketService
+    from aexy.services.ticket_service import TicketService
+
+    ws, dev = await _workspace(db_session)
+    src = await _project(db_session, ws, "Ops")
+    task = await _task(db_session, ws, src)
+    ticket = await _ticket(db_session, ws, task)
+    await db_session.commit()
+    row = await SprintTaskService(db_session).add_attachment(
+        task_id=task.id, file_name="heap-dump.log", file_url="http://s/heap.log",
+        storage_key=f"task-attachments/{task.id}/heap.log", uploaded_by_id=dev.id,
+    )
+    await db_session.commit()
+    fresh = (
+        await db_session.execute(
+            select(Ticket).where(Ticket.id == ticket.id).execution_options(populate_existing=True)
+        )
+    ).scalar_one()
+    mirror = next(e for e in fresh.attachments if e["key"] == row.storage_key)
+    assert sync.is_task_mirror_entry(mirror)
+
+    tickets = TicketService(db_session)
+    # Not on the share-link path, not among the sendable uploads…
+    assert tickets.find_ticket_attachment(fresh, mirror["id"], include_internal=False) is None
+    assert ServiceDeskTicketService._uploaded_attachments(fresh) == []
+    # …but a member can still see and open it, labelled as the task's.
+    assert tickets.find_ticket_attachment(fresh, mirror["id"], include_internal=True) is not None
+    listed = [a for a in ServiceDeskTicketService._detail_attachments(fresh) if a.id == mirror["id"]]
+    assert listed and listed[0].source == "task" and listed[0].can_forward is False
+
+
+def test_every_action_the_service_writes_is_in_the_response_literal() -> None:
+    """History fails response validation for any action missing here."""
+    import re
+    from pathlib import Path
+    from typing import get_args
+
+    from aexy.schemas.sprint import TaskActivityAction
+
+    allowed = set(get_args(TaskActivityAction))
+    source = Path(__file__).resolve().parents[2] / "src/aexy/services/sprint_task_service.py"
+    written = set(re.findall(r'action="([a-z_]+)"', source.read_text()))
+    assert written <= allowed, sorted(written - allowed)

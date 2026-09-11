@@ -3,9 +3,18 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AtSign, User } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import { cn } from "@/lib/utils";
 import { type AnchorRect, placePopover } from "./anchoredPopover";
+
+/**
+ * Where the list attaches. A function is preferred: it is re-read on every
+ * placement, so when the editor scrolls under the list (ProseMirror keeps the
+ * caret in view as the query grows) the list follows the caret instead of
+ * staying where the caret was.
+ */
+export type MentionAnchor = AnchorRect | (() => AnchorRect | null);
 
 export interface MentionCandidate {
   id: string;
@@ -30,18 +39,21 @@ export function MentionSuggestions({
   activeIndex,
   onPick,
   onHover,
-  title = "Mention a team member",
+  kind = "user",
   testId = "mention-suggestions",
 }: {
-  anchor: AnchorRect | null;
+  anchor: MentionAnchor | null;
   candidates: MentionCandidate[];
   query: string;
   activeIndex: number;
   onPick: (candidate: MentionCandidate) => void;
   onHover?: (index: number) => void;
-  title?: string;
+  /** What is being offered — decides the header text. */
+  kind?: "user" | "file";
   testId?: string;
 }) {
+  const t = useTranslations("common");
+  const title = kind === "file" ? t("mentions.referenceFile") : t("mentions.mentionMember");
   const ref = useRef<HTMLDivElement>(null);
   const [style, setStyle] = useState<React.CSSProperties>({ visibility: "hidden" });
 
@@ -52,10 +64,12 @@ export function MentionSuggestions({
     const place = () => {
       const el = ref.current;
       if (!el) return;
-      const rect = el.getBoundingClientRect();
+      const rect = typeof anchor === "function" ? anchor() : anchor;
+      if (!rect) return;
+      const box = el.getBoundingClientRect();
       const { left, top, maxHeight, side } = placePopover(
-        anchor,
-        { width: rect.width || 288, height: el.scrollHeight || rect.height },
+        rect,
+        { width: box.width || 288, height: el.scrollHeight || box.height },
         { width: window.innerWidth, height: window.innerHeight },
       );
       setStyle({ position: "fixed", left, top, maxHeight, visibility: "visible" });
@@ -63,7 +77,13 @@ export function MentionSuggestions({
     };
     place();
     window.addEventListener("resize", place);
-    return () => window.removeEventListener("resize", place);
+    // Capture phase: the editor's scroll container does not bubble scroll
+    // events to the window, and the caret moves with it.
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
   }, [anchor, candidates.length, query]);
 
   useEffect(() => {

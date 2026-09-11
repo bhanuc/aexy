@@ -367,7 +367,7 @@ async def create_task_dependency(
     await db.commit()
     await db.refresh(dependency)
 
-    return dependency
+    return _task_dependency_to_response(dependency)
 
 
 @router.get("/tasks/{task_id}", response_model=TaskDependencyListResponse)
@@ -472,7 +472,7 @@ async def update_task_dependency(
     await db.commit()
     await db.refresh(dependency)
 
-    return dependency
+    return _task_dependency_to_response(dependency)
 
 
 @router.delete(
@@ -517,7 +517,7 @@ async def resolve_task_dependency(
     await db.commit()
     await db.refresh(dependency)
 
-    return dependency
+    return _task_dependency_to_response(dependency)
 
 
 # ============================================================================

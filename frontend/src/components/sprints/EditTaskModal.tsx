@@ -43,7 +43,8 @@ import type { FileAIMetadata } from "@/lib/api";
 import { TaskDescriptionEditor, TaskDescriptionEditorRef, MentionUser } from "@/components/planning/TaskDescriptionEditor";
 import { TaskGitHubLinksSection } from "@/components/sprints/TaskGitHubLinksSection";
 import { MoveToProjectModal } from "@/components/planning/MoveToProjectModal";
-import { dependenciesApi } from "@/lib/api";
+import { useTaskDependencies } from "@/hooks/useDependencies";
+import { useTranslations } from "next-intl";
 import { FileMetadataPopover } from "@/components/files/FileMetadataPopover";
 import { FileAILine } from "@/components/files/FileAIBadges";
 import {
@@ -358,17 +359,15 @@ function AssignmentHistoryPanel({
 // the description no longer carries a "Moved from" line when it must match.
 function LinkedTasksSection({ taskId }: { taskId: string }) {
   const router = useRouter();
-  const { data } = useQuery({
-    queryKey: ["taskDependencies", taskId],
-    queryFn: () => dependenciesApi.listTaskDependencies(taskId),
-  });
-  const links = (data?.items ?? []).filter((d) => d.dependency_type === "duplicates");
+  const t = useTranslations("sprints");
+  const { dependencies } = useTaskDependencies(taskId);
+  const links = dependencies.filter((d) => d.dependency_type === "duplicates");
   if (links.length === 0) return null;
 
   return (
     <div className="pt-4 border-t border-border" data-testid="task-linked-tasks">
       <label className="block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">
-        Linked tasks
+        {t("linkedTasks.title")}
       </label>
       <ul className="space-y-1.5">
         {links.map((link) => {
@@ -390,12 +389,12 @@ function LinkedTasksSection({ taskId }: { taskId: string }) {
                 <ArrowRightLeft className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
                 <span className="truncate">
                   {otherKey != null && <span className="font-mono">#{otherKey}</span>}{" "}
-                  {otherTitle ?? "Task"}
+                  {otherTitle ?? t("linkedTasks.task")}
                 </span>
               </button>
               <div className="mt-0.5 text-muted-foreground">
-                {isDependent ? "Copied from" : "Copied to"} another project
-                {link.sync_content ? " · description, comments and attachments in sync" : ""}
+                {isDependent ? t("linkedTasks.copiedFrom") : t("linkedTasks.copiedTo")}
+                {link.sync_content ? ` · ${t("linkedTasks.inSync")}` : ""}
               </div>
             </li>
           );

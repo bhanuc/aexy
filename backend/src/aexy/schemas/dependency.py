@@ -63,18 +63,14 @@ class StoryDependencyResponse(BaseModel):
 
 
 class StoryDependencyListResponse(BaseModel):
-    """Schema for story dependency list item."""
+    """A story's dependencies, as `GET /dependencies/stories/{story_id}` returns them.
 
-    model_config = ConfigDict(from_attributes=True)
+    Declared as a single list item while the endpoint built ``{items, total}``
+    — the same fault as the task list, fixed the same way.
+    """
 
-    id: str
-    blocking_story_id: str
-    blocking_story_key: str | None = None
-    blocking_story_title: str | None = None
-    blocking_story_status: str | None = None
-    dependency_type: DependencyType
-    status: DependencyStatus
-    is_external: bool = False
+    items: list[StoryDependencyResponse] = Field(default_factory=list)
+    total: int = 0
 
 
 # ==================== Task Dependency Schemas ====================

@@ -178,7 +178,8 @@
       "splitMoving": "Moving…",
       "source": "Source",
       "loggedBy": "Logged by",
-      "noRequester": "No requester (logged here)"
+      "noRequester": "No requester (logged here)",
+      "taskFiles": "Files on the linked task"
     },
     "ai": {
       "title": "AI email categorisation",

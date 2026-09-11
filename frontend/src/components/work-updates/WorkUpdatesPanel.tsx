@@ -6,10 +6,10 @@ import { Loader2, Pencil, Send, Trash2, X, Check, Link2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { formatAbsolute, formatRelative } from "@/lib/datetime";
 import { WorkUpdate, WorkUpdateEntityType, workUpdatesApi } from "@/lib/api";
-import type { AnchorRect } from "@/components/mentions/anchoredPopover";
 import {
   MentionSuggestions,
   filterMentionCandidates,
+  type MentionAnchor,
   type MentionCandidate,
 } from "@/components/mentions/MentionSuggestions";
 
@@ -358,7 +358,7 @@ function useTextareaMentions(
   const [range, setRange] = useState<{ start: number; end: number } | null>(null);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
-  const [anchor, setAnchor] = useState<AnchorRect | null>(null);
+  const [anchor, setAnchor] = useState<MentionAnchor | null>(null);
   const [picked, setPicked] = useState<MentionCandidate[]>([]);
 
   const candidates = useMemo(
@@ -389,8 +389,11 @@ function useTextareaMentions(
     // A new query starts the highlight at the top again.
     if (match[2] !== query) setActiveIndex(0);
     setQuery(match[2]);
-    const rect = el.getBoundingClientRect();
-    setAnchor({ left: rect.left, top: rect.top, bottom: rect.bottom });
+    // Read live so the list follows the box if the page scrolls under it.
+    setAnchor(() => () => {
+      const rect = el.getBoundingClientRect();
+      return { left: rect.left, top: rect.top, bottom: rect.bottom };
+    });
   }, [users.length, query, close]);
 
   const pick = useCallback((candidate: MentionCandidate) => {
@@ -417,8 +420,12 @@ function useTextareaMentions(
       e.preventDefault();
       setActiveIndex((i) => (i - 1 + candidates.length) % candidates.length);
     } else if (e.key === "Enter" || e.key === "Tab") {
+      // The list can shrink under a stale index (a member refetch); then
+      // there is nothing to pick and the key means what it normally does.
+      const candidate = candidates[activeIndex] ?? candidates[0];
+      if (!candidate) return;
       e.preventDefault();
-      pick(candidates[activeIndex]);
+      pick(candidate);
     } else if (e.key === "Escape") {
       e.preventDefault();
       close();

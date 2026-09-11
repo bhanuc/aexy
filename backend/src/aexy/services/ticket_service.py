@@ -1352,8 +1352,17 @@ class TicketService:
         return created
 
     def _iter_attachments(self, ticket: Ticket, include_internal: bool):
-        """Yield attachment dicts from the ticket and its responses."""
+        """Yield attachment dicts from the ticket and its responses.
+
+        A ticket-level entry mirrored from the linked task's files is internal
+        — a developer's attachment on a board — and is skipped unless internal
+        material was asked for, the same as an internal note's files.
+        """
+        from aexy.services.content_sync_service import is_task_mirror_entry
+
         for a in ticket.attachments or []:
+            if is_task_mirror_entry(a) and not include_internal:
+                continue
             yield a
         for response in ticket.responses:
             if response.is_internal and not include_internal:

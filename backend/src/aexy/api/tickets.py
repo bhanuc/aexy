@@ -592,6 +592,12 @@ async def upload_ticket_attachments(
         )
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail)
 
+    # The task this ticket syncs with holds the same files — the same rule the
+    # service-desk upload route follows.
+    from aexy.services.content_sync_service import mirror_ticket_upload_to_task
+
+    await mirror_ticket_upload_to_task(db, ticket, created, uploaded_by_id=str(current_user.id))
+
     return [safe_attachment(m) for m in created]
 
 
@@ -632,7 +638,17 @@ async def delete_ticket_attachment(
         workspace_id, ticket_id, ticket_service, db, str(current_user.id), for_edit=True
     )
 
-    if not await ticket_service.remove_ticket_attachment(ticket, attachment_id):
+    # The synced task's rows for this file go too; the object stays if a task
+    # outside the sync still points at it.
+    from aexy.services.content_sync_service import remove_ticket_upload_from_task
+
+    match = ticket_service.find_ticket_attachment(ticket, attachment_id, include_internal=True)
+    still_referenced = await remove_ticket_upload_from_task(
+        db, ticket, ticket_service.attachment_key(match) if match else None
+    )
+    if not await ticket_service.remove_ticket_attachment(
+        ticket, attachment_id, delete_object=not still_referenced
+    ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found")
 
 

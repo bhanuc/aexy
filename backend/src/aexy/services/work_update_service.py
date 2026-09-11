@@ -241,6 +241,7 @@ class WorkUpdateService:
                     select(WorkspaceMember.developer_id).where(
                         WorkspaceMember.workspace_id == workspace_id,
                         WorkspaceMember.developer_id.in_(wanted),
+                        WorkspaceMember.status == "active",
                     )
                 )
             ).scalars()

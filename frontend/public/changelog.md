@@ -79,13 +79,28 @@ The two history entries a move writes — *moved to project* and *created from
 move* — were not in the list of actions the API allows in a response, so
 fetching the History of any task that had been moved failed validation.
 
+### Fixed: the History tab failed for any task whose assignees had been edited
+
+The multi-assignee endpoints write four history actions (`assignees_changed`,
+`assignee_added`, `assignee_removed`, `primary_assignee_cleared`) that were
+never listed among the actions the History response allows, so fetching the
+History of such a task failed validation. Same fault as the move actions
+above; a test now checks every action the service writes is in the list.
+
 ### Fixed: a task's dependency list never loaded
 
 `GET /dependencies/tasks/{id}` declared its response as a single dependency
 while building a `{items, total}` list, so it failed validation on every call
 and the client — which expects the list — never got an answer. The task detail
 now reads the link to a moved task from it, so it had to work; each entry also
-names the task at the other end and carries the sync flag.
+names the task at the other end and carries the sync flag. The story
+dependency list had the same fault and is fixed the same way.
+
+A developer's file mirrored onto a ticket by the sync is internal: it is
+listed on the ticket as the task's file, never offered on the compose box and
+never served on a share link. Deleting a task's copy of a file the requester
+sent leaves the ticket's own entry and its stored object alone, and a file that
+has already gone out on a reply keeps its object too.
 
 ## [0.38.1] - 2026-09-11
 

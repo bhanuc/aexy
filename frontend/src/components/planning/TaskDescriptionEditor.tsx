@@ -17,10 +17,10 @@ import { Markdown } from "tiptap-markdown";
 import { cn } from "@/lib/utils";
 import { User, File, Code, Type } from "lucide-react";
 
-import type { AnchorRect } from "@/components/mentions/anchoredPopover";
 import {
   MentionSuggestions,
   filterMentionCandidates,
+  type MentionAnchor,
 } from "@/components/mentions/MentionSuggestions";
 
 type EditorMode = "rich" | "markdown";
@@ -84,7 +84,7 @@ export const TaskDescriptionEditor = forwardRef<
   const [suggestion, setSuggestion] = useState<SuggestionKind | null>(null);
   const [suggestionQuery, setSuggestionQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
-  const [anchor, setAnchor] = useState<AnchorRect | null>(null);
+  const [anchor, setAnchor] = useState<MentionAnchor | null>(null);
   const [editorMode, setEditorMode] = useState<EditorMode>("rich");
   const [markdownContent, setMarkdownContent] = useState("");
 
@@ -206,20 +206,24 @@ export const TaskDescriptionEditor = forwardRef<
         const openAt = (kind: SuggestionKind) => {
           // The list is placed next to the caret, not under the editor, so a
           // long description on a short screen cannot push it off the page.
-          const coords = view.coordsAtPos(view.state.selection.from);
-          setAnchor({ left: coords.left, top: coords.top, bottom: coords.bottom });
+          // Read live, so the list follows the caret if the editor scrolls.
+          setAnchor(() => () => {
+            const coords = view.coordsAtPos(view.state.selection.from);
+            return { left: coords.left, top: coords.top, bottom: coords.bottom };
+          });
           setSuggestion(kind);
           updateQuery(() => "");
         };
 
-        // Handle @ for user mentions
-        if (event.key === "@" && !open && usersRef.current.length > 0) {
+        // Handle @ for user mentions. Typed while the other list is open, it
+        // switches — the character is still inserted and becomes the trigger.
+        if (event.key === "@" && open !== "user" && usersRef.current.length > 0) {
           openAt("user");
           return false;
         }
 
         // Handle # for file mentions
-        if (event.key === "#" && !open && filesRef.current.length > 0) {
+        if (event.key === "#" && open !== "file" && filesRef.current.length > 0) {
           openAt("file");
           return false;
         }
@@ -243,7 +247,14 @@ export const TaskDescriptionEditor = forwardRef<
           setActiveIndex((i) => (i - 1 + list.length) % list.length);
           return true;
         }
-        if ((event.key === "Enter" || event.key === "Tab") && list.length > 0) {
+        // Enter picks once something has been typed. A bare "@" followed by
+        // Enter is somebody starting a new line, not choosing the first name
+        // in the list — that closes the list and lets the newline through.
+        // Tab always picks.
+        if (
+          (event.key === "Tab" || (event.key === "Enter" && query.length > 0)) &&
+          list.length > 0
+        ) {
           pickRef.current(activeIndexRef.current);
           return true;
         }
@@ -478,7 +489,7 @@ export const TaskDescriptionEditor = forwardRef<
           activeIndex={activeIndex}
           onPick={(c) => insertMention(suggestion, c.id, c.name)}
           onHover={setActiveIndex}
-          title={suggestion === "user" ? "Mention a team member" : "Reference a file"}
+          kind={suggestion}
           testId={suggestion === "user" ? "mention-suggestions" : "file-suggestions"}
         />
       )}

@@ -1540,11 +1540,9 @@ class SprintTaskService:
                 source.description_json, src_node
             )
 
-        if source_action == "keep":
-            pass
-        elif source_action == "archive":
+        if source_action == "archive":
             source.is_archived = True
-        else:  # mark_done
+        elif source_action == "mark_done":
             done_slug = await self._resolve_done_status_slug(
                 str(source.workspace_id), str(source.team_id)
             )
@@ -1573,29 +1571,37 @@ class SprintTaskService:
         # A ticket raised from the source task pointed at a task that is now
         # archived (or done) on a board it has left. Re-point it and hand the
         # ticket to whoever owns the new board — moving the card onto the Tech
-        # board is how work actually gets handed to Tech.
+        # board is how work actually gets handed to Tech. The same when the
+        # original is kept but the pair are in sync: the ticket's notes reach
+        # both through the sync, and the destination is where the work went.
+        #
+        # Not when the original is kept *without* sync: it is still the live
+        # task on its board, nothing would carry the ticket's notes back to
+        # it, and re-pointing would strip its only ticket link.
         #
         # Failure here must not undo the move: the task has already been forked
         # and the source closed, and a half-applied move is worse than a ticket
         # that needs nudging by hand.
-        try:
-            from aexy.services.service_desk_ticket_service import (
-                ServiceDeskTicketService,
-            )
+        follow_ticket = not (source_action == "keep" and not sync_content)
+        if follow_ticket:
+            try:
+                from aexy.services.service_desk_ticket_service import (
+                    ServiceDeskTicketService,
+                )
 
-            await ServiceDeskTicketService(self.db).follow_linked_task_to_board(
-                workspace_id=str(source.workspace_id),
-                old_task_id=str(source.id),
-                new_task_id=str(new_parent.id),
-                board_id=str(target_project_id),
-                actor_id=actor_id,
-            )
-        except Exception:
-            logger.exception(
-                "Task %s moved to project %s but its linked ticket did not follow",
-                source.id,
-                target_project_id,
-            )
+                await ServiceDeskTicketService(self.db).follow_linked_task_to_board(
+                    workspace_id=str(source.workspace_id),
+                    old_task_id=str(source.id),
+                    new_task_id=str(new_parent.id),
+                    board_id=str(target_project_id),
+                    actor_id=actor_id,
+                )
+            except Exception:
+                logger.exception(
+                    "Task %s moved to project %s but its linked ticket did not follow",
+                    source.id,
+                    target_project_id,
+                )
 
         await self.db.flush()
         # Re-fetch so relationships are populated for the API response.

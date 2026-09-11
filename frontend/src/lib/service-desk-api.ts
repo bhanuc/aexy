@@ -228,7 +228,8 @@ export interface TicketAttachment {
   id: string | null;
   /** Where the file came from. "email" arrived on the conversation; "upload" was
    *  put there by somebody here to be sent out. */
-  source: "email" | "upload";
+  /** "task": the linked task's file, mirrored here by the content sync — internal, not sendable. */
+  source: "email" | "upload" | "task";
   filename: string;
   content_type: string | null;
   size_bytes: number | null;

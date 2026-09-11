@@ -77,6 +77,9 @@ async def synced_task_peers(db: AsyncSession, task_id: str) -> list[str]:
                 ).where(
                     TaskDependency.dependency_type == "duplicates",
                     TaskDependency.sync_content.is_(True),
+                    # A link the user has resolved is an unlink: the task detail
+                    # stops listing it, so the sync stops with it.
+                    TaskDependency.status == "active",
                     or_(
                         TaskDependency.dependent_task_id == current,
                         TaskDependency.blocking_task_id == current,
@@ -175,6 +178,18 @@ async def propagate_description(
 
 
 # ── attachments ──────────────────────────────────────────────────────────────
+
+
+def is_task_mirror_entry(entry: object) -> bool:
+    """Is this ``Ticket.attachments`` entry a mirror of a task's file?
+
+    Ownership follows provenance: an entry carrying ``source_task_id`` was put
+    there by the sync and goes when the task's row goes; an entry without one
+    is the ticket's own file (the requester's, or an upload to send) and a
+    task deleting its copy must not take it. The desk also treats mirrors as
+    internal — never offered for sending, never served on a share link.
+    """
+    return isinstance(entry, dict) and bool(entry.get("source_task_id"))
 
 
 def _ticket_entry_for(attachment: TaskAttachment, *, task_id: str) -> dict:
@@ -301,17 +316,19 @@ async def mirror_ticket_upload_to_task(
 
 async def remove_attachment_everywhere(
     db: AsyncSession, attachment: TaskAttachment
-) -> bool:
+) -> None:
     """Drop every mirror of ``attachment`` from its synced peers and tickets.
 
-    Returns True when the stored object is still referenced afterwards — by a
-    task outside the sync group (a ticket-conversion copy, say) or by a ticket
-    that is not syncing — in which case the caller must leave the object alone.
-    The row passed in is *not* deleted here; the caller owns that.
+    Only *mirrors* go: peer rows sharing the key, and ticket entries the sync
+    wrote (``is_task_mirror_entry``). A ticket's own file that the task holds a
+    conversion copy of stays on the ticket. Whether the stored object may be
+    deleted is a separate question — ``task_attachment_service.
+    attachment_object_still_referenced`` — and the row passed in is not
+    deleted here; the caller owns both.
     """
     key = attachment.storage_key
     if not key:
-        return False
+        return
     task_id = str(attachment.task_id)
     peer_ids = await synced_task_peers(db, task_id)
     if peer_ids:
@@ -332,21 +349,13 @@ async def remove_attachment_everywhere(
     for ticket in await synced_tickets_for_tasks(db, [task_id, *peer_ids]):
         entries = list(ticket.attachments or [])
         kept = [
-            e for e in entries if not (isinstance(e, dict) and e.get("key") == key)
+            e
+            for e in entries
+            if not (is_task_mirror_entry(e) and e.get("key") == key)
         ]
         if len(kept) != len(entries):
             ticket.attachments = kept
     await db.flush()
-
-    remaining = (
-        await db.execute(
-            select(TaskAttachment.id).where(
-                TaskAttachment.storage_key == key,
-                TaskAttachment.id != attachment.id,
-            )
-        )
-    ).first()
-    return remaining is not None
 
 
 async def remove_ticket_upload_from_task(
@@ -456,29 +465,48 @@ async def work_update_scope(
     task key or the ticket number — so the panel can say where an update was
     written. The entity itself maps to None.
     """
+    # Column selects throughout: a full SprintTask row drags fourteen selectin
+    # relationships behind it (its whole history and attachment list among
+    # them) and this runs on every Updates panel open. Labels only need three.
+    from aexy.services.service_desk_config import display_id, ticket_prefix
+
     scope: dict[tuple[str, str], str | None] = {(entity_type, str(entity_id)): None}
+
+    async def label_tasks(task_ids: list[str], prefix: str) -> None:
+        rows = await db.execute(
+            select(SprintTask.id, SprintTask.task_key, SprintTask.title).where(
+                SprintTask.id.in_(task_ids)
+            )
+        )
+        for tid, key, title in rows:
+            scope[("task", str(tid))] = f"{prefix}#{key}" if key is not None else title
+
     if entity_type == "task":
         group = await task_group(db, entity_id)
         peers = [t for t in group if t != str(entity_id)]
         if peers:
-            for task in (
-                await db.execute(select(SprintTask).where(SprintTask.id.in_(peers)))
-            ).scalars():
-                scope[("task", str(task.id))] = (
-                    f"#{task.task_key}" if task.task_key is not None else task.title
+            await label_tasks(peers, "")
+        tickets = (
+            await db.execute(
+                select(Ticket.id, Ticket.ticket_number, Ticket.workspace_id).where(
+                    Ticket.linked_task_id.in_(group),
+                    Ticket.sync_content_with_task.is_(True),
                 )
-        for ticket in await synced_tickets_for_tasks(db, group):
-            scope[("ticket", str(ticket.id))] = f"ticket #{ticket.ticket_number}"
+            )
+        ).all()
+        for tid, number, workspace_id in tickets:
+            # The same id the desk shows everywhere else (prefix included), so
+            # what the panel names can be found in the queue.
+            prefix = await ticket_prefix(db, str(workspace_id))
+            scope[("ticket", str(tid))] = f"ticket {display_id(prefix, number)}"
     elif entity_type == "ticket":
-        ticket = await db.get(Ticket, entity_id)
-        task_id = synced_task_id_for_ticket(ticket) if ticket is not None else None
-        if task_id is not None:
-            for task in (
-                await db.execute(
-                    select(SprintTask).where(SprintTask.id.in_(await task_group(db, task_id)))
+        row = (
+            await db.execute(
+                select(Ticket.linked_task_id, Ticket.sync_content_with_task).where(
+                    Ticket.id == entity_id
                 )
-            ).scalars():
-                scope[("task", str(task.id))] = (
-                    f"task #{task.task_key}" if task.task_key is not None else task.title
-                )
+            )
+        ).first()
+        if row is not None and row[0] and row[1]:
+            await label_tasks(await task_group(db, str(row[0])), "task ")
     return scope

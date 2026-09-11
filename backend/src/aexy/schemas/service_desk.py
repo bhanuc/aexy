@@ -35,9 +35,10 @@ MailboxChannel = Literal["webhook", "gmail_sync"]
 StakeholderSemantics = Literal["internal", "external", "closed"]
 # Which master-data table an external stakeholder speaks for.
 MasterDataLink = Literal["account", "vendor"]
-# A ticket file either arrived on the conversation or was uploaded here to be
-# sent out from it.
-AttachmentSource = Literal["email", "upload"]
+# A ticket file arrived on the conversation, was uploaded here to be sent out
+# from it, or is the linked task's file mirrored here by the content sync
+# (internal: never sendable from the ticket, never on a share link).
+AttachmentSource = Literal["email", "upload", "task"]
 
 
 # ==================== Taxonomy: stakeholders ====================

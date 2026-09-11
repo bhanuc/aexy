@@ -47,7 +47,11 @@
     "disabled": "Disabled",
     "manage": "Manage",
     "optional": "(optional)",
-    "copy": "Copy"
+    "copy": "Copy",
+    "mentions": {
+      "mentionMember": "Mention a team member",
+      "referenceFile": "Reference a file"
+    }
   },
   "saved": "Saved",
   "deleted": "Deleted"

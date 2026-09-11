@@ -93,18 +93,27 @@ test.describe("@-mentions in the task detail (live)", () => {
     const first = await options.first().boundingBox();
     expect(first!.y + first!.height).toBeLessThanOrEqual(720);
 
-    // Arrow keys move the highlight; Enter picks. No mouse needed.
+    // Arrow keys move the highlight. No mouse needed.
     const count = await options.count();
     if (count > 1) {
       await page.keyboard.press("ArrowDown");
       await expect(options.nth(1)).toHaveAttribute("aria-selected", "true");
       await page.keyboard.press("ArrowUp");
     }
+    // A bare "@" then Enter is a new line, not a pick — nobody gets mentioned
+    // by accident. Once something is typed, Enter picks the highlighted name.
     const name = (await options.first().textContent())!.trim();
     await page.keyboard.press("Enter");
     await expect(list).toBeHidden();
+    expect(await editor.evaluate((el) => el.innerHTML)).not.toContain(`@${name}`);
+
+    await page.keyboard.type("@" + name.slice(0, 2));
+    await expect(list).toBeVisible({ timeout: 5_000 });
+    const picked = (await list.getByTestId("mention-option").first().textContent())!.trim();
+    await page.keyboard.press("Enter");
+    await expect(list).toBeHidden();
     const html = await editor.evaluate((el) => el.innerHTML);
-    expect(html).toContain(`@${name}`);
+    expect(html).toContain(`@${picked}`);
     // The link keeps its mention href instead of being stripped to "".
     expect(html).toMatch(/href="mention:user:[0-9a-f-]{36}"/);
   });

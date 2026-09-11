@@ -220,8 +220,13 @@ export default function ServiceDeskTicketDetailPage() {
   // tell a later reader the customer had sent it.
   // Same reason for the default: a file from a payload that predates `source`
   // arrived by email, which is the only kind that existed then.
-  const emailedFiles = ticket.attachments.filter((file) => file.source !== "upload");
+  const emailedFiles = ticket.attachments.filter(
+    (file) => file.source !== "upload" && file.source !== "task",
+  );
   const uploadedFiles = ticket.attachments.filter((file) => file.source === "upload");
+  // The linked task's files, mirrored here by the content sync. Internal:
+  // shown so the desk knows what the board has, never offered for sending.
+  const taskFiles = ticket.attachments.filter((file) => file.source === "task");
   // Everything that will actually be attached, both kinds together — the panel's
   // job is to show what leaves, not how the desk got hold of it.
   const confirmFiles = [
@@ -1233,6 +1238,31 @@ export default function ServiceDeskTicketDetailPage() {
                   </span>
                 </label>
               </div>
+              {taskFiles.length > 0 && (
+                <div className="space-y-1" data-testid="sd-task-files">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <GitBranch className="h-3.5 w-3.5" /> {t("detail.taskFiles")}
+                  </div>
+                  {taskFiles.map((file) => (
+                    <div key={file.id} className="flex items-center gap-2 text-sm">
+                      <button
+                        type="button"
+                        className="min-w-0 break-all text-left underline underline-offset-2 hover:text-foreground"
+                        onClick={() =>
+                          downloadUpload.mutate({
+                            id: ticketId,
+                            attachmentId: file.id ?? "",
+                            filename: file.filename,
+                          })
+                        }
+                      >
+                        {file.filename}
+                      </button>
+                      <span className="shrink-0 text-xs text-muted-foreground">{fmtBytes(file.size_bytes)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* Sending is usually the hand-off, so the stage follows the recipient.
                   Untick when the mail is an update rather than a request. */}

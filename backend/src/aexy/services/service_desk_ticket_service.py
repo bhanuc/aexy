@@ -1502,12 +1502,34 @@ class ServiceDeskTicketService:
         ticketing uses — rather than in ``field_values``, which holds handles
         into the mailbox and no bytes of its own.
         """
+        from aexy.services.content_sync_service import is_task_mirror_entry
+
         raw = ticket.attachments or []
-        return [item for item in raw if isinstance(item, dict) and item.get("id")]
+        return [
+            item
+            for item in raw
+            if isinstance(item, dict) and item.get("id") and not is_task_mirror_entry(item)
+        ]
+
+    @staticmethod
+    def _task_attachments(ticket: Ticket) -> list[dict]:
+        """Files the linked task holds, mirrored here by the content sync.
+
+        Kept apart from the uploads on purpose: an upload is something the desk
+        means to send, and a developer's file from the board is not — it is
+        never offered on the compose box and never served on a share link.
+        """
+        from aexy.services.content_sync_service import is_task_mirror_entry
+
+        return [
+            item
+            for item in (ticket.attachments or [])
+            if isinstance(item, dict) and item.get("id") and is_task_mirror_entry(item)
+        ]
 
     @classmethod
     def _detail_attachments(cls, ticket: Ticket) -> list[TicketAttachment]:
-        """Both kinds of file on the ticket, each saying which kind it is."""
+        """All three kinds of file on the ticket, each saying which kind it is."""
         out = [
             TicketAttachment(
                 index=index,
@@ -1534,6 +1556,20 @@ class ServiceDeskTicketService:
                 source="upload",
             )
             for item in cls._uploaded_attachments(ticket)
+        )
+        out.extend(
+            TicketAttachment(
+                index=None,
+                id=str(item.get("id")),
+                filename=str(item.get("filename") or "attachment"),
+                content_type=item.get("type"),
+                size_bytes=item.get("size"),
+                # Internal by definition; forwarding it is a decision to make
+                # on the board, by attaching it to a reply from there.
+                can_forward=False,
+                source="task",
+            )
+            for item in cls._task_attachments(ticket)
         )
         return out
 

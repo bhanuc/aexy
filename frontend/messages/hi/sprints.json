@@ -199,6 +199,13 @@
       "ownerRepoPlaceholder": "owner/repo",
       "issueRepositoryAriaLabel": "GitHub issue की repository",
       "issueNumberAriaLabel": "GitHub issue नंबर"
+    },
+    "linkedTasks": {
+      "title": "जुड़े हुए टास्क",
+      "task": "टास्क",
+      "copiedFrom": "दूसरे प्रोजेक्ट से कॉपी किया गया",
+      "copiedTo": "दूसरे प्रोजेक्ट में कॉपी किया गया",
+      "inSync": "विवरण, कमेंट और अटैचमेंट सिंक में"
     }
   }
 }

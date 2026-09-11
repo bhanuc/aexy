@@ -807,6 +807,13 @@ TaskActivityAction = Literal[
     "created_from_move",
     # The description arrived from a task this one is kept in sync with.
     "description_synced",
+    # Multi-assignee edits. Written by the assignee-set endpoints since they
+    # were added; never listed here, so the History of any task whose
+    # assignees had been edited failed to load.
+    "assignees_changed",
+    "assignee_added",
+    "assignee_removed",
+    "primary_assignee_cleared",
 ]
 
 
