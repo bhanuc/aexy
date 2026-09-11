@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.1] - 2026-09-11
+
+The handoff timeline says how a ticket arrived and who from.
+
+### Fixed: the timeline's first entry said only "Ticket created"
+
+A ticket's timeline opened with the bucket it landed in, a timestamp, and the
+words "Ticket created" — so the one entry that should answer "where did this
+come from" was the one entry that didn't. The answer was already on the ticket
+and already on the same page: the channel it arrived on is rendered as a Source
+field, and the requester sits beside the conversation. The timeline simply
+never used either.
+
+It now reads the channel and the person together — "Email from Ada Lovelace",
+or "Phone or WhatsApp · logged by Priya Raman" for one taken down by hand.
+Those are different facts, so they are worded differently rather than flattened
+into one vague "by": an emailed ticket has a requester and no creator, and a
+manually logged one has a creator who is not the requester.
+
+Later entries gained the same treatment. Each segment already carried the id of
+whoever moved the ticket, and the timeline ignored it, so a handoff could not
+say who performed it. It is now resolved to a name where one is known.
+
+The arrival is identified by its timestamp rather than by taking the first
+segment in the response, so a re-ordered response cannot relabel a later
+handoff as the ticket's origin.
+
 ## [0.38.0] - 2026-09-11
 
 Access is decided in one place and shown in one order. The sidebar presets are
