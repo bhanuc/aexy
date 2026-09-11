@@ -7,8 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.38.1] - 2026-09-11
 
-The handoff timeline says how a ticket arrived and who from, and a department
-can be chosen for a stakeholder without being refused.
+The handoff timeline says how a ticket arrived and who from, a department can
+be chosen for a stakeholder without being refused, and the ticket page has one
+scrollbar rather than two.
+
+### Fixed: scrolling past the ticket dragged the whole application up
+
+Reaching the bottom of a ticket and carrying on scrolled the window as well,
+pulling the sidebar and the content up and leaving empty page beneath them —
+two scrollbars where there should be one.
+
+The shell is sized to the window and hidden at the edges precisely so the
+document never scrolls; only the content column does. What broke that was the
+file input behind "attach a file". It is visually hidden, which positions it
+absolutely, and an absolutely-positioned element is clipped by an ancestor's
+overflow only when that ancestor is itself positioned — none here was. Its
+containing block was therefore the page, so it was laid out at the document
+coordinate of its static position, below the fold on a long ticket, and
+stretched the document past the window. The wheel then chained from the column
+to the window on reaching the end.
+
+Anchoring the input to its own label keeps it clipped with everything else.
 
 ### Fixed: a department could be offered for a stakeholder and then refused
 

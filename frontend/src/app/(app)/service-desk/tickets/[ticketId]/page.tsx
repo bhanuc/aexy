@@ -1171,7 +1171,19 @@ export default function ServiceDeskTicketDetailPage() {
                     </button>
                   </div>
                 ))}
-                <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+                {/* `relative` is load-bearing. Tailwind's `sr-only` positions the
+                    input absolutely, and an absolutely-positioned element is only
+                    clipped by an ancestor's `overflow` if that ancestor is itself
+                    positioned. Without this the input's containing block is the
+                    page, so it was laid out at the document coordinate of its
+                    static position — below the fold of a long ticket — and
+                    stretched the document past the viewport. The app shell is
+                    `h-screen overflow-hidden` precisely so the document never
+                    scrolls, so the result was a second scrollbar: reach the
+                    bottom of the ticket column and the wheel would chain to the
+                    window and drag the whole shell up, leaving empty page
+                    beneath it. */}
+                <label className="relative inline-flex cursor-pointer items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
                   <input
                     type="file"
                     multiple
