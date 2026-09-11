@@ -43,6 +43,8 @@ import type { FileAIMetadata } from "@/lib/api";
 import { TaskDescriptionEditor, TaskDescriptionEditorRef, MentionUser } from "@/components/planning/TaskDescriptionEditor";
 import { TaskGitHubLinksSection } from "@/components/sprints/TaskGitHubLinksSection";
 import { MoveToProjectModal } from "@/components/planning/MoveToProjectModal";
+import { useTaskDependencies } from "@/hooks/useDependencies";
+import { useTranslations } from "next-intl";
 import { FileMetadataPopover } from "@/components/files/FileMetadataPopover";
 import { FileAILine } from "@/components/files/FileAIBadges";
 import {
@@ -81,6 +83,7 @@ function AssignmentHistoryPanel({
   taskId: string;
   users: MentionUser[];
 }) {
+  const router = useRouter();
   const { data, isLoading, error } = useQuery({
     queryKey: ["taskActivities", sprintId, teamId, taskId],
     queryFn: () => sprintId
@@ -260,6 +263,37 @@ function AssignmentHistoryPanel({
               )
               : <>moved to backlog</>;
             break;
+          case "moved_to_project": {
+            const m = event.metadata as { new_task_key?: number; source_action?: string; sync_content?: boolean };
+            line = (
+              <>
+                {m.source_action === "keep" ? "copied this task to another project" : "moved this task to another project"}
+                {m.new_task_key != null && <> as <span className="text-foreground">#{m.new_task_key}</span></>}
+                {m.sync_content ? ", kept in sync" : ""}
+              </>
+            );
+            break;
+          }
+          case "created_from_move": {
+            const m = event.metadata as { source_task_key?: number };
+            line = (
+              <>
+                created this task from{" "}
+                <span className="text-foreground">{m.source_task_key != null ? `#${m.source_task_key}` : "another project"}</span>
+              </>
+            );
+            break;
+          }
+          case "description_synced": {
+            const m = event.metadata as { source_task_key?: number };
+            line = (
+              <>
+                description updated from synced task{" "}
+                <span className="text-foreground">{m.source_task_key != null ? `#${m.source_task_key}` : ""}</span>
+              </>
+            );
+            break;
+          }
           default:
             line = (
               <>
@@ -282,6 +316,29 @@ function AssignmentHistoryPanel({
             <span className="text-muted-foreground">
               <span className="text-foreground font-medium">{actorName}</span>{" "}
               {line}
+              {/* A comment read through from a synced task, or mirrored from the
+                  ticket, says so — the row was not written here. */}
+              {event.action === "comment" && event.task_id !== taskId && event.task_key != null && (
+                <>
+                  {" "}
+                  <button
+                    type="button"
+                    data-testid="task-history-via"
+                    onClick={() =>
+                      event.task_team_id &&
+                      router.push(`/sprints/${event.task_team_id}/board?task=${event.task_id}`)
+                    }
+                    className="text-xs text-primary-400 hover:underline"
+                  >
+                    via #{event.task_key}
+                  </button>
+                </>
+              )}
+              {event.action === "comment" && typeof (event.metadata as { ticket_label?: string }).ticket_label === "string" && (
+                <span className="ml-1 text-xs text-muted-foreground" data-testid="task-history-from-ticket">
+                  from ticket {(event.metadata as { ticket_label?: string }).ticket_label}
+                </span>
+              )}
             </span>
             {event.action === "comment" && event.comment && (
               <p className="whitespace-pre-wrap text-foreground text-sm">{event.comment}</p>
@@ -293,6 +350,57 @@ function AssignmentHistoryPanel({
         );
       })}
     </ol>
+  );
+}
+
+// The tasks this one was moved to or from. A "duplicates" dependency is what a
+// cross-project move leaves behind; with content sync on, the pair share
+// description, comments and attachments, and this is where that is said —
+// the description no longer carries a "Moved from" line when it must match.
+function LinkedTasksSection({ taskId }: { taskId: string }) {
+  const router = useRouter();
+  const t = useTranslations("sprints");
+  const { dependencies } = useTaskDependencies(taskId);
+  const links = dependencies.filter((d) => d.dependency_type === "duplicates");
+  if (links.length === 0) return null;
+
+  return (
+    <div className="pt-4 border-t border-border" data-testid="task-linked-tasks">
+      <label className="block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">
+        {t("linkedTasks.title")}
+      </label>
+      <ul className="space-y-1.5">
+        {links.map((link) => {
+          // The other end of the link, whichever side this task is on.
+          const isDependent = link.dependent_task_id === taskId;
+          const otherId = isDependent ? link.blocking_task_id : link.dependent_task_id;
+          const otherKey = isDependent ? link.blocking_task_key : link.dependent_task_key;
+          const otherTitle = isDependent ? link.blocking_task_title : link.dependent_task_title;
+          const otherTeam = isDependent ? link.blocking_task_team_id : link.dependent_task_team_id;
+          return (
+            <li key={link.id} className="rounded border border-border bg-background/50 px-2 py-1.5 text-xs">
+              <button
+                type="button"
+                data-testid="task-linked-task"
+                disabled={!otherTeam}
+                onClick={() => otherTeam && router.push(`/sprints/${otherTeam}/board?task=${otherId}`)}
+                className="flex w-full items-center gap-1.5 text-left text-foreground hover:text-primary-400 disabled:cursor-default"
+              >
+                <ArrowRightLeft className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                <span className="truncate">
+                  {otherKey != null && <span className="font-mono">#{otherKey}</span>}{" "}
+                  {otherTitle ?? t("linkedTasks.task")}
+                </span>
+              </button>
+              <div className="mt-0.5 text-muted-foreground">
+                {isDependent ? t("linkedTasks.copiedFrom") : t("linkedTasks.copiedTo")}
+                {link.sync_content ? ` · ${t("linkedTasks.inSync")}` : ""}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
@@ -378,7 +486,7 @@ export function EditTaskModal({ task, onClose, onUpdate, onDelete, isUpdating, s
   const [estimatedHours, setEstimatedHours] = useState<string>(
     cachedState?.estimatedHours ?? task.estimated_hours?.toString() ?? "",
   );
-  const [activeTab, setActiveTab] = useState<"details" | "updates" | "history">("details");
+  const [activeTab, setActiveTab] = useState<"details" | "history">("details");
   const [newAttachmentFiles, setNewAttachmentFiles] = useState<File[]>([]);
   const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -743,7 +851,8 @@ export function EditTaskModal({ task, onClose, onUpdate, onDelete, isUpdating, s
         <div className="grid min-h-0 flex-1 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_20rem]">
           {/* Main content */}
           <div className="space-y-5 p-5 sm:p-6">
-            {/* Tabs: Details / Updates / History */}
+            {/* Tabs: Details / History. Updates live under the description —
+                a tab hid the conversation behind a click nobody made. */}
             <div className="flex gap-2 border-b border-border" data-testid="task-tabs">
               <button
                 type="button"
@@ -760,19 +869,6 @@ export function EditTaskModal({ task, onClose, onUpdate, onDelete, isUpdating, s
               </button>
               <button
                 type="button"
-                data-testid="task-tab-updates"
-                onClick={() => setActiveTab("updates")}
-                className={cn(
-                  "px-3 py-2 text-sm font-medium transition border-b-2",
-                  activeTab === "updates"
-                    ? "text-foreground border-primary-500"
-                    : "text-muted-foreground border-transparent hover:text-foreground",
-                )}
-              >
-                Updates
-              </button>
-              <button
-                type="button"
                 data-testid="task-tab-history"
                 onClick={() => setActiveTab("history")}
                 className={cn(
@@ -785,14 +881,6 @@ export function EditTaskModal({ task, onClose, onUpdate, onDelete, isUpdating, s
                 History
               </button>
             </div>
-
-            {activeTab === "updates" && (
-              <WorkUpdatesPanel
-                workspaceId={task.workspace_id ?? null}
-                entityType="task"
-                entityId={task.id}
-              />
-            )}
 
             {activeTab === "history" && (
               <AssignmentHistoryPanel
@@ -846,6 +934,25 @@ export function EditTaskModal({ task, onClose, onUpdate, onDelete, isUpdating, s
                 placeholder="Add more details... Use @ to mention team members"
                 users={users}
                 minHeight="260px"
+              />
+            </section>
+
+            {/* Updates — the comments on this task. Directly under the
+                description, where the conversation about it belongs. */}
+            <section data-testid="task-updates-section">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Updates
+                </label>
+                <span className="text-xs text-muted-foreground">
+                  Comments and progress notes · use @ to mention
+                </span>
+              </div>
+              <WorkUpdatesPanel
+                workspaceId={task.workspace_id ?? null}
+                entityType="task"
+                entityId={task.id}
+                users={users}
               />
             </section>
 
@@ -1244,6 +1351,8 @@ export function EditTaskModal({ task, onClose, onUpdate, onDelete, isUpdating, s
               />
             )}
 
+            <LinkedTasksSection taskId={task.id} />
+
             {/* Move to project */}
             {task.workspace_id && task.team_id && (
               <div className="pt-4 border-t border-border">
@@ -1339,8 +1448,9 @@ export function EditTaskModal({ task, onClose, onUpdate, onDelete, isUpdating, s
             sourceStatusSlug={task.status}
             onClose={() => setShowMoveProject(false)}
             onMoved={() => {
-              // Source is archived/done — close the detail modal so the user
-              // lands back on whichever list opened it, which will re-fetch.
+              // Whatever happened to the original, the lists behind this
+              // modal are stale — close so the user lands back on one that
+              // re-fetches, with the new link in place.
               onClose();
             }}
           />

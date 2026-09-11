@@ -153,7 +153,11 @@ Two neighbours of this control worth knowing:
   ticket with its own pending-with and its own clock, while the thread stays
   linked to the parent.
 * **Convert to task** — when the work belongs in a project rather than on the
-  desk, the ticket keeps its own life and gains a link to the task.
+  desk, the ticket keeps its own life and gains a link to the task. The two
+  stay in step: an internal note on the ticket is a comment on the task and
+  vice versa, progress updates read across, and a file uploaded to either
+  appears on both. The requester's own words are never overwritten from the
+  task. A switch under the link turns the sync off.
 
 ### Reading the clocks
 

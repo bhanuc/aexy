@@ -1170,6 +1170,7 @@ async def sync_task(
 def activity_to_response(activity) -> TaskActivityResponse:
     """Convert TaskActivity model to response schema."""
     actor = activity.actor
+    task = activity.task
     return TaskActivityResponse(
         id=str(activity.id),
         task_id=str(activity.task_id),
@@ -1183,6 +1184,10 @@ def activity_to_response(activity) -> TaskActivityResponse:
         comment=activity.comment,
         metadata=activity.activity_metadata or {},
         created_at=activity.created_at,
+        # Where the row lives — differs from the task being viewed when a
+        # comment is read through from a synced peer.
+        task_key=task.task_key if task is not None else None,
+        task_team_id=str(task.team_id) if task is not None and task.team_id else None,
     )
 
 

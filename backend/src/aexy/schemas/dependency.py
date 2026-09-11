@@ -63,18 +63,14 @@ class StoryDependencyResponse(BaseModel):
 
 
 class StoryDependencyListResponse(BaseModel):
-    """Schema for story dependency list item."""
+    """A story's dependencies, as `GET /dependencies/stories/{story_id}` returns them.
 
-    model_config = ConfigDict(from_attributes=True)
+    Declared as a single list item while the endpoint built ``{items, total}``
+    — the same fault as the task list, fixed the same way.
+    """
 
-    id: str
-    blocking_story_id: str
-    blocking_story_key: str | None = None
-    blocking_story_title: str | None = None
-    blocking_story_status: str | None = None
-    dependency_type: DependencyType
-    status: DependencyStatus
-    is_external: bool = False
+    items: list[StoryDependencyResponse] = Field(default_factory=list)
+    total: int = 0
 
 
 # ==================== Task Dependency Schemas ====================
@@ -108,10 +104,17 @@ class TaskDependencyResponse(BaseModel):
     workspace_id: str
     dependent_task_id: str
     dependent_task_title: str | None = None
+    dependent_task_key: int | None = None
+    dependent_task_team_id: str | None = None
     blocking_task_id: str
     blocking_task_title: str | None = None
     blocking_task_status: str | None = None
+    blocking_task_key: int | None = None
+    blocking_task_team_id: str | None = None
     dependency_type: DependencyType
+    # Only ever true on a "duplicates" link made by a cross-project move: the
+    # two tasks keep description, comments and attachments identical.
+    sync_content: bool = False
     is_cross_sprint: bool = False
     is_external: bool = False
     external_description: str | None = None
@@ -126,17 +129,15 @@ class TaskDependencyResponse(BaseModel):
 
 
 class TaskDependencyListResponse(BaseModel):
-    """Schema for task dependency list item."""
+    """A task's dependencies, as `GET /dependencies/tasks/{task_id}` returns them.
 
-    model_config = ConfigDict(from_attributes=True)
+    This was declared as a single list *item* while the endpoint built it as
+    ``{items, total}`` — so the endpoint failed response validation on every
+    call, and the client (which expects ``items``) never got an answer.
+    """
 
-    id: str
-    blocking_task_id: str
-    blocking_task_title: str | None = None
-    blocking_task_status: str | None = None
-    dependency_type: DependencyType
-    status: DependencyStatus
-    is_external: bool = False
+    items: list[TaskDependencyResponse] = Field(default_factory=list)
+    total: int = 0
 
 
 # ==================== Dependency Resolution ====================

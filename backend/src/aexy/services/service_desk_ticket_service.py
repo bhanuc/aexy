@@ -973,6 +973,22 @@ class ServiceDeskTicketService:
         self.db.add(note)
         await self.db.flush()
 
+        # The linked task, when the pair are kept in sync, gets the note as a
+        # comment — the developer reading the board sees what the desk wrote
+        # without opening the ticket.
+        ticket = await self.db.get(Ticket, ticket_id)
+        if ticket is not None:
+            from aexy.services.content_sync_service import mirror_ticket_note_to_task
+
+            prefix = await ticket_prefix(self.db, workspace_id)
+            await mirror_ticket_note_to_task(
+                self.db,
+                ticket,
+                text,
+                actor_id=author_id,
+                ticket_label=render_display_id(prefix, ticket.ticket_number),
+            )
+
         author = await self.db.get(Developer, author_id)
         return ServiceDeskNote(
             id=note.id,
@@ -982,6 +998,32 @@ class ServiceDeskTicketService:
             created_at=note.created_at,
             system=False,
         )
+
+    async def set_task_sync(
+        self,
+        workspace_id: str,
+        ticket_id: str,
+        enabled: bool,
+        scope_developer_id: str | None = None,
+    ) -> bool:
+        """Switch the ticket ↔ linked-task content sync on or off.
+
+        Turning it off stops notes, updates and files flowing from now on; what
+        already crossed stays where it landed. Turning it back on does not
+        replay the gap — the two are reconciled by the next write, not by a
+        merge nobody asked for.
+        """
+        await self._sd(workspace_id, ticket_id, developer_id=scope_developer_id, for_edit=True)
+        ticket = await self.db.get(Ticket, ticket_id)
+        if ticket is None:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        if not ticket.linked_task_id:
+            raise HTTPException(
+                status_code=400, detail="This ticket is not linked to a task"
+            )
+        ticket.sync_content_with_task = bool(enabled)
+        await self.db.flush()
+        return ticket.sync_content_with_task
 
     async def list_notes(
         self, workspace_id: str, ticket_id: str, scope_developer_id: str | None = None
@@ -1006,6 +1048,7 @@ class ServiceDeskTicketService:
                 author_name=(name or email) if note.author_id else None,
                 content=note.content,
                 created_at=note.created_at,
+                synced_from_task_id=note.synced_from_task_id,
                 system=note.author_id is None,
             )
             for note, name, email in rows
@@ -1459,12 +1502,34 @@ class ServiceDeskTicketService:
         ticketing uses — rather than in ``field_values``, which holds handles
         into the mailbox and no bytes of its own.
         """
+        from aexy.services.content_sync_service import is_task_mirror_entry
+
         raw = ticket.attachments or []
-        return [item for item in raw if isinstance(item, dict) and item.get("id")]
+        return [
+            item
+            for item in raw
+            if isinstance(item, dict) and item.get("id") and not is_task_mirror_entry(item)
+        ]
+
+    @staticmethod
+    def _task_attachments(ticket: Ticket) -> list[dict]:
+        """Files the linked task holds, mirrored here by the content sync.
+
+        Kept apart from the uploads on purpose: an upload is something the desk
+        means to send, and a developer's file from the board is not — it is
+        never offered on the compose box and never served on a share link.
+        """
+        from aexy.services.content_sync_service import is_task_mirror_entry
+
+        return [
+            item
+            for item in (ticket.attachments or [])
+            if isinstance(item, dict) and item.get("id") and is_task_mirror_entry(item)
+        ]
 
     @classmethod
     def _detail_attachments(cls, ticket: Ticket) -> list[TicketAttachment]:
-        """Both kinds of file on the ticket, each saying which kind it is."""
+        """All three kinds of file on the ticket, each saying which kind it is."""
         out = [
             TicketAttachment(
                 index=index,
@@ -1491,6 +1556,20 @@ class ServiceDeskTicketService:
                 source="upload",
             )
             for item in cls._uploaded_attachments(ticket)
+        )
+        out.extend(
+            TicketAttachment(
+                index=None,
+                id=str(item.get("id")),
+                filename=str(item.get("filename") or "attachment"),
+                content_type=item.get("type"),
+                size_bytes=item.get("size"),
+                # Internal by definition; forwarding it is a decision to make
+                # on the board, by attaching it to a reply from there.
+                can_forward=False,
+                source="task",
+            )
+            for item in cls._task_attachments(ticket)
         )
         return out
 
@@ -1811,6 +1890,14 @@ class ServiceDeskTicketService:
                 ),
             ) from exc
 
+        # The task this ticket syncs with holds the same files: rows pointing at
+        # the objects just stored, not second copies.
+        from aexy.services.content_sync_service import mirror_ticket_upload_to_task
+
+        await mirror_ticket_upload_to_task(
+            self.db, ticket, created, uploaded_by_id=scope_developer_id
+        )
+
         return [
             TicketAttachment(
                 index=None,
@@ -1844,7 +1931,20 @@ class ServiceDeskTicketService:
         if ticket is None:
             raise HTTPException(status_code=404, detail="Ticket not found")
 
-        if not await TicketService(self.db).remove_ticket_attachment(ticket, attachment_id):
+        # The synced task's rows for this file go too. If a task *outside* the
+        # sync still points at the object (a conversion copy on a task whose
+        # sync was switched off), the object stays for it.
+        from aexy.services.content_sync_service import remove_ticket_upload_from_task
+
+        tickets = TicketService(self.db)
+        match = tickets.find_ticket_attachment(ticket, attachment_id, include_internal=True)
+        still_referenced = await remove_ticket_upload_from_task(
+            self.db, ticket, tickets.attachment_key(match) if match else None
+        )
+
+        if not await tickets.remove_ticket_attachment(
+            ticket, attachment_id, delete_object=not still_referenced
+        ):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="This ticket has no such uploaded file",
@@ -2351,6 +2451,13 @@ class ServiceDeskTicketService:
             )
         ).all()
 
+        # Enough about the linked task to name it and link to its board.
+        linked_task = None
+        if ticket.linked_task_id:
+            from aexy.models.sprint import SprintTask
+
+            linked_task = await self.db.get(SprintTask, ticket.linked_task_id)
+
         return ServiceDeskTicketDetail(
             id=sd.id,
             ticket_id=sd.ticket_id,
@@ -2378,6 +2485,13 @@ class ServiceDeskTicketService:
             created_at=sd.created_at,
             priority=ticket.priority,
             linked_task_id=ticket.linked_task_id,
+            linked_task_key=linked_task.task_key if linked_task is not None else None,
+            linked_task_team_id=(
+                str(linked_task.team_id)
+                if linked_task is not None and linked_task.team_id
+                else None
+            ),
+            sync_content_with_task=bool(ticket.sync_content_with_task),
             notes=[
                 ServiceDeskNote(
                     id=note.id,
@@ -2385,6 +2499,7 @@ class ServiceDeskTicketService:
                     author_name=(note_author or note_email) if note.author_id else None,
                     content=note.content,
                     created_at=note.created_at,
+                    synced_from_task_id=note.synced_from_task_id,
                     # No author means the desk wrote it. Marked so the UI can
                     # style it as the system explaining itself rather than as a
                     # colleague's remark.

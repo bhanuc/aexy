@@ -683,6 +683,7 @@ async def move_task_to_project(
             subtask_strategy=body.subtask_strategy,
             actor_id=str(current_user.id),
             target_status_slug=body.target_status_slug,
+            sync_content=body.sync_content,
         )
     except TaskValidationError as exc:
         raise HTTPException(
@@ -712,6 +713,7 @@ async def bulk_move_tasks_to_project(
         subtask_strategy=body.subtask_strategy,
         actor_id=str(current_user.id),
         target_status_slug=body.target_status_slug,
+        sync_content=body.sync_content,
     )
     await db.commit()
     return {"results": results}

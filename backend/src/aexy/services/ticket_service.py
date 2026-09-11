@@ -1352,8 +1352,17 @@ class TicketService:
         return created
 
     def _iter_attachments(self, ticket: Ticket, include_internal: bool):
-        """Yield attachment dicts from the ticket and its responses."""
+        """Yield attachment dicts from the ticket and its responses.
+
+        A ticket-level entry mirrored from the linked task's files is internal
+        — a developer's attachment on a board — and is skipped unless internal
+        material was asked for, the same as an internal note's files.
+        """
+        from aexy.services.content_sync_service import is_task_mirror_entry
+
         for a in ticket.attachments or []:
+            if is_task_mirror_entry(a) and not include_internal:
+                continue
             yield a
         for response in ticket.responses:
             if response.is_internal and not include_internal:
@@ -1383,15 +1392,21 @@ class TicketService:
             return get_storage_service().key_from_url(url)
         return None
 
-    async def remove_ticket_attachment(self, ticket: Ticket, attachment_id: str) -> bool:
-        """Delete a ticket-level attachment from storage and the ticket."""
+    async def remove_ticket_attachment(
+        self, ticket: Ticket, attachment_id: str, *, delete_object: bool = True
+    ) -> bool:
+        """Delete a ticket-level attachment from the ticket, and from storage.
+
+        `delete_object=False` leaves the stored bytes in place — for a file the
+        linked task still holds a row for, which points at the same object.
+        """
         attachments = list(ticket.attachments or [])
         match = next((a for a in attachments if a.get("id") == attachment_id), None)
         if match is None:
             return False
 
         key = self.attachment_key(match)
-        if key:
+        if key and delete_object:
             await get_storage_service().delete_object(key)
 
         ticket.attachments = [a for a in attachments if a.get("id") != attachment_id]

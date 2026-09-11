@@ -2986,7 +2986,10 @@ export type TaskActivityAction =
   | "attachment_removed"
   | "archived"
   | "unarchived"
-  | "sprint_changed";
+  | "sprint_changed"
+  | "moved_to_project"
+  | "created_from_move"
+  | "description_synced";
 
 export interface TaskActivity {
   id: string;
@@ -3001,6 +3004,10 @@ export interface TaskActivity {
   comment: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
+  // Where the row lives. A comment read through from a task this one is kept
+  // in sync with carries that task's id/key/board here, not the viewed one's.
+  task_key?: number | null;
+  task_team_id?: string | null;
 }
 
 export interface TaskActivityList {
@@ -4290,9 +4297,11 @@ export const projectTasksApi = {
     taskId: string,
     body: {
       target_project_id: string;
-      source_action: "archive" | "mark_done";
+      source_action: "archive" | "mark_done" | "keep";
       subtask_strategy?: "block" | "cascade" | "orphan";
       target_status_slug?: string;
+      // Keep description, comments and attachments identical on both tasks.
+      sync_content?: boolean;
     },
   ): Promise<SprintTask> => {
     const response = await api.post(
@@ -4311,9 +4320,11 @@ export const projectTasksApi = {
     body: {
       task_ids: string[];
       target_project_id: string;
-      source_action: "archive" | "mark_done";
+      source_action: "archive" | "mark_done" | "keep";
       subtask_strategy?: "block" | "cascade" | "orphan";
       target_status_slug?: string;
+      // Keep description, comments and attachments identical on both tasks.
+      sync_content?: boolean;
     },
   ): Promise<BulkMoveResponse> => {
     const response = await api.post(
@@ -9466,6 +9477,10 @@ export interface Ticket {
   team_id?: string;
   external_issues: ExternalIssue[];
   linked_task_id?: string;
+  linked_task_key?: number | null;
+  linked_task_team_id?: string | null;
+  // Whether notes, progress updates and files are kept in step with the linked task.
+  sync_content_with_task?: boolean;
   linked_crm_contact?: {
     id: string;
     display_name: string;
@@ -15907,6 +15922,9 @@ export interface WorkUpdate {
   body: string;
   created_at: string;
   edited_at?: string | null;
+  // Set when the update was written on a linked entity (the ticket this task
+  // came from, a task it is kept in sync with) and read through to this list.
+  origin_label?: string | null;
 }
 
 export interface WorkUpdateListResponse {
@@ -15937,11 +15955,14 @@ export const workUpdatesApi = {
     workspaceId: string,
     entityType: WorkUpdateEntityType,
     entityId: string,
-    body: string
+    body: string,
+    // People @-mentioned in the body; each is notified. The body stays plain
+    // text, so who was meant travels alongside it.
+    mentionedUserIds: string[] = []
   ): Promise<WorkUpdate> => {
     const response = await api.post(
       `/workspaces/${workspaceId}/work-updates/${entityType}/${entityId}`,
-      { body }
+      { body, mentioned_user_ids: mentionedUserIds }
     );
     return response.data;
   },
@@ -16251,8 +16272,18 @@ export interface StoryDependency {
 export interface TaskDependency {
   id: string;
   dependent_task_id: string;
+  dependent_task_title?: string | null;
+  dependent_task_key?: number | null;
+  dependent_task_team_id?: string | null;
   blocking_task_id: string;
+  blocking_task_title?: string | null;
+  blocking_task_status?: string | null;
+  blocking_task_key?: number | null;
+  blocking_task_team_id?: string | null;
   dependency_type: DependencyType;
+  // Only on a "duplicates" link made by a cross-project move: the pair keep
+  // description, comments and attachments identical.
+  sync_content?: boolean;
   description?: string;
   is_cross_sprint: boolean;
   status: DependencyStatus;

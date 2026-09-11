@@ -414,6 +414,14 @@ class Ticket(Base):
         ForeignKey("sprint_tasks.id", ondelete="SET NULL"),
         nullable=True,
     )
+    # Whether the ticket and its linked task keep internal notes, progress
+    # updates and attachments in step (services/content_sync_service.py). On by
+    # default: the link exists because the two are the same piece of work. The
+    # requester's own words are never overwritten from the task — the ticket
+    # body is not part of the sync.
+    sync_content_with_task: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
 
     # SLA tracking
     first_response_at: Mapped[datetime | None] = mapped_column(
@@ -504,6 +512,15 @@ class TicketResponse(Base):
 
     # Internal note vs public response
     is_internal: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # Set when this internal note is a mirror of a comment written on the linked
+    # task (content sync). Lets the desk label it as the task talking rather than
+    # a colleague writing here, and stops the mirror being mirrored back.
+    synced_from_task_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("sprint_tasks.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     # Content
     content: Mapped[str] = mapped_column(Text, nullable=False)

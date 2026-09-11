@@ -6,7 +6,8 @@ import { toast } from "sonner";
 import { BulkMoveResponse, projectTasksApi } from "@/lib/api";
 import { invalidateTaskCaches } from "@/hooks/invalidateTaskCaches";
 
-export type SourceAction = "archive" | "mark_done";
+// "keep" leaves the original exactly as it is and only records the link.
+export type SourceAction = "archive" | "mark_done" | "keep";
 export type SubtaskStrategy = "block" | "cascade" | "orphan";
 
 // Stable error codes the backend can return. Surface the friendlier
@@ -19,11 +20,33 @@ const ERROR_MESSAGES: Record<string, string> = {
   task_has_subtasks: "This task has subtasks — pick a subtask strategy first.",
   source_task_not_found: "Task not found.",
   invalid_target_status: "Picked status doesn't exist on the destination board.",
+  invalid_source_action: "That isn't a valid choice for the original task.",
 };
 
 function extractErrorCode(err: unknown): string | null {
   const e = err as { response?: { data?: { detail?: string } } };
   return e?.response?.data?.detail ?? null;
+}
+
+interface MoveOptions {
+  target_project_id: string;
+  source_action: SourceAction;
+  subtask_strategy?: SubtaskStrategy;
+  target_status_slug?: string;
+  /** Keep description, comments and attachments identical on both tasks. */
+  sync_content?: boolean;
+}
+
+function moveBody(input: MoveOptions) {
+  return {
+    target_project_id: input.target_project_id,
+    source_action: input.source_action,
+    subtask_strategy: input.subtask_strategy ?? "block",
+    sync_content: input.sync_content ?? true,
+    ...(input.target_status_slug && {
+      target_status_slug: input.target_status_slug,
+    }),
+  };
 }
 
 export function useTaskMove(opts: {
@@ -33,24 +56,16 @@ export function useTaskMove(opts: {
   const queryClient = useQueryClient();
 
   const single = useMutation({
-    mutationFn: async (input: {
-      taskId: string;
-      target_project_id: string;
-      source_action: SourceAction;
-      subtask_strategy?: SubtaskStrategy;
-      target_status_slug?: string;
-    }) =>
-      projectTasksApi.moveToProject(opts.sourceProjectId, input.taskId, {
-        target_project_id: input.target_project_id,
-        source_action: input.source_action,
-        subtask_strategy: input.subtask_strategy ?? "block",
-        ...(input.target_status_slug && {
-          target_status_slug: input.target_status_slug,
-        }),
-      }),
-    onSuccess: (newTask) => {
+    mutationFn: async (input: MoveOptions & { taskId: string }) =>
+      projectTasksApi.moveToProject(opts.sourceProjectId, input.taskId, moveBody(input)),
+    onSuccess: (newTask, input) => {
       invalidateTaskCaches(queryClient, opts.workspaceId);
-      toast.success(`Moved to project — new task #${newTask.task_key}`);
+      const linked = input.sync_content ?? true ? ", kept in sync" : "";
+      toast.success(
+        input.source_action === "keep"
+          ? `Copied to project as #${newTask.task_key}${linked} — the original stays as it is`
+          : `Moved to project — new task #${newTask.task_key}${linked}`,
+      );
     },
     onError: (err) => {
       const code = extractErrorCode(err);
@@ -59,21 +74,12 @@ export function useTaskMove(opts: {
   });
 
   const bulk = useMutation({
-    mutationFn: async (input: {
-      task_ids: string[];
-      target_project_id: string;
-      source_action: SourceAction;
-      subtask_strategy?: SubtaskStrategy;
-      target_status_slug?: string;
-    }): Promise<BulkMoveResponse> =>
+    mutationFn: async (
+      input: MoveOptions & { task_ids: string[] },
+    ): Promise<BulkMoveResponse> =>
       projectTasksApi.bulkMoveToProject(opts.sourceProjectId, {
         task_ids: input.task_ids,
-        target_project_id: input.target_project_id,
-        source_action: input.source_action,
-        subtask_strategy: input.subtask_strategy ?? "block",
-        ...(input.target_status_slug && {
-          target_status_slug: input.target_status_slug,
-        }),
+        ...moveBody(input),
       }),
     onSuccess: (response) => {
       invalidateTaskCaches(queryClient, opts.workspaceId);

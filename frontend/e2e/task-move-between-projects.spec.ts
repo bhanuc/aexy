@@ -3,9 +3,10 @@
  *
  * "Move" here is fork-and-link, not a reparent: a new task is created in the
  * destination project, linked back to the original as a `duplicates`
- * dependency, and the original is archived or marked done at the operator's
- * choice (see `SprintTaskService.move_to_project`). These assertions follow
- * that contract rather than expecting the source row's project to change.
+ * dependency, and the original is left as it is (the default since 0.39.0),
+ * archived, or marked done at the operator's choice (see
+ * `SprintTaskService.move_to_project`). These assertions follow that contract
+ * rather than expecting the source row's project to change.
  *
  * Covers the whole path — board → task detail → "Move to project…" → the
  * destination picker → the resulting rows on both boards — because the service
@@ -125,7 +126,7 @@ test.describe("Move a task between projects (live)", () => {
     }
   });
 
-  test("the move lands the task on the destination board and closes the original", async ({
+  test("the default move lands the task on the destination board and leaves the original open", async ({
     page,
     request,
   }) => {
@@ -167,7 +168,15 @@ test.describe("Move a task between projects (live)", () => {
     await expect(select).toBeVisible();
     await select.selectOption(target.id);
 
-    const submit = page.getByRole("button", { name: /^Move( task)?$/i });
+    // The defaults: the original is left as it is, and the pair stay in sync.
+    await expect(
+      modal.getByTestId("move-source-action-keep").getByRole("radio"),
+    ).toBeChecked();
+    await expect(
+      modal.getByTestId("move-sync-content").getByRole("checkbox"),
+    ).toBeChecked();
+
+    const submit = page.getByRole("button", { name: /^(Copy & link|Move( task)?)$/i });
     await expect(submit).toBeEnabled({ timeout: 10_000 });
     await submit.click();
 
@@ -185,7 +194,7 @@ test.describe("Move a task between projects (live)", () => {
       )
       .toContain(title);
 
-    // …and the original is closed out rather than left open on two boards.
+    // …and the original is left exactly as it was: open, on its board.
     const moved = (await listTasks(request, target.id)).find(
       (t) => t.title === title,
     )!;
@@ -200,16 +209,57 @@ test.describe("Move a task between projects (live)", () => {
     );
     expect(srcResp.ok()).toBe(true);
     const src = await srcResp.json();
-    expect(
-      src.is_archived === true || /done|complete/i.test(String(src.status)),
-      `the original task is still open (archived=${src.is_archived}, status=${src.status})`,
-    ).toBe(true);
+    expect(src.is_archived, "keep must not archive the original").toBe(false);
+    expect(String(src.status)).toBe(String(task.status));
 
-    // The fork records where it came from, so the trail isn't lost.
-    expect(
-      String(moved.description ?? ""),
-      "the moved task carries no 'Moved from' breadcrumb",
-    ).toMatch(/Moved from/i);
+    // In sync, the two descriptions must match — so no breadcrumb on either.
+    expect(String(moved.description ?? "")).toBe(String(src.description ?? ""));
+    expect(String(moved.description ?? "")).not.toMatch(/Moved from/i);
+  });
+
+  test("archiving the original without sync closes it and leaves the breadcrumbs", async ({
+    page,
+    request,
+  }) => {
+    const stamp = Date.now();
+    const source = await createProject(request, `e2e-move-arch-src-${stamp}`);
+    const target = await createProject(request, `e2e-move-arch-dst-${stamp}`);
+    projectIds.push(source.id, target.id);
+
+    const title = `Archive me ${stamp}`;
+    const task = await createTask(request, source.id, title);
+
+    await page.goto(`/sprints/${source.id}/board?task=${task.id}`, {
+      waitUntil: "domcontentloaded",
+      timeout: 60_000,
+    });
+    const moveTrigger = page.getByRole("button", { name: /Move to project/i });
+    await expect(moveTrigger).toBeVisible({ timeout: 30_000 });
+    await moveTrigger.click();
+
+    const modal = page.getByTestId("move-to-project-modal");
+    await page.getByTestId("move-destination-project").selectOption(target.id);
+    await modal.getByTestId("move-source-action-archive").click();
+    await modal.getByTestId("move-sync-content").getByRole("checkbox").uncheck();
+    await page.getByRole("button", { name: /^Move$/i }).click();
+    await expect(modal).toBeHidden({ timeout: 30_000 });
+
+    await expect
+      .poll(
+        async () => (await listTasks(request, target.id)).map((t) => t.title),
+        { timeout: 30_000 },
+      )
+      .toContain(title);
+    const moved = (await listTasks(request, target.id)).find((t) => t.title === title)!;
+    expect(String(moved.description ?? "")).toMatch(/Moved from/i);
+
+    const src = await (
+      await request.get(`${API_BASE}/teams/${source.id}/tasks/${task.id}`, {
+        headers: authHeaders(),
+      })
+    ).json();
+    expect(src.is_archived, "archive was chosen").toBe(true);
+    expect(String(src.description ?? "")).toMatch(/Moved to/i);
   });
 
   test("the destination list excludes the project the task is already on", async ({

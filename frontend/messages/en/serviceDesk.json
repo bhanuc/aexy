@@ -81,6 +81,9 @@
       "convert": "Convert",
       "converting": "Converting…",
       "linkedToTask": "Linked to a project task",
+      "linkedToTaskKey": "Linked to task #{key}",
+      "syncWithTask": "Keep notes, progress updates and files in sync with the task",
+      "noteFromTask": "from the task",
       "detectedIssues": "Detected issues",
       "detectedIssuesHint": "The first issue stays on this ticket. Select any remaining issue that should become its own ticket.",
       "selectIssue": "Select issue",
@@ -175,7 +178,8 @@
       "splitMoving": "Moving…",
       "source": "Source",
       "loggedBy": "Logged by",
-      "noRequester": "No requester (logged here)"
+      "noRequester": "No requester (logged here)",
+      "taskFiles": "Files on the linked task"
     },
     "ai": {
       "title": "AI email categorisation",

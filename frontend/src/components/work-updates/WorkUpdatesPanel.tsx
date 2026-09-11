@@ -1,25 +1,35 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Pencil, Send, Trash2, X, Check } from "lucide-react";
+import { Loader2, Pencil, Send, Trash2, X, Check, Link2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { formatAbsolute, formatRelative } from "@/lib/datetime";
 import { WorkUpdate, WorkUpdateEntityType, workUpdatesApi } from "@/lib/api";
+import { MentionSuggestions } from "@/components/mentions/MentionSuggestions";
+import {
+  filterMentionCandidates,
+  type MentionCandidate,
+} from "@/components/mentions/mentionModel";
 
 // Progress updates for one task or ticket. Shared by the task modal and the
 // ticket detail page so both read and write the same stream — a standup note
 // written on the ticket is the same fact as one written on the linked task.
+// Updates written on a task this one is kept in sync with, or on the ticket it
+// came from, are read through and labelled with where they were written.
 //
 // Deliberately not the comment thread: see backend models/work_update.py.
 export function WorkUpdatesPanel({
   workspaceId,
   entityType,
   entityId,
+  users = [],
 }: {
   workspaceId: string | null;
   entityType: WorkUpdateEntityType;
   entityId: string;
+  /** Members offered when the author types "@". Empty disables mentions. */
+  users?: MentionCandidate[];
 }) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -29,6 +39,9 @@ export function WorkUpdatesPanel({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const mentions = useTextareaMentions(textareaRef, users, draft, setDraft);
 
   const queryKey = ["workUpdates", workspaceId, entityType, entityId];
 
@@ -39,11 +52,14 @@ export function WorkUpdatesPanel({
   });
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey });
+    // Every list that reads this stream through — the linked ticket, a synced
+    // task — is stale now too, so the whole family is refreshed.
+    queryClient.invalidateQueries({ queryKey: ["workUpdates", workspaceId] });
     // The post is mirrored into the activity log, so the History tab and the
     // workspace feed are now stale too.
     queryClient.invalidateQueries({ queryKey: ["ticketTimeline", workspaceId, entityId] });
     queryClient.invalidateQueries({ queryKey: ["activityFeed", workspaceId] });
+    queryClient.invalidateQueries({ queryKey: ["taskActivities"] });
   };
 
   const describeError = (err: unknown, fallback: string) => {
@@ -53,9 +69,16 @@ export function WorkUpdatesPanel({
 
   const postUpdate = useMutation({
     mutationFn: (body: string) =>
-      workUpdatesApi.create(workspaceId!, entityType, entityId, body),
+      workUpdatesApi.create(
+        workspaceId!,
+        entityType,
+        entityId,
+        body,
+        mentions.mentionedIdsIn(body),
+      ),
     onSuccess: () => {
       setDraft("");
+      mentions.reset();
       setActionError(null);
       invalidate();
     },
@@ -90,16 +113,37 @@ export function WorkUpdatesPanel({
           writing and the thing you just wrote stay next to each other. */}
       <div>
         <textarea
+          ref={textareaRef}
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="Where does this stand? e.g. API done, waiting on vendor sandbox creds."
+          onChange={(e) => {
+            setDraft(e.target.value);
+            mentions.onChange(e.target);
+          }}
+          onKeyDown={mentions.onKeyDown}
+          onBlur={mentions.close}
+          placeholder={
+            users.length > 0
+              ? "Where does this stand? Use @ to mention someone."
+              : "Where does this stand? e.g. API done, waiting on vendor sandbox creds."
+          }
           rows={3}
           data-testid="work-update-input"
           className="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none text-sm"
         />
+        {mentions.open && (
+          <MentionSuggestions
+            reference={mentions.reference}
+            candidates={mentions.candidates}
+            query={mentions.query}
+            activeIndex={mentions.activeIndex}
+            onPick={mentions.pick}
+            onHover={mentions.setActiveIndex}
+            testId="work-update-mention-suggestions"
+          />
+        )}
         <div className="flex items-center justify-between gap-3 mt-2">
           <p className="text-xs text-muted-foreground">
-            Progress updates are separate from comments — this is the current state of the work.
+            Progress updates are separate from the history — this is the current state of the work.
           </p>
           <button
             type="button"
@@ -196,7 +240,19 @@ function UpdateItem({
       className="flex flex-col gap-2 rounded-lg border border-border bg-background/40 p-3 text-sm"
     >
       <div className="flex items-start justify-between gap-2">
-        <span className="text-foreground font-medium">{authorName}</span>
+        <span className="flex flex-wrap items-center gap-2">
+          <span className="text-foreground font-medium">{authorName}</span>
+          {update.origin_label && (
+            // Written on a linked ticket or a synced task, read through here.
+            <span
+              data-testid="work-update-origin"
+              className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground"
+            >
+              <Link2 className="h-3 w-3" />
+              from {update.origin_label}
+            </span>
+          )}
+        </span>
         <span className="flex items-center gap-2 shrink-0">
           <time
             className="text-xs text-muted-foreground"
@@ -279,4 +335,120 @@ function UpdateItem({
       )}
     </li>
   );
+}
+
+
+/**
+ * "@" in a plain textarea: watch the word being typed at the caret, offer the
+ * members that match, and on pick replace "@quer" with "@Full Name ". The body
+ * stays plain text; the ids of the people whose "@Name" is still present at
+ * submit time travel alongside it (`mentionedIdsIn`).
+ *
+ * The list is anchored to the textarea's bottom edge (a caret rectangle in a
+ * textarea needs a mirror element — not worth it for a three-line box) and
+ * flips above when the screen is short.
+ */
+function useTextareaMentions(
+  ref: React.RefObject<HTMLTextAreaElement | null>,
+  users: MentionCandidate[],
+  value: string,
+  setValue: (next: string) => void,
+) {
+  const [range, setRange] = useState<{ start: number; end: number } | null>(null);
+  const [query, setQuery] = useState("");
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [picked, setPicked] = useState<MentionCandidate[]>([]);
+
+  const candidates = useMemo(
+    () => (range ? filterMentionCandidates(users, query) : []),
+    [users, query, range],
+  );
+  const open = range !== null && candidates.length > 0;
+
+  const close = useCallback(() => {
+    setRange(null);
+    setQuery("");
+    setActiveIndex(0);
+  }, []);
+
+  // Called on every change: is the caret inside an "@word"?
+  const onChange = useCallback((el: HTMLTextAreaElement) => {
+    if (users.length === 0) return;
+    const caret = el.selectionStart ?? el.value.length;
+    const before = el.value.slice(0, caret);
+    const match = /(^|\s)@([^\s@]*)$/.exec(before);
+    if (!match) {
+      close();
+      return;
+    }
+    const start = caret - match[2].length - 1;
+    setRange({ start, end: caret });
+    // A new query starts the highlight at the top again.
+    if (match[2] !== query) setActiveIndex(0);
+    setQuery(match[2]);
+  }, [users.length, query, close]);
+
+  // The list attaches to the box itself. Read live, so it follows the box
+  // when the page scrolls under it.
+  const reference = useCallback(
+    () => ref.current?.getBoundingClientRect() ?? null,
+    [ref],
+  );
+
+  const pick = useCallback((candidate: MentionCandidate) => {
+    if (!range) return;
+    const next = `${value.slice(0, range.start)}@${candidate.name} ${value.slice(range.end)}`;
+    setValue(next);
+    setPicked((prev) => (prev.some((p) => p.id === candidate.id) ? prev : [...prev, candidate]));
+    close();
+    // Put the caret after the inserted name once React has re-rendered.
+    const el = ref.current;
+    const caret = range.start + candidate.name.length + 2;
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(caret, caret);
+    });
+  }, [range, value, setValue, close, ref]);
+
+  const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!open) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveIndex((i) => (i + 1) % candidates.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIndex((i) => (i - 1 + candidates.length) % candidates.length);
+    } else if (e.key === "Enter" || e.key === "Tab") {
+      // The list can shrink under a stale index (a member refetch); then
+      // there is nothing to pick and the key means what it normally does.
+      const candidate = candidates[activeIndex] ?? candidates[0];
+      if (!candidate) return;
+      e.preventDefault();
+      pick(candidate);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      close();
+    }
+  }, [open, candidates, activeIndex, pick, close]);
+
+  // Only people whose "@Name" survived editing count as mentioned.
+  const mentionedIdsIn = useCallback(
+    (body: string) => picked.filter((p) => body.includes(`@${p.name}`)).map((p) => p.id),
+    [picked],
+  );
+
+  return {
+    open,
+    reference,
+    candidates,
+    query,
+    activeIndex,
+    setActiveIndex,
+    onChange,
+    onKeyDown,
+    pick,
+    close,
+    mentionedIdsIn,
+    reset: () => { setPicked([]); close(); },
+  };
 }

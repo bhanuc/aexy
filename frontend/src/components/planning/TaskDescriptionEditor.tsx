@@ -1,13 +1,27 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
-import { useEditor, EditorContent } from "@tiptap/react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
+import { useEditor, useEditorState, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import Link from "@tiptap/extension-link";
 import { Markdown } from "tiptap-markdown";
 import { cn } from "@/lib/utils";
-import { User, File, AtSign, Hash, Code, Type } from "lucide-react";
+import { User, File, Code, Type } from "lucide-react";
+
+import { MentionSuggestion, setMentionSources } from "@/components/mentions/MentionSuggestion";
+import {
+  MENTION_HREF,
+  collectMentions,
+  type MentionSet,
+} from "@/components/mentions/mentionModel";
 
 type EditorMode = "rich" | "markdown";
 
@@ -24,10 +38,7 @@ export interface MentionFile {
 
 interface TaskDescriptionEditorProps {
   content: Record<string, unknown> | null;
-  onChange?: (content: Record<string, unknown>, mentions: {
-    user_ids: string[];
-    file_paths: string[];
-  }) => void;
+  onChange?: (content: Record<string, unknown>, mentions: MentionSet) => void;
   placeholder?: string;
   readOnly?: boolean;
   users?: MentionUser[];
@@ -38,9 +49,11 @@ interface TaskDescriptionEditorProps {
 
 export interface TaskDescriptionEditorRef {
   getContent: () => Record<string, unknown>;
-  getMentions: () => { user_ids: string[]; file_paths: string[] };
+  getMentions: () => MentionSet;
   clearContent: () => void;
 }
+
+const NO_MENTIONS: MentionSet = { user_ids: [], file_paths: [] };
 
 export const TaskDescriptionEditor = forwardRef<
   TaskDescriptionEditorRef,
@@ -58,38 +71,13 @@ export const TaskDescriptionEditor = forwardRef<
   },
   ref
 ) {
-  const [mentionedUserIds, setMentionedUserIds] = useState<Set<string>>(new Set());
-  const [mentionedFilePaths, setMentionedFilePaths] = useState<Set<string>>(new Set());
-  const [showUserSuggestions, setShowUserSuggestions] = useState(false);
-  const [showFileSuggestions, setShowFileSuggestions] = useState(false);
-  const [suggestionQuery, setSuggestionQuery] = useState("");
   const [editorMode, setEditorMode] = useState<EditorMode>("rich");
   const [markdownContent, setMarkdownContent] = useState("");
 
-  // Tiptap's useEditor captures `editorProps` (incl. handleKeyDown) ONCE at
-  // creation — there is no deps array — so the handler would otherwise read
-  // stale copies of this state/props. Mirror everything it needs into refs
-  // and keep them current so the keydown handler always sees live values.
-  const showUserRef = useRef(showUserSuggestions);
-  const showFileRef = useRef(showFileSuggestions);
-  const queryRef = useRef(suggestionQuery);
-  const usersRef = useRef(users);
-  const filesRef = useRef(files);
-  useEffect(() => { showUserRef.current = showUserSuggestions; }, [showUserSuggestions]);
-  useEffect(() => { showFileRef.current = showFileSuggestions; }, [showFileSuggestions]);
-  useEffect(() => { queryRef.current = suggestionQuery; }, [suggestionQuery]);
-  useEffect(() => { usersRef.current = users; }, [users]);
-  useEffect(() => { filesRef.current = files; }, [files]);
-
-  // Filter users based on query
-  const filteredUsers = users.filter((user) =>
-    user.name.toLowerCase().includes(suggestionQuery.toLowerCase())
-  ).slice(0, 6);
-
-  // Filter files based on query
-  const filteredFiles = files.filter((file) =>
-    file.name.toLowerCase().includes(suggestionQuery.toLowerCase())
-  ).slice(0, 6);
+  // useEditor captures its options once, so the change handler is read
+  // through a ref that follows the latest render.
+  const onChangeRef = useRef(onChange);
+  useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
 
   const editor = useEditor({
     extensions: [
@@ -109,12 +97,17 @@ export const TaskDescriptionEditor = forwardRef<
         openOnClick: readOnly,
         autolink: true,
         linkOnPaste: true,
+        // Mentions are link marks with a `mention:` href. The Link extension
+        // only renders hrefs whose protocol it knows, so without this the
+        // mark survived in the JSON but rendered as `href=""`.
+        isAllowedUri: (url, ctx) => MENTION_HREF.test(url) || ctx.defaultValidate(url),
         HTMLAttributes: {
           target: "_blank",
           rel: "noopener noreferrer nofollow",
           class: "text-blue-400 hover:text-blue-300 underline cursor-pointer",
         },
       }),
+      MentionSuggestion,
       Markdown.configure({
         html: true,
         tightLists: true,
@@ -147,135 +140,38 @@ export const TaskDescriptionEditor = forwardRef<
         if (readOnly || !(event.metaKey || event.ctrlKey)) return false;
         const target = (event.target as HTMLElement | null)?.closest("a");
         const href = target?.getAttribute("href");
-        if (!href) return false;
+        if (!href || MENTION_HREF.test(href)) return false;
         window.open(href, "_blank", "noopener,noreferrer");
         return true;
-      },
-      handleKeyDown: (_view, event) => {
-        // Read live values via refs (see note above) — never the stale
-        // closure copies captured when the editor was created.
-        const showUser = showUserRef.current;
-        const showFile = showFileRef.current;
-        const query = queryRef.current;
-
-        // Handle @ for user mentions
-        if (event.key === "@" && !showUser && usersRef.current.length > 0) {
-          setShowUserSuggestions(true);
-          setShowFileSuggestions(false);
-          setSuggestionQuery("");
-          return false;
-        }
-
-        // Handle # for file mentions
-        if (event.key === "#" && !showFile && filesRef.current.length > 0) {
-          setShowFileSuggestions(true);
-          setShowUserSuggestions(false);
-          setSuggestionQuery("");
-          return false;
-        }
-
-        // Handle escape to close suggestions
-        if (event.key === "Escape" && (showUser || showFile)) {
-          setShowUserSuggestions(false);
-          setShowFileSuggestions(false);
-          return true;
-        }
-
-        // While a suggestion box is open, keep the query in sync but NEVER
-        // swallow the keystroke — every key must still reach ProseMirror so
-        // the field can't get stuck. The typed characters land in the doc
-        // and are what insertMention() later deletes on selection.
-        if (showUser || showFile) {
-          if (event.key === "Backspace") {
-            if (query.length > 0) {
-              setSuggestionQuery((q) => q.slice(0, -1));
-            } else {
-              // Deleting the trigger char itself closes the box.
-              setShowUserSuggestions(false);
-              setShowFileSuggestions(false);
-            }
-            return false;
-          }
-
-          if (event.key === " " || event.key === "Enter") {
-            setShowUserSuggestions(false);
-            setShowFileSuggestions(false);
-            return false;
-          }
-
-          if (event.key.length === 1 && !event.ctrlKey && !event.metaKey) {
-            setSuggestionQuery((q) => q + event.key);
-            return false;
-          }
-        }
-
-        return false;
       },
     },
     onUpdate: ({ editor }) => {
       const json = editor.getJSON() as Record<string, unknown>;
-      onChange?.(json, {
-        user_ids: Array.from(mentionedUserIds),
-        file_paths: Array.from(mentionedFilePaths),
-      });
+      onChangeRef.current?.(json, collectMentions(json));
     },
   });
 
-  // Insert mention into editor
-  const insertMention = useCallback((type: "user" | "file", id: string, label: string) => {
+  // The lists offered on "@" and "#" live in the extension's storage, so they
+  // can change without rebuilding the editor.
+  useEffect(() => {
     if (!editor) return;
-
-    // Delete the @ or # trigger character and query
-    const triggerLength = 1 + suggestionQuery.length;
-    editor.commands.deleteRange({
-      from: editor.state.selection.from - triggerLength,
-      to: editor.state.selection.from,
+    setMentionSources(editor, {
+      users,
+      files: files.map((f) => ({ id: f.path, name: f.name })),
     });
+  }, [editor, users, files]);
 
-    // Insert the mention as styled text
-    const mentionClass = type === "user"
-      ? "bg-blue-500/20 text-blue-400 rounded px-1 py-0.5"
-      : "bg-amber-500/20 text-amber-400 rounded px-1 py-0.5";
+  // Who and what the text currently mentions — read from the document on
+  // every change, so it cannot drift from the words on screen.
+  const mentions = useEditorState({
+    editor,
+    selector: ({ editor: e }) => (e ? collectMentions(e.getJSON()) : NO_MENTIONS),
+  }) ?? NO_MENTIONS;
 
-    editor.commands.insertContent({
-      type: "text",
-      marks: [
-        {
-          type: "link",
-          attrs: {
-            href: type === "user" ? `mention:user:${id}` : `mention:file:${id}`,
-            class: mentionClass,
-          },
-        },
-      ],
-      text: type === "user" ? `@${label}` : `#${label}`,
-    });
-
-    editor.commands.insertContent(" ");
-
-    // Track the mention
-    if (type === "user") {
-      setMentionedUserIds((prev) => new Set([...prev, id]));
-    } else {
-      setMentionedFilePaths((prev) => new Set([...prev, id]));
-    }
-
-    // Close suggestions
-    setShowUserSuggestions(false);
-    setShowFileSuggestions(false);
-    setSuggestionQuery("");
-
-    // Notify parent
-    const json = editor.getJSON() as Record<string, unknown>;
-    onChange?.(json, {
-      user_ids: type === "user"
-        ? [...Array.from(mentionedUserIds), id]
-        : Array.from(mentionedUserIds),
-      file_paths: type === "file"
-        ? [...Array.from(mentionedFilePaths), id]
-        : Array.from(mentionedFilePaths),
-    });
-  }, [editor, suggestionQuery, mentionedUserIds, mentionedFilePaths, onChange]);
+  const notify = useCallback((target: NonNullable<typeof editor>) => {
+    const json = target.getJSON() as Record<string, unknown>;
+    onChange?.(json, collectMentions(json));
+  }, [onChange]);
 
   // Toggle editor mode
   const handleModeToggle = useCallback(() => {
@@ -293,17 +189,12 @@ export const TaskDescriptionEditor = forwardRef<
       try {
         editor.commands.setContent(markdownContent);
         setEditorMode("rich");
-        // Notify parent with updated JSON
-        const json = editor.getJSON() as Record<string, unknown>;
-        onChange?.(json, {
-          user_ids: Array.from(mentionedUserIds),
-          file_paths: Array.from(mentionedFilePaths),
-        });
+        notify(editor);
       } catch (error) {
         console.error("Failed to parse markdown:", error);
       }
     }
-  }, [editor, editorMode, markdownContent, onChange, mentionedUserIds, mentionedFilePaths]);
+  }, [editor, editorMode, markdownContent, notify]);
 
   // Handle markdown textarea change
   const handleMarkdownChange = useCallback(
@@ -314,14 +205,10 @@ export const TaskDescriptionEditor = forwardRef<
       // Update editor content in background so parent gets valid JSON
       if (editor) {
         editor.commands.setContent(newContent);
-        const json = editor.getJSON() as Record<string, unknown>;
-        onChange?.(json, {
-          user_ids: Array.from(mentionedUserIds),
-          file_paths: Array.from(mentionedFilePaths),
-        });
+        notify(editor);
       }
     },
-    [editor, onChange, mentionedUserIds, mentionedFilePaths]
+    [editor, notify]
   );
 
   // Sync content when it changes externally
@@ -338,10 +225,7 @@ export const TaskDescriptionEditor = forwardRef<
   // Expose methods via ref
   useImperativeHandle(ref, () => ({
     getContent: () => editor?.getJSON() as Record<string, unknown> || {},
-    getMentions: () => ({
-      user_ids: Array.from(mentionedUserIds),
-      file_paths: Array.from(mentionedFilePaths),
-    }),
+    getMentions: () => (editor ? collectMentions(editor.getJSON()) : NO_MENTIONS),
     clearContent: () => editor?.commands.clearContent(),
   }));
 
@@ -394,62 +278,10 @@ export const TaskDescriptionEditor = forwardRef<
         </div>
       )}
 
-      {/* User mention suggestions */}
-      {showUserSuggestions && filteredUsers.length > 0 && (
-        <div className="absolute left-0 right-0 top-full mt-1 bg-muted border border-border rounded-lg shadow-xl z-50 overflow-hidden">
-          <div className="px-3 py-1.5 border-b border-border text-xs text-muted-foreground flex items-center gap-1.5">
-            <AtSign className="w-3 h-3" />
-            <span>Mention a team member</span>
-            {suggestionQuery && <span className="text-muted-foreground">({suggestionQuery})</span>}
-          </div>
-          {filteredUsers.map((user) => (
-            <button
-              key={user.id}
-              onClick={() => insertMention("user", user.id, user.name)}
-              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-left text-foreground hover:bg-accent transition-colors"
-            >
-              {user.avatar_url ? (
-                <img
-                  src={user.avatar_url}
-                  alt={user.name}
-                  className="w-5 h-5 rounded-full"
-                />
-              ) : (
-                <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center">
-                  <User className="w-3 h-3" />
-                </div>
-              )}
-              <span>{user.name}</span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* File mention suggestions */}
-      {showFileSuggestions && filteredFiles.length > 0 && (
-        <div className="absolute left-0 right-0 top-full mt-1 bg-muted border border-border rounded-lg shadow-xl z-50 overflow-hidden max-h-64 overflow-y-auto">
-          <div className="px-3 py-1.5 border-b border-border text-xs text-muted-foreground flex items-center gap-1.5">
-            <Hash className="w-3 h-3" />
-            <span>Reference a file</span>
-            {suggestionQuery && <span className="text-muted-foreground">({suggestionQuery})</span>}
-          </div>
-          {filteredFiles.map((file) => (
-            <button
-              key={file.path}
-              onClick={() => insertMention("file", file.path, file.name)}
-              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-left text-foreground hover:bg-accent transition-colors"
-            >
-              <File className="w-4 h-4 flex-shrink-0" />
-              <span className="truncate">{file.name}</span>
-            </button>
-          ))}
-        </div>
-      )}
-
       {/* Mentioned items display */}
-      {(mentionedUserIds.size > 0 || mentionedFilePaths.size > 0) && (
+      {(mentions.user_ids.length > 0 || mentions.file_paths.length > 0) && (
         <div className="border-t border-border px-3 py-2 flex flex-wrap gap-1.5">
-          {Array.from(mentionedUserIds).map((userId) => {
+          {mentions.user_ids.map((userId) => {
             const user = users.find((u) => u.id === userId);
             return (
               <span
@@ -461,7 +293,7 @@ export const TaskDescriptionEditor = forwardRef<
               </span>
             );
           })}
-          {Array.from(mentionedFilePaths).map((path) => {
+          {mentions.file_paths.map((path) => {
             const file = files.find((f) => f.path === path);
             return (
               <span

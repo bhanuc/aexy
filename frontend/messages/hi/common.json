@@ -47,7 +47,11 @@
     "disabled": "अक्षम",
     "manage": "प्रबंधित करें",
     "optional": "(वैकल्पिक)",
-    "copy": "कॉपी करें"
+    "copy": "कॉपी करें",
+    "mentions": {
+      "mentionMember": "टीम के सदस्य को मेंशन करें",
+      "referenceFile": "फ़ाइल का संदर्भ दें"
+    }
   },
   "saved": "सहेजा गया",
   "deleted": "हटाया गया"

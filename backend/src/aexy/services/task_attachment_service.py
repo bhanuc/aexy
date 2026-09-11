@@ -280,9 +280,18 @@ async def delete_attachment_for_task(
             detail="Attachment not found",
         )
 
+    key = attachment_storage_key(attachment)
+    # Whether anything else points at the same object: a task this one is
+    # not synced with (a ticket-conversion copy, say) or a ticket holding the
+    # file. Asked before the row goes, and the object is only removed when the
+    # answer is no — deleting it under another row would make that row look
+    # deleted while still being listed.
+    still_referenced = await attachment_object_still_referenced(db, attachment)
+
+    await task_service.delete_attachment(attachment_id, actor_id=actor_id)
+
     storage = get_storage_service()
-    if storage.is_configured():
-        key = attachment_storage_key(attachment)
+    if storage.is_configured() and not still_referenced:
         if key:
             await storage.delete_object(key)
         else:
@@ -291,8 +300,72 @@ async def delete_attachment_for_task(
                 "skipping object delete",
                 attachment.file_url,
             )
-
-    await task_service.delete_attachment(attachment_id, actor_id=actor_id)
     await db.commit()
     if task.workspace_id:
         await StorageQuotaService(db).invalidate_workspace_usage(str(task.workspace_id))
+
+
+async def attachment_object_still_referenced(db, attachment) -> bool:
+    """Is the stored object behind `attachment` used by anything else?
+
+    Rows on tasks kept in sync with this one, and the *mirror* entries the sync
+    wrote onto their tickets, go with the row and do not count. Everything
+    else does: a row on any other task; a ticket's own entry (the requester's
+    file, or an upload to send — the conversion copies those onto the task by
+    key, so the ticket still needs the object); and an entry on any of the
+    ticket's messages, because sending moves a staged upload onto the message
+    it went out with and the sent mail must stay readable.
+    """
+    from sqlalchemy import select
+
+    from aexy.models.sprint import TaskAttachment
+    from aexy.models.ticketing import Ticket, TicketResponse
+    from aexy.services.content_sync_service import (
+        is_task_mirror_entry,
+        synced_task_peers,
+    )
+
+    key = attachment_storage_key(attachment)
+    if not key:
+        return False
+    task_id = str(attachment.task_id)
+    group = [task_id, *await synced_task_peers(db, task_id)]
+
+    other_rows = (
+        await db.execute(
+            select(TaskAttachment.id).where(
+                TaskAttachment.storage_key == key,
+                TaskAttachment.task_id.not_in(group),
+            )
+        )
+    ).first()
+    if other_rows is not None:
+        return True
+
+    ticket_rows = (
+        await db.execute(
+            select(Ticket.id, Ticket.attachments).where(Ticket.linked_task_id.in_(group))
+        )
+    ).all()
+    for _tid, entries in ticket_rows:
+        for entry in entries or []:
+            if (
+                isinstance(entry, dict)
+                and entry.get("key") == key
+                and not is_task_mirror_entry(entry)
+            ):
+                return True
+    ticket_ids = [str(t) for t, _ in ticket_rows]
+    if ticket_ids:
+        responses = (
+            await db.execute(
+                select(TicketResponse.attachments).where(
+                    TicketResponse.ticket_id.in_(ticket_ids)
+                )
+            )
+        ).scalars()
+        for entries in responses:
+            for entry in entries or []:
+                if isinstance(entry, dict) and entry.get("key") == key:
+                    return True
+    return False
