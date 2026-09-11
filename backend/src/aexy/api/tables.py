@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from aexy.core.database import get_db
 from aexy.api.developers import get_current_developer
+from aexy.models.crm import CRMRecord
 from aexy.models.developer import Developer
 from aexy.schemas.crm import (
     CRMObjectResponse,
@@ -709,8 +710,17 @@ async def delete_record(
         table_id=table_id,
         actor_id=str(current_user.id),
         action="record_deleted",
-        record_id=record_id,
-        changes={"permanent": permanent, "values": removed_values},
+        # `record_id` references crm_records, so it can only be set while the
+        # row still exists — an archive keeps it, a permanent delete does not.
+        # Writing it for a hard delete makes the insert violate the foreign key
+        # and takes the whole request down with a 500. The id goes into
+        # `changes` either way, so the entry still says which record went.
+        record_id=None if permanent else record_id,
+        changes={
+            "permanent": permanent,
+            "record_id": record_id,
+            "values": removed_values,
+        },
         ip_address=_client_ip(request),
     )
 
@@ -734,19 +744,44 @@ async def bulk_delete_records(
         table_id, str(current_user.id), "manage", workspace_id
     )
 
+    # Snapshot before deleting. A bulk delete is a *hard* delete — unlike
+    # `DELETE /records/{id}`, which archives — so these rows are the ones whose
+    # contents cannot be read back afterwards by any means, and were the ones
+    # the trail said nothing about. Read once for the whole batch, and only when
+    # the table is actually being audited, so a workspace that has not asked for
+    # a trail pays nothing for it.
+    from sqlalchemy import select
+
+    audit = TableAuditService(db)
+    removed_by_id: dict[str, dict] = {}
+    if await audit.is_enabled(table_id) and data.record_ids:
+        rows = await db.execute(
+            select(CRMRecord.id, CRMRecord.values).where(
+                CRMRecord.id.in_(data.record_ids),
+                CRMRecord.object_id == table_id,
+            )
+        )
+        removed_by_id = {str(rid): dict(vals or {}) for rid, vals in rows.all()}
+
     deleted = await service.bulk_delete_records(data.record_ids, data.permanent, table_id=table_id)
 
     # One entry per record, not one for the batch: an audit trail has to say
     # which rows went, and a bulk delete from the table view is the fastest
     # way to lose a lot of them.
-    audit = TableAuditService(db)
     for rid in data.record_ids:
         await audit.log(
             table_id=table_id,
             actor_id=str(current_user.id),
             action="record_deleted",
-            record_id=rid,
-            changes={"permanent": data.permanent, "via": "bulk"},
+            # See the single-record path: the column references crm_records, so
+            # it cannot name a row that has just been removed for good.
+            record_id=None if data.permanent else rid,
+            changes={
+                "permanent": data.permanent,
+                "via": "bulk",
+                "record_id": rid,
+                "values": removed_by_id.get(str(rid), {}),
+            },
             ip_address=_client_ip(request),
         )
 

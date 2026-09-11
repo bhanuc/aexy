@@ -17,6 +17,20 @@ class TableAuditService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    async def is_enabled(self, table_id: str) -> bool:
+        """Whether this table is being audited.
+
+        `log` makes the same check per call, which is right for a single write
+        and wrong for a batch: a bulk delete of 200 rows would otherwise read
+        the config 200 times, and would pay to snapshot values that were never
+        going to be recorded. Callers writing a batch should ask once.
+        """
+        result = await self.db.execute(
+            select(CRMObject.audit_config).where(CRMObject.id == table_id)
+        )
+        config = result.scalar_one_or_none()
+        return bool(config and config.get("enabled", False))
+
     async def log(
         self,
         table_id: str,

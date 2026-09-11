@@ -56,8 +56,12 @@ has everything in it.
 ## Deleting
 
 Deleting a single row archives it; it can come back. **Bulk delete removes the
-rows for good** — the audit log keeps the event, but the data is gone. The two
-buttons look equally reversible and are not.
+rows for good.** The two buttons look equally reversible and are not.
+
+If the table has auditing switched on — open the table, then Settings → audit;
+off by default — the log keeps one entry per deleted row, including the values it held,
+so you can at least see what was removed and by whom. With auditing off there
+is no record.
 
 ## Common mistakes
 
