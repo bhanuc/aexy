@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -106,6 +107,7 @@ export default function ServiceDeskTicketDetailPage() {
     splitDetectedIssues,
     updateTicket,
     addNote,
+    setTaskSync,
     splitMessages,
     emailStakeholder,
     uploadFiles,
@@ -888,7 +890,37 @@ export default function ServiceDeskTicketDetailPage() {
                   <GitBranch className="h-3.5 w-3.5" /> {t("detail.convertToTask")}
                 </div>
                 {ticket.linked_task_id ? (
-                  <Badge variant="secondary">{t("detail.linkedToTask")}</Badge>
+                  <div className="space-y-2" data-testid="sd-linked-task">
+                    {ticket.linked_task_team_id ? (
+                      <Link
+                        href={`/sprints/${ticket.linked_task_team_id}/board?task=${ticket.linked_task_id}`}
+                        className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+                        data-testid="sd-linked-task-link"
+                      >
+                        <GitBranch className="h-3.5 w-3.5" />
+                        {ticket.linked_task_key != null
+                          ? t("detail.linkedToTaskKey", { key: ticket.linked_task_key })
+                          : t("detail.linkedToTask")}
+                      </Link>
+                    ) : (
+                      <Badge variant="secondary">{t("detail.linkedToTask")}</Badge>
+                    )}
+                    {/* Notes, progress updates and files flow both ways while
+                        this is on. The requester's own words never do. */}
+                    <label className="flex items-start gap-2 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        data-testid="sd-task-sync"
+                        checked={ticket.sync_content_with_task !== false}
+                        disabled={!canEdit || setTaskSync.isPending}
+                        onChange={(e) =>
+                          setTaskSync.mutate({ id: ticketId, enabled: e.target.checked })
+                        }
+                      />
+                      <span>{t("detail.syncWithTask")}</span>
+                    </label>
+                  </div>
                 ) : (
                   <>
                     <select
@@ -1305,6 +1337,14 @@ export default function ServiceDeskTicketDetailPage() {
                       <span className="font-medium text-foreground">
                         {n.system ? t("detail.noteSystem") : n.author_name || t("detail.noteUnknown")}
                       </span>
+                      {n.synced_from_task_id && (
+                        <span
+                          className="rounded-full border border-border bg-muted/60 px-2 py-0.5"
+                          data-testid="sd-note-from-task"
+                        >
+                          {t("detail.noteFromTask")}
+                        </span>
+                      )}
                       <span>{new Date(n.created_at).toLocaleString()}</span>
                     </div>
                     <p className="whitespace-pre-wrap break-words">{n.content}</p>

@@ -80,6 +80,7 @@ from aexy.schemas.service_desk import (
     ScorecardPreviewRequest,
     TicketFilters,
     TicketFieldsUpdate,
+    TaskSyncUpdate,
 )
 from aexy.services.service_desk_digest_service import ServiceDeskDigestService
 from aexy.services.service_desk_service import ServiceDeskService
@@ -1063,6 +1064,20 @@ async def list_ticket_notes(
     """This ticket's internal notes — the desk's own record, never sent to anybody."""
     return await ServiceDeskTicketService(db).list_notes(
         workspace_id, ticket_id, scope_developer_id=current.id
+    )
+
+
+@router.patch("/tickets/{ticket_id}/task-sync", response_model=bool)
+async def set_ticket_task_sync(
+    workspace_id: str,
+    ticket_id: str,
+    data: TaskSyncUpdate,
+    db: AsyncSession = Depends(get_db),
+    current: Developer = Depends(get_current_developer),
+):
+    """Keep — or stop keeping — notes, updates and files in step with the linked task."""
+    return await ServiceDeskTicketService(db).set_task_sync(
+        workspace_id, ticket_id, data.enabled, scope_developer_id=current.id
     )
 
 

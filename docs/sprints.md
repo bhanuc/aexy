@@ -94,6 +94,36 @@ changes flow both ways. Two things follow from that, and both surprise people:
   database — or through anything that bypasses the sync — is how a workspace
   ends up with two versions of the truth.
 
+## Moving work to another project
+
+A task sometimes belongs on a different board — the Ops team logs it, the Tech
+team does it. **Move to project…** in the task's detail creates a copy on the
+destination board and links the two. You choose what happens to the original:
+
+- **Leave the original as it is** (the default) — it stays open on its board,
+  untouched. Use this when both teams keep working: Ops tracks the request,
+  Tech tracks the fix.
+- **Archive original** — hidden from the board, restorable from the archive.
+- **Mark original as Done** — stays visible in the Done column.
+
+**Keep description, comments and attachments in sync** is on by default. While
+it is on, the two tasks share those three things: rewrite the description on
+either board and the other follows; an update or comment written on one is
+read on the other, labelled with where it was written; a file attached to one
+appears on both, and removing it removes it from both. Nothing else is shared
+— status, assignee, dates and points belong to each board, because the point
+of the move is that the two boards run the work independently.
+
+With sync off you get the older behaviour: the copy starts with a *Moved from*
+line, the closed original gets a *Moved to* line, and from then on they drift
+apart. Either way the pair appear under **Linked tasks** in the task's detail.
+
+A ticket that was converted into a task follows the same rule with its task:
+internal notes on the ticket become comments on the task and vice versa,
+progress updates read across, and uploads appear on both. The requester's own
+words — the ticket body — are never overwritten from the task. The ticket page
+has a switch to turn the sync off.
+
 ## Common mistakes
 
 - **Two active sprints.** The second start is refused. If a team feels it needs

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertCircle, ArrowRight, RefreshCw } from "lucide-react";
+import { AlertCircle, ArrowRight, Link2, RefreshCw } from "lucide-react";
 
 import { useProjects } from "@/hooks/useProjects";
 import { useTaskMove, SourceAction, SubtaskStrategy } from "@/hooks/useTaskMove";
@@ -22,7 +22,14 @@ export interface MoveToProjectModalProps {
   onMoved?: () => void;
 }
 
+// "keep" first and default: with the two tasks kept in sync, closing the
+// original is a decision to make on purpose, not a side effect of moving.
 const SOURCE_ACTIONS: { value: SourceAction; label: string; hint: string }[] = [
+  {
+    value: "keep",
+    label: "Leave the original as it is",
+    hint: "Stays open on this board, untouched. The two tasks are linked.",
+  },
   {
     value: "archive",
     label: "Archive original",
@@ -55,10 +62,11 @@ const SUBTASK_STRATEGIES: { value: SubtaskStrategy; label: string; hint: string 
 
 /**
  * Move one or more tasks to another project in the same workspace. The
- * source task is forked into the destination project, linked back as
- * a "duplicates" dependency, and then archived or marked done at the
- * operator's choice. Used by both the task detail modal and the bulk
- * toolbar.
+ * source task is forked into the destination project and linked back as
+ * a "duplicates" dependency; the original is left as it is, archived, or
+ * marked done at the operator's choice. With "keep in sync" (the default)
+ * the pair share description, comments and attachments from then on —
+ * nothing else. Used by both the task detail modal and the bulk toolbar.
  */
 export function MoveToProjectModal({
   workspaceId,
@@ -80,7 +88,8 @@ export function MoveToProjectModal({
   );
 
   const [targetProjectId, setTargetProjectId] = useState<string>("");
-  const [sourceAction, setSourceAction] = useState<SourceAction>("archive");
+  const [sourceAction, setSourceAction] = useState<SourceAction>("keep");
+  const [syncContent, setSyncContent] = useState(true);
   const [subtaskStrategy, setSubtaskStrategy] = useState<SubtaskStrategy>("block");
   const [targetStatusSlug, setTargetStatusSlug] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
@@ -136,6 +145,7 @@ export function MoveToProjectModal({
           source_action: sourceAction,
           subtask_strategy: "block",  // bulk skips per-task subtask handling
           target_status_slug: targetStatusSlug || undefined,
+          sync_content: syncContent,
         });
       } else {
         await single.mutateAsync({
@@ -144,6 +154,7 @@ export function MoveToProjectModal({
           source_action: sourceAction,
           subtask_strategy: showSubtaskRadio ? subtaskStrategy : "block",
           target_status_slug: targetStatusSlug || undefined,
+          sync_content: syncContent,
         });
       }
       onMoved?.();
@@ -166,7 +177,7 @@ export function MoveToProjectModal({
         </h3>
         <p className="text-muted-foreground text-sm mb-5">
           A new task is created in the destination project and linked back
-          to {isBulk ? "each original" : "this one"} as a duplicate.
+          to {isBulk ? "each original" : "this one"}.
         </p>
 
         <form onSubmit={handleSubmit}>
@@ -245,6 +256,7 @@ export function MoveToProjectModal({
                 {SOURCE_ACTIONS.map((opt) => (
                   <label
                     key={opt.value}
+                    data-testid={`move-source-action-${opt.value}`}
                     className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition ${
                       sourceAction === opt.value
                         ? "border-primary-500 bg-primary-900/20"
@@ -269,6 +281,32 @@ export function MoveToProjectModal({
                 ))}
               </div>
             </div>
+
+            <label
+              data-testid="move-sync-content"
+              className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition ${
+                syncContent
+                  ? "border-primary-500 bg-primary-900/20"
+                  : "border-border hover:border-foreground/30"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={syncContent}
+                onChange={(e) => setSyncContent(e.target.checked)}
+                className="mt-1"
+              />
+              <div>
+                <div className="flex items-center gap-1.5 text-foreground text-sm font-medium">
+                  <Link2 className="h-3.5 w-3.5" />
+                  Keep description, comments and attachments in sync
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Edits on either task appear on the other. Status, assignee,
+                  dates and points stay separate for each board.
+                </div>
+              </div>
+            </label>
 
             {showSubtaskRadio && (
               <div>
@@ -341,7 +379,7 @@ export function MoveToProjectModal({
               ) : (
                 <>
                   <ArrowRight className="h-4 w-4" />
-                  Move
+                  {sourceAction === "keep" ? "Copy & link" : "Move"}
                 </>
               )}
             </button>

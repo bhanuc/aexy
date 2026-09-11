@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import select, func, or_
+from sqlalchemy import and_, select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -553,12 +553,15 @@ class SprintTaskService:
         if title is not None:
             _record("title_changed", "title", task.title, title)
             task.title = title
+        description_touched = False
         if description is not None:
             _record("description_changed", "description", task.description, description)
+            description_touched = description_touched or task.description != description
             task.description = description
         if description_json is not ...:
             # Rich-text representation of description; not activity-logged
             # because `description_changed` already covers the change event.
+            description_touched = description_touched or task.description_json != description_json
             task.description_json = description_json
         if story_points is not None:
             _record("points_changed", "story_points", task.story_points, story_points)
@@ -680,6 +683,13 @@ class SprintTaskService:
                         "to_assignee_id": assignee_id,
                     },
                 )
+
+        if description_touched:
+            # Tasks kept in sync with this one get the same text, with a
+            # history row on each saying where it came from.
+            from aexy.services.content_sync_service import propagate_description
+
+            await propagate_description(self.db, task, actor_id=actor_id)
 
         # Re-fetch with relationships loaded (assignee may have changed).
         # `assignees` may have just been reconciled above, so reload it rather
@@ -1301,10 +1311,16 @@ class SprintTaskService:
         new_parent_id: str | None,
         actor_id: str | None,
         override_status_slug: str | None = None,
+        sync_content: bool = False,
     ) -> SprintTask:
         """Create a new task in the target project copying the carry-over
         fields from `source`. Used by `move_to_project` for the parent task
         and (under `cascade`) recursively for each subtask.
+
+        With `sync_content` the link is flagged so the pair keep description,
+        comments and attachments identical from now on, and the "Moved from"
+        breadcrumb is left out — the two descriptions must be the same text,
+        and the link section in the task detail shows the relation instead.
 
         Fields explicitly NOT copied — see plan for rationale:
         - source_type/source_id/source_url (new task is fresh; the link is
@@ -1332,11 +1348,16 @@ class SprintTaskService:
         # Prepend a "Moved from <SOURCE-KEY>" breadcrumb so the new task
         # records its origin inline. Visible in every surface that already
         # renders the description — list previews, detail modal, mobile.
-        breadcrumb_text, breadcrumb_node = _move_breadcrumb(source, kind="from")
-        new_description = _prefix_description(source.description, breadcrumb_text)
-        new_description_json = _prepend_node_to_doc(
-            source.description_json, breadcrumb_node
-        )
+        # Not when the pair are kept in sync: the descriptions must match.
+        if sync_content:
+            new_description = source.description
+            new_description_json = source.description_json
+        else:
+            breadcrumb_text, breadcrumb_node = _move_breadcrumb(source, kind="from")
+            new_description = _prefix_description(source.description, breadcrumb_text)
+            new_description_json = _prepend_node_to_doc(
+                source.description_json, breadcrumb_node
+            )
 
         new_task = SprintTask(
             id=str(uuid4()),
@@ -1376,10 +1397,21 @@ class SprintTaskService:
             dependent_task_id=new_task.id,
             blocking_task_id=source.id,
             dependency_type="duplicates",
+            sync_content=sync_content,
             created_by_id=actor_id,
         )
         self.db.add(link)
         await self.db.flush()
+
+        if sync_content:
+            # The files are part of what is being kept identical. Rows only —
+            # they point at the objects the source already holds.
+            from aexy.services.content_sync_service import mirror_attachment
+
+            for attachment in await self.list_attachments(str(source.id)):
+                await mirror_attachment(
+                    self.db, attachment, peer_ids=[str(new_task.id)]
+                )
 
         await self.log_activity(
             task_id=new_task.id,
@@ -1402,14 +1434,18 @@ class SprintTaskService:
         subtask_strategy: str = "block",
         actor_id: str | None = None,
         target_status_slug: str | None = None,
+        sync_content: bool = False,
     ) -> SprintTask:
         """Fork a task into another project in the same workspace.
 
-        Returns the newly created task. The source task is either archived
-        or marked done depending on `source_action`. See the plan file
-        `mutable-herding-flute.md` for full semantics.
+        Returns the newly created task. The source is archived, marked done,
+        or — with "keep" — left exactly as it is, per `source_action`. With
+        `sync_content` the pair keep description, comments and attachments
+        identical from now on (see content_sync_service); the API defaults
+        this on, the service defaults it off so older callers keep the plain
+        fork.
         """
-        if source_action not in ("archive", "mark_done"):
+        if source_action not in ("archive", "mark_done", "keep"):
             raise TaskValidationError("invalid_source_action")
         if subtask_strategy not in ("block", "cascade", "orphan"):
             raise TaskValidationError("invalid_subtask_strategy")
@@ -1459,6 +1495,7 @@ class SprintTaskService:
             new_parent_id=None,
             actor_id=actor_id,
             override_status_slug=target_status_slug,
+            sync_content=sync_content,
         )
 
         if subtasks and subtask_strategy == "cascade":
@@ -1471,31 +1508,41 @@ class SprintTaskService:
                     target_project_id=target_project_id,
                     new_parent_id=new_parent.id,
                     actor_id=actor_id,
+                    sync_content=sync_content,
                 )
-                # Each source subtask gets its own "Moved to" pointer at
-                # the corresponding clone — the parent breadcrumb alone
-                # wouldn't reach them.
-                sub_text, sub_node = _move_breadcrumb(new_sub, kind="to")
-                sub.description = _prefix_description(sub.description, sub_text)
-                sub.description_json = _prepend_node_to_doc(
-                    sub.description_json, sub_node
-                )
+                if source_action == "keep":
+                    # The parent stays open, so its subtasks do too.
+                    continue
+                if not sync_content:
+                    # Each source subtask gets its own "Moved to" pointer at
+                    # the corresponding clone — the parent breadcrumb alone
+                    # wouldn't reach them.
+                    sub_text, sub_node = _move_breadcrumb(new_sub, kind="to")
+                    sub.description = _prefix_description(sub.description, sub_text)
+                    sub.description_json = _prepend_node_to_doc(
+                        sub.description_json, sub_node
+                    )
                 sub.is_archived = True
         # `orphan` strategy leaves subtasks alone — parent_task_id still
         # points to the now-archived/done source. The UI surfaces this as
         # "parent archived" but the data stays consistent.
 
-        # Prepend "Moved to <NEW-KEY>" on the source. Runs whether the
-        # action is archive or mark_done — both close the source, and the
-        # breadcrumb makes the close cause obvious to anyone who later
-        # opens it.
-        src_text, src_node = _move_breadcrumb(new_parent, kind="to")
-        source.description = _prefix_description(source.description, src_text)
-        source.description_json = _prepend_node_to_doc(
-            source.description_json, src_node
-        )
+        # Prepend "Moved to <NEW-KEY>" on the source when it is being closed
+        # (archive or mark_done): the breadcrumb makes the close cause obvious
+        # to anyone who later opens it. Not with "keep" — the task is to be
+        # left as it is — and not when the pair are kept in sync, because the
+        # descriptions must stay the same text. The link section shows the
+        # relation in both cases.
+        if source_action != "keep" and not sync_content:
+            src_text, src_node = _move_breadcrumb(new_parent, kind="to")
+            source.description = _prefix_description(source.description, src_text)
+            source.description_json = _prepend_node_to_doc(
+                source.description_json, src_node
+            )
 
-        if source_action == "archive":
+        if source_action == "keep":
+            pass
+        elif source_action == "archive":
             source.is_archived = True
         else:  # mark_done
             done_slug = await self._resolve_done_status_slug(
@@ -1515,9 +1562,11 @@ class SprintTaskService:
             metadata={
                 "new_task_id": str(new_parent.id),
                 "new_task_key": new_parent.task_key,
+                "new_task_team_id": str(target_project_id),
                 "source_action": source_action,
                 "subtask_strategy": subtask_strategy,
                 "subtask_count": len(subtasks),
+                "sync_content": sync_content,
             },
         )
 
@@ -1562,6 +1611,7 @@ class SprintTaskService:
         subtask_strategy: str = "block",
         actor_id: str | None = None,
         target_status_slug: str | None = None,
+        sync_content: bool = False,
     ) -> list[dict]:
         """Per-task move; never aborts the whole batch on one failure.
 
@@ -1582,6 +1632,7 @@ class SprintTaskService:
                     subtask_strategy=subtask_strategy,
                     actor_id=actor_id,
                     target_status_slug=target_status_slug,
+                    sync_content=sync_content,
                 )
                 results.append({
                     "task_id": tid,
@@ -2345,18 +2396,33 @@ class SprintTaskService:
         Returns:
             Tuple of (list of activities, total count).
         """
+        # Comments written on a task this one is kept in sync with belong in
+        # this list too — read through rather than copied, so an edit or a
+        # delete happens once. Only comments: the rest of a peer's history
+        # (its status, its assignee) is its own.
+        from aexy.services.content_sync_service import synced_task_peers
+
+        peers = await synced_task_peers(self.db, task_id)
+        scope = TaskActivity.task_id == task_id
+        if peers:
+            scope = or_(
+                scope,
+                and_(
+                    TaskActivity.task_id.in_(peers),
+                    TaskActivity.action == "comment",
+                ),
+            )
+
         # Get total count
-        count_stmt = select(func.count(TaskActivity.id)).where(
-            TaskActivity.task_id == task_id
-        )
+        count_stmt = select(func.count(TaskActivity.id)).where(scope)
         count_result = await self.db.execute(count_stmt)
         total = count_result.scalar_one()
 
         # Get activities
         stmt = (
             select(TaskActivity)
-            .where(TaskActivity.task_id == task_id)
-            .options(selectinload(TaskActivity.actor))
+            .where(scope)
+            .options(selectinload(TaskActivity.actor), selectinload(TaskActivity.task))
             .order_by(TaskActivity.created_at.desc())
             .offset(offset)
             .limit(limit)
@@ -2402,6 +2468,17 @@ class SprintTaskService:
             actor_id=actor_id,
             comment=comment,
         )
+
+        # A ticket kept in sync with this task (or with one of its synced
+        # peers) gets the comment as an internal note.
+        if task is not None:
+            from aexy.services.content_sync_service import (
+                mirror_task_comment_to_tickets,
+            )
+
+            await mirror_task_comment_to_tickets(
+                self.db, task, comment, actor_id=actor_id
+            )
 
         # Send mention notifications
         if actor_id and comment:
@@ -3059,6 +3136,11 @@ class SprintTaskService:
             field_name="attachment",
             new_value=file_name,
         )
+        # Tasks and tickets kept in sync with this one get a row pointing at
+        # the same stored object.
+        from aexy.services.content_sync_service import mirror_attachment
+
+        await mirror_attachment(self.db, attachment)
         return attachment
 
     async def list_attachments(self, task_id: str) -> list[TaskAttachment]:
@@ -3080,12 +3162,21 @@ class SprintTaskService:
     async def delete_attachment(
         self, attachment_id: str, actor_id: str | None = None
     ) -> bool:
-        """Delete an attachment row. Returns True if removed."""
+        """Delete an attachment row. Returns True if removed.
+
+        Mirrors on synced tasks and tickets go with it — they are the same
+        file. Whether the stored object may follow is a separate question,
+        answered by `attachment_object_still_referenced`; callers that delete
+        objects ask it first.
+        """
         attachment = await self.get_attachment(attachment_id)
         if not attachment:
             return False
         task_id = str(attachment.task_id)
         file_name = attachment.file_name
+        from aexy.services.content_sync_service import remove_attachment_everywhere
+
+        await remove_attachment_everywhere(self.db, attachment)
         await self.db.delete(attachment)
         await self.db.flush()
         # History tab event so deletes show up alongside other task activity.

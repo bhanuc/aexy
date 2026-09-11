@@ -270,6 +270,8 @@ export interface TicketNote {
   created_at: string;
   /** True when the desk wrote it — a transition, a routing decision, a merge. */
   system: boolean;
+  /** Set when the note is the mirror of a comment written on the linked task. */
+  synced_from_task_id?: string | null;
 }
 
 export interface MessageSplitResult {
@@ -281,6 +283,10 @@ export interface MessageSplitResult {
 export interface ServiceDeskTicketDetail extends ServiceDeskTicket {
   body: string | null;
   linked_task_id: string | null;
+  linked_task_key?: number | null;
+  linked_task_team_id?: string | null;
+  /** Whether notes, progress updates and files are kept in step with the linked task. */
+  sync_content_with_task?: boolean;
   detected_issues: DetectedIssue[];
   split_done_indexes: number[];
   segments: Segment[];
@@ -812,6 +818,9 @@ export const serviceDeskApi = {
     (await api.get(`${base(ws)}/tickets/${id}/notes`)).data,
   addNote: async (ws: string, id: string, content: string): Promise<TicketNote> =>
     (await api.post(`${base(ws)}/tickets/${id}/notes`, { content })).data,
+  /** Keep — or stop keeping — notes, updates and files in step with the linked task. */
+  setTaskSync: async (ws: string, id: string, enabled: boolean): Promise<boolean> =>
+    (await api.patch(`${base(ws)}/tickets/${id}/task-sync`, { enabled })).data,
   /**
    * Move correspondence off this ticket onto a new one.
    *

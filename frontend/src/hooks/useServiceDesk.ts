@@ -490,6 +490,15 @@ export function useServiceDeskMutations() {
     addNote: useDeskMutation({
       mutationFn: ({ id, content }: { id: string; content: string }) =>
         serviceDeskApi.addNote(ws!, id, content),
+      onSuccess: (_r, v) => {
+        invalidateTickets(v.id);
+        // The note lands on the linked task as a comment.
+        qc.invalidateQueries({ queryKey: ["taskActivities"] });
+      },
+    }),
+    setTaskSync: useDeskMutation({
+      mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
+        serviceDeskApi.setTaskSync(ws!, id, enabled),
       onSuccess: (_r, v) => invalidateTickets(v.id),
     }),
     splitMessages: useDeskMutation({

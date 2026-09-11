@@ -10,7 +10,7 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aexy.models.work_update import WORK_UPDATE_ENTITY_TYPES, WorkUpdate
@@ -88,16 +88,42 @@ class WorkUpdateService:
         """Newest first — the current state of the work is the thing you want
         to read, and the history of it is below."""
         await self._assert_entity_in_workspace(workspace_id, entity_type, entity_id)
+        updates, _ = await self.list_updates_with_origin(
+            workspace_id, entity_type, entity_id
+        )
+        return updates
+
+    async def list_updates_with_origin(
+        self, workspace_id: str, entity_type: str, entity_id: str
+    ) -> tuple[list[WorkUpdate], dict[str, str]]:
+        """The entity's updates plus those read through from what it syncs with.
+
+        A task converted from a ticket, or moved to another board with content
+        sync on, is one piece of work with several rows; a standup note written
+        on any of them is the same fact. Rows stay where they were written —
+        this widens the read rather than copying — so an edit or delete happens
+        once. The second value maps update id → label of where it was written,
+        for the ones that were not written here.
+        """
+        from aexy.services.content_sync_service import work_update_scope
+
+        scope = await work_update_scope(self.db, entity_type, entity_id)
+        clauses = [
+            (WorkUpdate.entity_type == et) & (WorkUpdate.entity_id == eid)
+            for (et, eid) in scope
+        ]
         result = await self.db.execute(
             select(WorkUpdate)
-            .where(
-                WorkUpdate.workspace_id == workspace_id,
-                WorkUpdate.entity_type == entity_type,
-                WorkUpdate.entity_id == entity_id,
-            )
+            .where(WorkUpdate.workspace_id == workspace_id, or_(*clauses))
             .order_by(WorkUpdate.created_at.desc())
         )
-        return list(result.scalars().all())
+        updates = list(result.scalars().all())
+        origins = {
+            str(u.id): label
+            for u in updates
+            if (label := scope.get((u.entity_type, str(u.entity_id)))) is not None
+        }
+        return updates, origins
 
     async def latest_by_entity(
         self, workspace_id: str, entity_type: str, entity_ids: list[str]
@@ -149,6 +175,7 @@ class WorkUpdateService:
         entity_id: str,
         author_id: str,
         body: str,
+        mentioned_user_ids: list[str] | None = None,
     ) -> WorkUpdate:
         await self._assert_entity_in_workspace(workspace_id, entity_type, entity_id)
         cleaned = self._clean_body(body)
@@ -178,7 +205,77 @@ class WorkUpdateService:
         )
 
         await self.db.refresh(update)
+
+        if mentioned_user_ids:
+            await self._notify_mentions(
+                workspace_id, entity_type, entity_id, author_id, cleaned, mentioned_user_ids
+            )
         return update
+
+    async def _notify_mentions(
+        self,
+        workspace_id: str,
+        entity_type: str,
+        entity_id: str,
+        author_id: str,
+        body: str,
+        mentioned_user_ids: list[str],
+    ) -> None:
+        """Tell each @-mentioned member, except the author, and only members.
+
+        The ids arrive from the client, so each is checked against the
+        workspace before anyone is notified — otherwise a body could be used
+        to ping arbitrary accounts.
+        """
+        from aexy.models.developer import Developer
+        from aexy.models.workspace import WorkspaceMember
+        from aexy.services.notification_service import notify_mention
+
+        wanted = {str(u) for u in mentioned_user_ids if str(u) != str(author_id)}
+        if not wanted:
+            return
+        members = {
+            str(m)
+            for m in (
+                await self.db.execute(
+                    select(WorkspaceMember.developer_id).where(
+                        WorkspaceMember.workspace_id == workspace_id,
+                        WorkspaceMember.developer_id.in_(wanted),
+                    )
+                )
+            ).scalars()
+        }
+        if not members:
+            return
+        author = await self.db.get(Developer, author_id)
+        author_name = (author.name if author and author.name else None) or "Someone"
+        if entity_type == "task":
+            from aexy.models.sprint import SprintTask
+
+            task = await self.db.get(SprintTask, entity_id)
+            action_url = (
+                f"/sprints/{task.team_id}/board?task={entity_id}"
+                if task is not None and task.team_id
+                else f"/sprints?task={entity_id}"
+            )
+            label = "task update"
+        else:
+            action_url = f"/service-desk/tickets/{entity_id}"
+            label = "ticket update"
+        snippet = body if len(body) <= 100 else body[:100] + "..."
+        for uid in sorted(members):
+            try:
+                await notify_mention(
+                    db=self.db,
+                    mentioned_user_id=uid,
+                    mentioner_name=author_name,
+                    entity_type=label,
+                    entity_id=str(entity_id),
+                    action_url=action_url,
+                    snippet=snippet,
+                )
+            except Exception:  # a failed ping must not lose the update
+                logger.exception("Mention notification for %s failed", uid)
 
     async def edit_update(
         self, workspace_id: str, update_id: str, requester_id: str, body: str

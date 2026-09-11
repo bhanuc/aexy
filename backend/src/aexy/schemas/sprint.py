@@ -800,6 +800,13 @@ TaskActivityAction = Literal[
     "archived",
     "unarchived",
     "sprint_changed",
+    # Cross-project moves. Both were already written by move_to_project but
+    # missing here, so the History tab of any moved task failed response
+    # validation.
+    "moved_to_project",
+    "created_from_move",
+    # The description arrived from a task this one is kept in sync with.
+    "description_synced",
 ]
 
 
@@ -826,6 +833,11 @@ class TaskActivityResponse(BaseModel):
     comment: str | None = None
     metadata: dict = Field(default_factory=dict)
     created_at: datetime
+    # Where the row lives. A comment can be read through from a task this one is
+    # kept in sync with, in which case task_id is not the task being viewed;
+    # the key and board let the UI say "via #12" and link there.
+    task_key: int | None = None
+    task_team_id: str | None = None
 
 
 class TaskActivityListResponse(BaseModel):
@@ -919,7 +931,11 @@ class TaskFromTemplateCreate(BaseModel):
 # archived or marked done at the operator's choice. See
 # SprintTaskService.move_to_project for the contract.
 
-SourceAction = Literal["archive", "mark_done"]
+# "keep" leaves the original exactly as it is — open, on its board, untouched —
+# and only records the link. It is the default in the UI: with content sync on,
+# the two are the same work seen from two boards, and closing one of them is a
+# decision the operator should make on purpose.
+SourceAction = Literal["archive", "mark_done", "keep"]
 SubtaskStrategy = Literal["block", "cascade", "orphan"]
 
 
@@ -930,6 +946,11 @@ class TaskMoveToProjectRequest(BaseModel):
     source_action: SourceAction
     subtask_strategy: SubtaskStrategy = "block"
     target_status_slug: str | None = None
+    # Keep description, comments and attachments identical on both tasks from
+    # now on. Nothing else is shared. Defaults on; the dialog offers it as a
+    # checkbox. The service default is off so that callers who never heard of
+    # the flag get the old fork behaviour — the API is where the default lives.
+    sync_content: bool = True
 
 
 class TaskBulkMoveToProjectRequest(BaseModel):
@@ -941,6 +962,7 @@ class TaskBulkMoveToProjectRequest(BaseModel):
     source_action: SourceAction
     subtask_strategy: SubtaskStrategy = "block"
     target_status_slug: str | None = None
+    sync_content: bool = True
 
 
 class BulkMoveResult(BaseModel):

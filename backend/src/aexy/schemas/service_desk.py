@@ -520,6 +520,12 @@ class PendingWithUpdate(BaseModel):
     note: str | None = None
 
 
+class TaskSyncUpdate(BaseModel):
+    """Turn the ticket ↔ linked-task content sync on or off."""
+
+    enabled: bool
+
+
 class ConvertToTaskRequest(BaseModel):
     project_id: str
     sprint_id: str | None = None
@@ -660,6 +666,8 @@ class ServiceDeskNote(BaseModel):
     author_name: str | None = None
     content: str
     created_at: datetime
+    #: Set when this note is the mirror of a comment written on the linked task.
+    synced_from_task_id: str | None = None
     #: True when nobody typed this — the desk explaining its own behaviour.
     system: bool = False
 
@@ -817,6 +825,12 @@ class PublishTargetsResponse(BaseModel):
 class ServiceDeskTicketDetail(ServiceDeskTicketResponse):
     body: str | None = None
     linked_task_id: str | None = None
+    # Enough to link to the task's board and name it: /sprints/{team}/board?task=…
+    linked_task_key: int | None = None
+    linked_task_team_id: str | None = None
+    # Whether notes, progress updates and attachments are kept in step with the
+    # linked task. Meaningless without one.
+    sync_content_with_task: bool = True
     detected_issues: list[DetectedIssue] = Field(default_factory=list)
     split_done_indexes: list[int] = Field(default_factory=list)
     segments: list[SegmentResponse] = Field(default_factory=list)

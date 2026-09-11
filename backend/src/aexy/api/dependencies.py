@@ -405,8 +405,48 @@ async def list_task_dependencies(
     dependencies = result.scalars().all()
 
     return TaskDependencyListResponse(
-        items=list(dependencies),
+        items=[_task_dependency_to_response(d) for d in dependencies],
         total=len(dependencies),
+    )
+
+
+def _task_dependency_to_response(dep: TaskDependency) -> TaskDependencyResponse:
+    """Row → response, with the two tasks named.
+
+    Validating the ORM row directly left every `*_title` None — they are not
+    attributes of the row — so the task detail had ids and nothing to show
+    for them. The relationships are selectin-loaded, so this costs no query.
+    """
+    dependent = dep.dependent_task
+    blocking = dep.blocking_task
+    return TaskDependencyResponse(
+        id=str(dep.id),
+        workspace_id=str(dep.workspace_id),
+        dependent_task_id=str(dep.dependent_task_id),
+        dependent_task_title=dependent.title if dependent is not None else None,
+        dependent_task_key=dependent.task_key if dependent is not None else None,
+        dependent_task_team_id=(
+            str(dependent.team_id) if dependent is not None and dependent.team_id else None
+        ),
+        blocking_task_id=str(dep.blocking_task_id),
+        blocking_task_title=blocking.title if blocking is not None else None,
+        blocking_task_status=blocking.status if blocking is not None else None,
+        blocking_task_key=blocking.task_key if blocking is not None else None,
+        blocking_task_team_id=(
+            str(blocking.team_id) if blocking is not None and blocking.team_id else None
+        ),
+        dependency_type=dep.dependency_type,
+        sync_content=bool(dep.sync_content),
+        is_cross_sprint=dep.is_cross_sprint,
+        is_external=dep.is_external,
+        external_description=dep.external_description,
+        external_url=dep.external_url,
+        status=dep.status,
+        resolved_at=dep.resolved_at,
+        notes=dep.notes,
+        created_by_id=str(dep.created_by_id) if dep.created_by_id else None,
+        created_at=dep.created_at,
+        updated_at=dep.updated_at,
     )
 
 

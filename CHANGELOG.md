@@ -5,6 +5,88 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.0] - 2026-09-11
+
+Moving a task to another project can leave the original as it is, and the two
+tasks — or a ticket and the task it became — keep their description, comments
+and attachments in step. Updates sit under the description, and @-mentions
+work again on a laptop screen.
+
+### Added: leave the original where it is
+
+"Move to project…" offered two fates for the original task: archive it, or
+mark it done. Both close it, and neither fits the common case where two teams
+keep working the same item from their own boards — Ops tracking the request,
+Tech tracking the fix. A third option, **Leave the original as it is**, is now
+the default. The copy is created and linked; nothing on the original changes.
+
+### Added: description, comments and attachments stay in sync
+
+Until now a moved task and its original drifted from the moment of the move: a
+comment on one was invisible from the other, a file attached to the copy never
+reached the original, and two descriptions slowly stopped saying the same
+thing. The move dialog has a **Keep description, comments and attachments in
+sync** checkbox, on by default. While it is on:
+
+- Rewriting the description on either board updates the other, with a history
+  entry naming where the text came from.
+- Progress updates and comments written on one are read on the other, labelled
+  with where they were written. They are read through rather than copied, so
+  an edit or a delete happens once and is true everywhere.
+- A file attached to one appears on both as a second row pointing at the same
+  stored object — not a second upload — and removing it removes it from both.
+  The object itself is released only when nothing else points at it, which
+  also fixes a latent fault: deleting a task's copy of a ticket's attachment
+  used to delete the ticket's file with it.
+
+Nothing else is shared. Status, assignee, dates, points and sprint belong to
+each board, because the point of the move is that the two boards run the work
+independently. With sync on, the *Moved from* / *Moved to* lines are no longer
+written into the descriptions (they would break the match); the pair appear
+under **Linked tasks** in the task detail instead.
+
+A ticket and the task it was converted into follow the same rule: an internal
+note on the ticket becomes a comment on the task and vice versa, progress
+updates read across, and a file uploaded on either side appears on both. The
+requester's own words — the ticket body — are never overwritten from the task.
+The link on the ticket page now opens the task, and a switch beneath it turns
+the sync off.
+
+### Changed: updates sit under the description
+
+A task's updates — its comments and progress notes — lived behind an "Updates"
+tab that nobody clicked, so the conversation about a task was effectively
+hidden. They now sit directly under the description. The tabs are Details and
+History.
+
+### Fixed: @-mentions appeared not to work
+
+Typing "@" in a task description did open the list of people — below the
+editor, with `position: absolute`. On a 1280×720 laptop with a long
+description the list started at y≈660 and was 211px tall: the header row was
+visible and none of the names were, which reads as "mentions don't work".
+The list is now anchored to the caret and flips above it when the space below
+is short, so it stays on screen wherever the cursor is. It also takes
+ArrowUp/ArrowDown/Enter, and the `mention:` links it inserts render with their
+href (the editor's link extension was stripping the unknown protocol).
+
+The updates composer had no mentions at all. It now offers the same list on
+"@", inserts the name, and notifies the people named.
+
+### Fixed: the History tab of a moved task failed to load
+
+The two history entries a move writes — *moved to project* and *created from
+move* — were not in the list of actions the API allows in a response, so
+fetching the History of any task that had been moved failed validation.
+
+### Fixed: a task's dependency list never loaded
+
+`GET /dependencies/tasks/{id}` declared its response as a single dependency
+while building a `{items, total}` list, so it failed validation on every call
+and the client — which expects the list — never got an answer. The task detail
+now reads the link to a moved task from it, so it had to work; each entry also
+names the task at the other end and carries the sync flag.
+
 ## [0.38.1] - 2026-09-11
 
 The handoff timeline says how a ticket arrived and who from, a department can

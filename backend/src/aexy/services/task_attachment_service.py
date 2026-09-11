@@ -280,9 +280,18 @@ async def delete_attachment_for_task(
             detail="Attachment not found",
         )
 
+    key = attachment_storage_key(attachment)
+    # Whether anything else points at the same object: a task this one is
+    # not synced with (a ticket-conversion copy, say) or a ticket holding the
+    # file. Asked before the row goes, and the object is only removed when the
+    # answer is no — deleting it under another row would make that row look
+    # deleted while still being listed.
+    still_referenced = await attachment_object_still_referenced(db, attachment)
+
+    await task_service.delete_attachment(attachment_id, actor_id=actor_id)
+
     storage = get_storage_service()
-    if storage.is_configured():
-        key = attachment_storage_key(attachment)
+    if storage.is_configured() and not still_referenced:
         if key:
             await storage.delete_object(key)
         else:
@@ -291,8 +300,50 @@ async def delete_attachment_for_task(
                 "skipping object delete",
                 attachment.file_url,
             )
-
-    await task_service.delete_attachment(attachment_id, actor_id=actor_id)
     await db.commit()
     if task.workspace_id:
         await StorageQuotaService(db).invalidate_workspace_usage(str(task.workspace_id))
+
+
+async def attachment_object_still_referenced(db, attachment) -> bool:
+    """Is the stored object behind `attachment` used by anything else?
+
+    Rows on tasks kept in sync with this one, and entries on tickets syncing
+    with them, are removed together with the row and do not count. A row on
+    any other task does, and so does an entry on any ticket linked to a task
+    in the group whose sync is off — the conversion copies the ticket's files
+    onto the task by key, so the ticket still needs the object.
+    """
+    from sqlalchemy import select
+
+    from aexy.models.sprint import TaskAttachment
+    from aexy.models.ticketing import Ticket
+    from aexy.services.content_sync_service import synced_task_peers
+
+    key = attachment_storage_key(attachment)
+    if not key:
+        return False
+    task_id = str(attachment.task_id)
+    group = [task_id, *await synced_task_peers(db, task_id)]
+
+    other_rows = (
+        await db.execute(
+            select(TaskAttachment.id).where(
+                TaskAttachment.storage_key == key,
+                TaskAttachment.task_id.not_in(group),
+            )
+        )
+    ).first()
+    if other_rows is not None:
+        return True
+
+    tickets = (
+        await db.execute(select(Ticket).where(Ticket.linked_task_id.in_(group)))
+    ).scalars()
+    for ticket in tickets:
+        if ticket.sync_content_with_task:
+            continue  # its entry is removed with the row
+        for entry in ticket.attachments or []:
+            if isinstance(entry, dict) and entry.get("key") == key:
+                return True
+    return False

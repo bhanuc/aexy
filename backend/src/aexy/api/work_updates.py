@@ -65,8 +65,9 @@ async def _authorize(
     await ensure_member_app_access(db, workspace_id, str(developer.id), app_id)
 
 
-def _to_response(update: WorkUpdate) -> WorkUpdateResponse:
+def _to_response(update: WorkUpdate, origin_label: str | None = None) -> WorkUpdateResponse:
     return WorkUpdateResponse(
+        origin_label=origin_label,
         id=str(update.id),
         entity_type=update.entity_type,
         entity_id=str(update.entity_id),
@@ -127,11 +128,14 @@ async def list_work_updates(
 ):
     """Progress updates for one task or ticket, newest first."""
     await _authorize(db, workspace_id, current_developer, entity_type)
-    updates = await WorkUpdateService(db).list_updates(
+    service = WorkUpdateService(db)
+    await service._assert_entity_in_workspace(workspace_id, entity_type, entity_id)
+    updates, origins = await service.list_updates_with_origin(
         workspace_id, entity_type, entity_id
     )
     return WorkUpdateListResponse(
-        items=[_to_response(u) for u in updates], total=len(updates)
+        items=[_to_response(u, origins.get(str(u.id))) for u in updates],
+        total=len(updates),
     )
 
 
@@ -162,6 +166,7 @@ async def create_work_update(
         entity_id=entity_id,
         author_id=str(current_developer.id),
         body=payload.body,
+        mentioned_user_ids=payload.mentioned_user_ids,
     )
     return _to_response(update)
 

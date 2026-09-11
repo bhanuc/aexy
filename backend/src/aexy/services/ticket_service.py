@@ -1383,15 +1383,21 @@ class TicketService:
             return get_storage_service().key_from_url(url)
         return None
 
-    async def remove_ticket_attachment(self, ticket: Ticket, attachment_id: str) -> bool:
-        """Delete a ticket-level attachment from storage and the ticket."""
+    async def remove_ticket_attachment(
+        self, ticket: Ticket, attachment_id: str, *, delete_object: bool = True
+    ) -> bool:
+        """Delete a ticket-level attachment from the ticket, and from storage.
+
+        `delete_object=False` leaves the stored bytes in place — for a file the
+        linked task still holds a row for, which points at the same object.
+        """
         attachments = list(ticket.attachments or [])
         match = next((a for a in attachments if a.get("id") == attachment_id), None)
         if match is None:
             return False
 
         key = self.attachment_key(match)
-        if key:
+        if key and delete_object:
             await get_storage_service().delete_object(key)
 
         ticket.attachments = [a for a in attachments if a.get("id") != attachment_id]

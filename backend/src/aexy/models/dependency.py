@@ -211,6 +211,15 @@ class TaskDependency(Base):
     # Notes
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Only meaningful on a "duplicates" link made by moving a task to another
+    # project. When set, the two tasks keep their description, comments and
+    # attachments identical — see services/content_sync_service.py. Nothing
+    # else (status, assignee, dates, points) is shared: the whole point of the
+    # move is that the two boards run the work independently.
+    sync_content: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+
     # Created by
     created_by_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False),

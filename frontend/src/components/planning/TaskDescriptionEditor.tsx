@@ -1,15 +1,30 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import Link from "@tiptap/extension-link";
 import { Markdown } from "tiptap-markdown";
 import { cn } from "@/lib/utils";
-import { User, File, AtSign, Hash, Code, Type } from "lucide-react";
+import { User, File, Code, Type } from "lucide-react";
+
+import type { AnchorRect } from "@/components/mentions/anchoredPopover";
+import {
+  MentionSuggestions,
+  filterMentionCandidates,
+} from "@/components/mentions/MentionSuggestions";
 
 type EditorMode = "rich" | "markdown";
+type SuggestionKind = "user" | "file";
 
 export interface MentionUser {
   id: string;
@@ -42,6 +57,12 @@ export interface TaskDescriptionEditorRef {
   clearContent: () => void;
 }
 
+// Mentions are stored as link marks with a `mention:` href. tiptap's Link
+// extension only renders hrefs whose protocol it knows, so without this the
+// mark survived in the JSON but rendered as `href=""` — a mention that looked
+// like one and went nowhere.
+const MENTION_HREF = /^mention:(user|file):/;
+
 export const TaskDescriptionEditor = forwardRef<
   TaskDescriptionEditorRef,
   TaskDescriptionEditorProps
@@ -60,36 +81,60 @@ export const TaskDescriptionEditor = forwardRef<
 ) {
   const [mentionedUserIds, setMentionedUserIds] = useState<Set<string>>(new Set());
   const [mentionedFilePaths, setMentionedFilePaths] = useState<Set<string>>(new Set());
-  const [showUserSuggestions, setShowUserSuggestions] = useState(false);
-  const [showFileSuggestions, setShowFileSuggestions] = useState(false);
+  const [suggestion, setSuggestion] = useState<SuggestionKind | null>(null);
   const [suggestionQuery, setSuggestionQuery] = useState("");
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [anchor, setAnchor] = useState<AnchorRect | null>(null);
   const [editorMode, setEditorMode] = useState<EditorMode>("rich");
   const [markdownContent, setMarkdownContent] = useState("");
+
+  const userCandidates = useMemo(
+    () => filterMentionCandidates(users, suggestionQuery),
+    [users, suggestionQuery],
+  );
+  const fileCandidates = useMemo(
+    () =>
+      filterMentionCandidates(
+        files.map((f) => ({ id: f.path, name: f.name })),
+        suggestionQuery,
+      ),
+    [files, suggestionQuery],
+  );
+  const candidates = useMemo(
+    () => (suggestion === "user" ? userCandidates : suggestion === "file" ? fileCandidates : []),
+    [suggestion, userCandidates, fileCandidates],
+  );
 
   // Tiptap's useEditor captures `editorProps` (incl. handleKeyDown) ONCE at
   // creation — there is no deps array — so the handler would otherwise read
   // stale copies of this state/props. Mirror everything it needs into refs
   // and keep them current so the keydown handler always sees live values.
-  const showUserRef = useRef(showUserSuggestions);
-  const showFileRef = useRef(showFileSuggestions);
+  const suggestionRef = useRef(suggestion);
   const queryRef = useRef(suggestionQuery);
   const usersRef = useRef(users);
   const filesRef = useRef(files);
-  useEffect(() => { showUserRef.current = showUserSuggestions; }, [showUserSuggestions]);
-  useEffect(() => { showFileRef.current = showFileSuggestions; }, [showFileSuggestions]);
+  const candidatesRef = useRef(candidates);
+  const activeIndexRef = useRef(activeIndex);
+  const pickRef = useRef<(index: number) => void>(() => {});
+  useEffect(() => { suggestionRef.current = suggestion; }, [suggestion]);
   useEffect(() => { queryRef.current = suggestionQuery; }, [suggestionQuery]);
   useEffect(() => { usersRef.current = users; }, [users]);
   useEffect(() => { filesRef.current = files; }, [files]);
+  useEffect(() => { candidatesRef.current = candidates; }, [candidates]);
+  useEffect(() => { activeIndexRef.current = activeIndex; }, [activeIndex]);
 
-  // Filter users based on query
-  const filteredUsers = users.filter((user) =>
-    user.name.toLowerCase().includes(suggestionQuery.toLowerCase())
-  ).slice(0, 6);
+  // A new query starts the highlight at the top again.
+  const updateQuery = useCallback((next: (q: string) => string) => {
+    setSuggestionQuery(next);
+    setActiveIndex(0);
+  }, []);
 
-  // Filter files based on query
-  const filteredFiles = files.filter((file) =>
-    file.name.toLowerCase().includes(suggestionQuery.toLowerCase())
-  ).slice(0, 6);
+  const closeSuggestions = useCallback(() => {
+    setSuggestion(null);
+    setSuggestionQuery("");
+    setActiveIndex(0);
+    setAnchor(null);
+  }, []);
 
   const editor = useEditor({
     extensions: [
@@ -109,6 +154,7 @@ export const TaskDescriptionEditor = forwardRef<
         openOnClick: readOnly,
         autolink: true,
         linkOnPaste: true,
+        isAllowedUri: (url, ctx) => MENTION_HREF.test(url) || ctx.defaultValidate(url),
         HTMLAttributes: {
           target: "_blank",
           rel: "noopener noreferrer nofollow",
@@ -147,37 +193,58 @@ export const TaskDescriptionEditor = forwardRef<
         if (readOnly || !(event.metaKey || event.ctrlKey)) return false;
         const target = (event.target as HTMLElement | null)?.closest("a");
         const href = target?.getAttribute("href");
-        if (!href) return false;
+        if (!href || MENTION_HREF.test(href)) return false;
         window.open(href, "_blank", "noopener,noreferrer");
         return true;
       },
-      handleKeyDown: (_view, event) => {
+      handleKeyDown: (view, event) => {
         // Read live values via refs (see note above) — never the stale
         // closure copies captured when the editor was created.
-        const showUser = showUserRef.current;
-        const showFile = showFileRef.current;
+        const open = suggestionRef.current;
         const query = queryRef.current;
 
+        const openAt = (kind: SuggestionKind) => {
+          // The list is placed next to the caret, not under the editor, so a
+          // long description on a short screen cannot push it off the page.
+          const coords = view.coordsAtPos(view.state.selection.from);
+          setAnchor({ left: coords.left, top: coords.top, bottom: coords.bottom });
+          setSuggestion(kind);
+          updateQuery(() => "");
+        };
+
         // Handle @ for user mentions
-        if (event.key === "@" && !showUser && usersRef.current.length > 0) {
-          setShowUserSuggestions(true);
-          setShowFileSuggestions(false);
-          setSuggestionQuery("");
+        if (event.key === "@" && !open && usersRef.current.length > 0) {
+          openAt("user");
           return false;
         }
 
         // Handle # for file mentions
-        if (event.key === "#" && !showFile && filesRef.current.length > 0) {
-          setShowFileSuggestions(true);
-          setShowUserSuggestions(false);
-          setSuggestionQuery("");
+        if (event.key === "#" && !open && filesRef.current.length > 0) {
+          openAt("file");
           return false;
         }
 
+        if (!open) return false;
+
         // Handle escape to close suggestions
-        if (event.key === "Escape" && (showUser || showFile)) {
-          setShowUserSuggestions(false);
-          setShowFileSuggestions(false);
+        if (event.key === "Escape") {
+          closeSuggestions();
+          return true;
+        }
+
+        // Keyboard selection. Swallowed, because moving the cursor or breaking
+        // the paragraph is not what these keys mean while the list is open.
+        const list = candidatesRef.current;
+        if (event.key === "ArrowDown" && list.length > 0) {
+          setActiveIndex((i) => (i + 1) % list.length);
+          return true;
+        }
+        if (event.key === "ArrowUp" && list.length > 0) {
+          setActiveIndex((i) => (i - 1 + list.length) % list.length);
+          return true;
+        }
+        if ((event.key === "Enter" || event.key === "Tab") && list.length > 0) {
+          pickRef.current(activeIndexRef.current);
           return true;
         }
 
@@ -185,28 +252,24 @@ export const TaskDescriptionEditor = forwardRef<
         // swallow the keystroke — every key must still reach ProseMirror so
         // the field can't get stuck. The typed characters land in the doc
         // and are what insertMention() later deletes on selection.
-        if (showUser || showFile) {
-          if (event.key === "Backspace") {
-            if (query.length > 0) {
-              setSuggestionQuery((q) => q.slice(0, -1));
-            } else {
-              // Deleting the trigger char itself closes the box.
-              setShowUserSuggestions(false);
-              setShowFileSuggestions(false);
-            }
-            return false;
+        if (event.key === "Backspace") {
+          if (query.length > 0) {
+            updateQuery((q) => q.slice(0, -1));
+          } else {
+            // Deleting the trigger char itself closes the box.
+            closeSuggestions();
           }
+          return false;
+        }
 
-          if (event.key === " " || event.key === "Enter") {
-            setShowUserSuggestions(false);
-            setShowFileSuggestions(false);
-            return false;
-          }
+        if (event.key === " " || event.key === "Enter") {
+          closeSuggestions();
+          return false;
+        }
 
-          if (event.key.length === 1 && !event.ctrlKey && !event.metaKey) {
-            setSuggestionQuery((q) => q + event.key);
-            return false;
-          }
+        if (event.key.length === 1 && !event.ctrlKey && !event.metaKey) {
+          updateQuery((q) => q + event.key);
+          return false;
         }
 
         return false;
@@ -260,10 +323,7 @@ export const TaskDescriptionEditor = forwardRef<
       setMentionedFilePaths((prev) => new Set([...prev, id]));
     }
 
-    // Close suggestions
-    setShowUserSuggestions(false);
-    setShowFileSuggestions(false);
-    setSuggestionQuery("");
+    closeSuggestions();
 
     // Notify parent
     const json = editor.getJSON() as Record<string, unknown>;
@@ -275,7 +335,14 @@ export const TaskDescriptionEditor = forwardRef<
         ? [...Array.from(mentionedFilePaths), id]
         : Array.from(mentionedFilePaths),
     });
-  }, [editor, suggestionQuery, mentionedUserIds, mentionedFilePaths, onChange]);
+  }, [editor, suggestionQuery, mentionedUserIds, mentionedFilePaths, onChange, closeSuggestions]);
+
+  const pickIndex = useCallback((index: number) => {
+    const candidate = candidates[index];
+    if (!candidate || !suggestion) return;
+    insertMention(suggestion, candidate.id, candidate.name);
+  }, [candidates, suggestion, insertMention]);
+  useEffect(() => { pickRef.current = pickIndex; }, [pickIndex]);
 
   // Toggle editor mode
   const handleModeToggle = useCallback(() => {
@@ -334,6 +401,14 @@ export const TaskDescriptionEditor = forwardRef<
       }
     }
   }, [editor, content]);
+
+  // Losing focus (a click elsewhere) closes the list.
+  useEffect(() => {
+    if (!editor) return;
+    const onBlur = () => closeSuggestions();
+    editor.on("blur", onBlur);
+    return () => { editor.off("blur", onBlur); };
+  }, [editor, closeSuggestions]);
 
   // Expose methods via ref
   useImperativeHandle(ref, () => ({
@@ -394,56 +469,18 @@ export const TaskDescriptionEditor = forwardRef<
         </div>
       )}
 
-      {/* User mention suggestions */}
-      {showUserSuggestions && filteredUsers.length > 0 && (
-        <div className="absolute left-0 right-0 top-full mt-1 bg-muted border border-border rounded-lg shadow-xl z-50 overflow-hidden">
-          <div className="px-3 py-1.5 border-b border-border text-xs text-muted-foreground flex items-center gap-1.5">
-            <AtSign className="w-3 h-3" />
-            <span>Mention a team member</span>
-            {suggestionQuery && <span className="text-muted-foreground">({suggestionQuery})</span>}
-          </div>
-          {filteredUsers.map((user) => (
-            <button
-              key={user.id}
-              onClick={() => insertMention("user", user.id, user.name)}
-              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-left text-foreground hover:bg-accent transition-colors"
-            >
-              {user.avatar_url ? (
-                <img
-                  src={user.avatar_url}
-                  alt={user.name}
-                  className="w-5 h-5 rounded-full"
-                />
-              ) : (
-                <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center">
-                  <User className="w-3 h-3" />
-                </div>
-              )}
-              <span>{user.name}</span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* File mention suggestions */}
-      {showFileSuggestions && filteredFiles.length > 0 && (
-        <div className="absolute left-0 right-0 top-full mt-1 bg-muted border border-border rounded-lg shadow-xl z-50 overflow-hidden max-h-64 overflow-y-auto">
-          <div className="px-3 py-1.5 border-b border-border text-xs text-muted-foreground flex items-center gap-1.5">
-            <Hash className="w-3 h-3" />
-            <span>Reference a file</span>
-            {suggestionQuery && <span className="text-muted-foreground">({suggestionQuery})</span>}
-          </div>
-          {filteredFiles.map((file) => (
-            <button
-              key={file.path}
-              onClick={() => insertMention("file", file.path, file.name)}
-              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-left text-foreground hover:bg-accent transition-colors"
-            >
-              <File className="w-4 h-4 flex-shrink-0" />
-              <span className="truncate">{file.name}</span>
-            </button>
-          ))}
-        </div>
+      {/* @ and # suggestions, placed at the caret and kept on screen */}
+      {suggestion && (
+        <MentionSuggestions
+          anchor={anchor}
+          candidates={candidates}
+          query={suggestionQuery}
+          activeIndex={activeIndex}
+          onPick={(c) => insertMention(suggestion, c.id, c.name)}
+          onHover={setActiveIndex}
+          title={suggestion === "user" ? "Mention a team member" : "Reference a file"}
+          testId={suggestion === "user" ? "mention-suggestions" : "file-suggestions"}
+        />
       )}
 
       {/* Mentioned items display */}
