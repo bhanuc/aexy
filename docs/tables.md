@@ -58,8 +58,8 @@ has everything in it.
 Deleting a single row archives it; it can come back. **Bulk delete removes the
 rows for good.** The two buttons look equally reversible and are not.
 
-If the table has auditing switched on — Settings → the table → audit, off by
-default — the log keeps one entry per deleted row, including the values it held,
+If the table has auditing switched on — open the table, then Settings → audit;
+off by default — the log keeps one entry per deleted row, including the values it held,
 so you can at least see what was removed and by whom. With auditing off there
 is no record.
 

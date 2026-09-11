@@ -410,3 +410,128 @@ async def test_http_mutations_record_nothing_while_auditing_is_off(
     )
     assert resp.status_code == 200, resp.text
     assert await _entries(db_session, str(table.id)) == []
+
+
+@pytest.mark.asyncio
+async def test_a_permanent_delete_over_http_does_not_blow_up(
+    db_session: AsyncSession, api
+):
+    """`table_audit_log.record_id` references `crm_records`, so it can only name
+    a row that still exists. An archive keeps the row; a permanent delete does
+    not — and writing the id anyway makes the audit insert violate the foreign
+    key and takes the request down with a 500.
+
+    That is what shipped in 0.37.6: with auditing switched on,
+    `DELETE /records/{id}?permanent=true` and every bulk delete (which is always
+    permanent) returned 500. It went unnoticed because the soft delete is the
+    default, and the default is what got tested.
+    """
+    client, dev = api
+    ws, _ = await _ws(db_session, "aud-perm")
+    table = await _table(
+        db_session, ws, audit=True, slug="aud-perm-t", created_by_id=str(dev.id)
+    )
+
+    service = DataTableService(db_session)
+    record = await service.create_record(
+        table_id=str(table.id),
+        workspace_id=str(ws.id),
+        values={"title": "gone for good"},
+        created_by_id=str(dev.id),
+    )
+    await db_session.commit()
+    record_id = str(record.id)
+
+    resp = await client.delete(
+        f"/api/v1/workspaces/{ws.id}/tables/{table.id}/records/{record_id}"
+        "?permanent=true"
+    )
+    assert resp.status_code == 204, resp.text
+
+    entries = await _entries(db_session, str(table.id))
+    deleted = [e for e in entries if e.action == "record_deleted"]
+    assert len(deleted) == 1
+    # The column has to be empty — the row it would reference is gone — so the
+    # id lives in the payload instead, where it still answers "which record".
+    assert deleted[0].record_id is None
+    assert deleted[0].changes["record_id"] == record_id
+    assert deleted[0].changes["values"] == {"title": "gone for good"}
+    assert deleted[0].changes["permanent"] is True
+
+
+@pytest.mark.asyncio
+async def test_an_archive_keeps_the_record_reference(
+    db_session: AsyncSession, api
+):
+    """The soft delete leaves the row in place, so the column can still point at
+    it and `?record_id=` filtering keeps working."""
+    client, dev = api
+    ws, _ = await _ws(db_session, "aud-arch")
+    table = await _table(
+        db_session, ws, audit=True, slug="aud-arch-t", created_by_id=str(dev.id)
+    )
+
+    service = DataTableService(db_session)
+    record = await service.create_record(
+        table_id=str(table.id),
+        workspace_id=str(ws.id),
+        values={"title": "archived"},
+        created_by_id=str(dev.id),
+    )
+    await db_session.commit()
+
+    resp = await client.delete(
+        f"/api/v1/workspaces/{ws.id}/tables/{table.id}/records/{record.id}"
+    )
+    assert resp.status_code == 204, resp.text
+
+    deleted = [
+        e for e in await _entries(db_session, str(table.id))
+        if e.action == "record_deleted"
+    ]
+    assert len(deleted) == 1
+    assert str(deleted[0].record_id) == str(record.id)
+
+
+@pytest.mark.asyncio
+async def test_bulk_delete_records_what_each_row_held(
+    db_session: AsyncSession, api
+):
+    """Bulk delete is a hard delete, so these rows are the ones whose contents
+    cannot be read back by any other means — and they were the ones the trail
+    said nothing about. One entry per record, each carrying its own values."""
+    client, dev = api
+    ws, _ = await _ws(db_session, "aud-bulk")
+    table = await _table(
+        db_session, ws, audit=True, slug="aud-bulk-t", created_by_id=str(dev.id)
+    )
+
+    service = DataTableService(db_session)
+    ids = []
+    for title in ("first", "second", "third"):
+        rec = await service.create_record(
+            table_id=str(table.id),
+            workspace_id=str(ws.id),
+            values={"title": title},
+            created_by_id=str(dev.id),
+        )
+        ids.append(str(rec.id))
+    await db_session.commit()
+
+    resp = await client.post(
+        f"/api/v1/workspaces/{ws.id}/tables/{table.id}/records/bulk-delete",
+        json={"record_ids": ids, "permanent": True},
+    )
+    assert resp.status_code == 200, resp.text
+
+    deleted = [
+        e for e in await _entries(db_session, str(table.id))
+        if e.action == "record_deleted"
+    ]
+    assert len(deleted) == 3, "a trail has to say which rows went, not just how many"
+    by_id = {e.changes["record_id"]: e.changes for e in deleted}
+    assert set(by_id) == set(ids)
+    assert {c["values"]["title"] for c in by_id.values()} == {
+        "first", "second", "third",
+    }
+    assert all(e.record_id is None for e in deleted)
