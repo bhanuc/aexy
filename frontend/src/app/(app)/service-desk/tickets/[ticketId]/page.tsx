@@ -272,6 +272,44 @@ export default function ServiceDeskTicketDetailPage() {
     t("detail.noRequester");
   const splitDoneIndexes = new Set(ticket.split_done_indexes ?? []);
 
+  /** A workspace member's name from the id a segment records as the actor. */
+  const memberName = (developerId: string): string | null =>
+    (members ?? []).find((m) => m.developer_id === developerId)?.developer_name ||
+    (members ?? []).find((m) => m.developer_id === developerId)?.developer_email ||
+    null;
+
+  // The ticket's arrival is the earliest segment. Found by timestamp rather
+  // than by taking segments[0], because the ordering is the API's to choose
+  // and a re-ordered response would silently relabel a later handoff as the
+  // arrival.
+  const arrivalSegmentId = ticket.segments.length
+    ? ticket.segments.reduce((earliest, seg) =>
+        new Date(seg.entered_at) < new Date(earliest.entered_at) ? seg : earliest,
+      ).id
+    : null;
+
+  // How the ticket got here and who it came from, in one line. `origin` and the
+  // requester were both already on the ticket and both already rendered further
+  // up the page — the timeline just never said it, so the entry that should
+  // answer "where did this come from" read only "Ticket created".
+  const arrivalDescription = (() => {
+    const how = t(`origin.${ticket.origin}`);
+    // A manual ticket is logged by somebody here; an emailed one has a
+    // requester and no creator. Both are worth naming, and they are different
+    // facts, so they get different wording rather than one vague "by".
+    if (ticket.origin === "manual") {
+      return ticket.logged_by_name
+        ? t("detail.timelineLoggedBy", { how, actor: ticket.logged_by_name })
+        : how;
+    }
+    const sender =
+      ticket.requester_name ||
+      (ticket.requester_email && ticket.requester_email !== "manual@local"
+        ? ticket.requester_email
+        : null);
+    return sender ? t("detail.timelineArrivedFrom", { how, sender }) : how;
+  })();
+
   const apply = async () => {
     if (!target) return;
     await changePendingWith.mutateAsync({ id: ticketId, pending_with: target, note: note || undefined });
@@ -1133,7 +1171,19 @@ export default function ServiceDeskTicketDetailPage() {
                     </button>
                   </div>
                 ))}
-                <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+                {/* `relative` is load-bearing. Tailwind's `sr-only` positions the
+                    input absolutely, and an absolutely-positioned element is only
+                    clipped by an ancestor's `overflow` if that ancestor is itself
+                    positioned. Without this the input's containing block is the
+                    page, so it was laid out at the document coordinate of its
+                    static position — below the fold of a long ticket — and
+                    stretched the document past the viewport. The app shell is
+                    `h-screen overflow-hidden` precisely so the document never
+                    scrolls, so the result was a second scrollbar: reach the
+                    bottom of the ticket column and the wheel would chain to the
+                    window and drag the whole shell up, leaving empty page
+                    beneath it. */}
+                <label className="relative inline-flex cursor-pointer items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
                   <input
                     type="file"
                     multiple
@@ -1300,6 +1350,13 @@ export default function ServiceDeskTicketDetailPage() {
                   position: sh?.position,
                   semantics: sh?.semantics,
                 });
+                // The earliest segment is the ticket arriving. It read "Ticket
+                // created" and nothing else, while how it got here and who it
+                // came from were both already on the ticket — so the one entry
+                // that answers "where did this come from" was the one entry
+                // that didn't say.
+                const isArrival = s.id === arrivalSegmentId;
+                const actor = s.changed_by_id ? memberName(s.changed_by_id) : null;
                 return (
                   <li key={s.id} className="flex gap-3">
                     <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${c?.dot ?? "bg-muted-foreground"}`} />
@@ -1310,6 +1367,17 @@ export default function ServiceDeskTicketDetailPage() {
                         {s.exited_at ? ` → ${new Date(s.exited_at).toLocaleString()}` : ` · ${t("detail.open")}`}
                         {s.duration_seconds != null && ` · ${fmtDays(s.duration_seconds)}`}
                       </div>
+                      {isArrival ? (
+                        <div className="break-words text-xs text-muted-foreground">
+                          {arrivalDescription}
+                        </div>
+                      ) : (
+                        actor && (
+                          <div className="break-words text-xs text-muted-foreground">
+                            {t("detail.timelineMovedBy", { actor })}
+                          </div>
+                        )
+                      )}
                       {s.note && <div className="break-words text-xs text-muted-foreground">{s.note}</div>}
                     </div>
                   </li>

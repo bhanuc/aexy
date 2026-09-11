@@ -291,7 +291,7 @@ function CreateWebhookForm({
           {availableEvents.map((event) => (
             <label
               key={event}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer transition ${
+              className={`relative flex items-center gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer transition ${
                 selectedEvents.includes(event)
                   ? "bg-primary/10 border-primary/30 text-foreground"
                   : "bg-muted border-border text-muted-foreground hover:border-border"

@@ -105,7 +105,7 @@ export default function HomePage() {
 
         <div className="flex flex-wrap items-center gap-2">
           {showWorkspaceFilter && (
-            <label className="flex items-center gap-2 text-sm">
+            <label className="relative flex items-center gap-2 text-sm">
               <Globe className="h-4 w-4 text-muted-foreground" aria-hidden />
               <span className="sr-only">{t("workspaceScope")}</span>
               <select

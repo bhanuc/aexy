@@ -5,6 +5,75 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.1] - 2026-09-11
+
+The handoff timeline says how a ticket arrived and who from, a department can
+be chosen for a stakeholder without being refused, and the ticket page has one
+scrollbar rather than two.
+
+### Fixed: scrolling past the ticket dragged the whole application up
+
+Reaching the bottom of a ticket and carrying on scrolled the window as well,
+pulling the sidebar and the content up and leaving empty page beneath them —
+two scrollbars where there should be one.
+
+The shell is sized to the window and hidden at the edges precisely so the
+document never scrolls; only the content column does. What broke that was the
+file input behind "attach a file". It is visually hidden, which positions it
+absolutely, and an absolutely-positioned element is clipped by an ancestor's
+overflow only when that ancestor is itself positioned — none here was. Its
+containing block was therefore the page, so it was laid out at the document
+coordinate of its static position, below the fold on a long ticket, and
+stretched the document past the window. The wheel then chained from the column
+to the window on reaching the end.
+
+Anchoring the input to its own label keeps it clipped with everything else.
+
+### Fixed: a department could be offered for a stakeholder and then refused
+
+Choosing a department on `/settings/service-desk/stakeholders` could fail with
+"'tech' is not a known function", listing functions that did not include the
+one just picked — from that page's own department picker.
+
+The picker lists the workspace's departments, filtered only on having a routing
+key at all. A department whose key predates the function registry therefore
+appeared in the list and was rejected on save. The two halves of the product
+disagreed about the same key: the department stayed editable on its own page,
+because a *stored* value is kept valid so a record cannot lock itself, but a
+new stakeholder has no stored value to keep — so it could never be pointed at
+that department. The department was unusable for desk routing, with an error
+blaming the spelling rather than saying so.
+
+A stakeholder's key is a reference, not a new value: it names a department that
+already exists, chosen from a list of exactly those departments. A key an active
+department in the workspace actually carries is now accepted as it is. Anything
+else still has to satisfy the registry, whose purpose is to stop new keys being
+invented that nothing joins to — and the keys are read per workspace, so one
+tenant's legacy spelling cannot make itself valid in another.
+
+### Fixed: the timeline's first entry said only "Ticket created"
+
+A ticket's timeline opened with the bucket it landed in, a timestamp, and the
+words "Ticket created" — so the one entry that should answer "where did this
+come from" was the one entry that didn't. The answer was already on the ticket
+and already on the same page: the channel it arrived on is rendered as a Source
+field, and the requester sits beside the conversation. The timeline simply
+never used either.
+
+It now reads the channel and the person together — "Email from Ada Lovelace",
+or "Phone or WhatsApp · logged by Priya Raman" for one taken down by hand.
+Those are different facts, so they are worded differently rather than flattened
+into one vague "by": an emailed ticket has a requester and no creator, and a
+manually logged one has a creator who is not the requester.
+
+Later entries gained the same treatment. Each segment already carried the id of
+whoever moved the ticket, and the timeline ignored it, so a handoff could not
+say who performed it. It is now resolved to a name where one is known.
+
+The arrival is identified by its timestamp rather than by taking the first
+segment in the response, so a re-ordered response cannot relabel a later
+handoff as the ticket's origin.
+
 ## [0.38.0] - 2026-09-11
 
 Access is decided in one place and shown in one order. The sidebar presets are
