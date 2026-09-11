@@ -81,7 +81,10 @@ export function MultiUploadDropzone({
           accept(e.dataTransfer.files);
         }}
         className={cn(
-          "flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed px-6 py-7 text-sm transition-colors",
+          // `relative` so the visually-hidden file input below is clipped with the
+          // dropzone instead of being laid out against the page — see the
+          // ticket-page fix for what that costs.
+          "relative flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed px-6 py-7 text-sm transition-colors",
           drag
             ? "border-primary-500 bg-primary-500/10 text-foreground"
             : "border-border bg-muted/20 text-muted-foreground hover:border-primary-500/50 hover:bg-muted/40 hover:text-foreground",

@@ -109,6 +109,41 @@ test.describe("Service Desk ticket page scrolling (live)", () => {
     expect(await docFits(), "the document grew while scrolling").toBe(true);
   });
 
+  // The same escape is possible anywhere in the shell, and `sr-only` is used in
+  // two dozen places. Rather than assert the CSS of each, assert the invariant
+  // the shell exists to provide: inside `h-screen overflow-hidden`, no route
+  // may leave the document taller than the window.
+  const ROUTES: [string, string][] = [
+    ["service desk queue", "/service-desk"],
+    ["dashboard", "/dashboard"],
+    ["drive", "/docs/drive"],
+    ["webhook settings", "/settings/webhooks"],
+  ];
+
+  for (const [name, url] of ROUTES) {
+    test(`${name} leaves the document no taller than the window`, async ({
+      page,
+    }) => {
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
+      await expect(page.locator("#main-content")).toBeVisible({
+        timeout: 60_000,
+      });
+      await page.waitForTimeout(2_000);
+
+      const m = await page.evaluate(() => ({
+        doc: document.documentElement.scrollHeight,
+        win: window.innerHeight,
+      }));
+      expect(
+        m.doc,
+        `${name}: the document is ${m.doc - m.win}px taller than the ${m.win}px ` +
+          "window, so the shell can be scrolled out from under the app. The " +
+          "usual cause is an absolutely-positioned element — `sr-only` is one — " +
+          "whose nearest ancestor is unpositioned, so no overflow clips it.",
+      ).toBeLessThanOrEqual(m.win + 1);
+    });
+  }
+
   // No cleanup: the desk has no ticket-delete endpoint, by design — a ticket is
   // a record of something that happened and is closed rather than removed.
 });

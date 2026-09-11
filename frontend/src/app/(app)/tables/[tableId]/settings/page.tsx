@@ -267,7 +267,7 @@ export default function TableSettingsPage() {
                   return (
                     <label
                       key={opt.value}
-                      className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                      className={`relative flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
                         visibility === opt.value
                           ? "border-purple-500 bg-purple-500/5"
                           : "border-border hover:bg-accent"
@@ -298,7 +298,7 @@ export default function TableSettingsPage() {
                 {ROW_ACCESS_OPTIONS.map((opt) => (
                   <label
                     key={opt.value}
-                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                    className={`relative flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
                       rowAccessMode === opt.value
                         ? "border-purple-500 bg-purple-500/5"
                         : "border-border hover:bg-accent"
