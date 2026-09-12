@@ -79,6 +79,31 @@ Workflows orchestrate via Temporal activities under the hood — `WorkflowServic
 
 `WorkflowExecution.steps_executed` is the authoritative log of what happened — the workflow engine reads/writes this state, and the UI displays it as a visual timeline.
 
+### Resuming a workflow from outside (`api/workflow_events.py`)
+
+A wait node can wait on a signal from another system rather than a timer. Four
+receivers turn such a signal into an event the waiting executions subscribe to:
+
+```
+POST /workspaces/{ws}/workflow-events/webhooks/email-tracking
+POST /workspaces/{ws}/workflow-events/webhooks/form-submission
+POST /workspaces/{ws}/workflow-events/webhooks/meeting
+POST /workspaces/{ws}/workflow-events/webhooks/custom/{webhook_id}
+```
+
+The caller is a form tool or a calendar, which cannot hold a user's bearer
+token, so these authenticate with a **per-workspace secret** instead. It is
+derived from `SECRET_KEY` — no column, nothing to rotate out of sync — and is
+presented either as the `X-Aexy-Webhook-Secret` header or, for senders that
+cannot set headers, a `secret` query parameter. A secret opens only its own
+workspace; anything else is a 401.
+
+`GET /workspaces/{ws}/workflow-events/webhook-urls` returns the four URLs and
+the secret to configure the sender with. It requires workspace membership.
+
+Until 0.39.1 these four took no authentication at all, so knowing a workspace
+id was enough to resume another tenant's workflows with invented data.
+
 ## AI Agent integration with automations
 
 Automations can call AI agents at three points (`api/automation_agents.py:51-94`):

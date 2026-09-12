@@ -5,6 +5,81 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.1] - 2026-09-12
+
+Seven groups of API endpoints answered callers who presented no credentials at
+all. They now require a token, and in several cases require that the caller
+has some business with the person or workspace they are asking about.
+
+### Security: platform operations were open to the internet
+
+`/api/v1/admin/*` reports LLM spend across every tenant, prints the provider
+configuration, flushes the analysis cache and triggers batch processing. The
+router carried no authentication dependency, so all seven endpoints answered
+anonymous requests — `GET /admin/llm/usage` returned platform-wide token
+counts and cost, and `POST /admin/cache/clear` was a cache flush anyone could
+run. Nothing there is workspace-scoped, so the whole router now requires a
+platform admin (`ADMIN_EMAILS`), the same gate `/platform-admin/*` uses.
+
+### Security: a developer id in the URL was answered for anyone
+
+`/analysis` and `/career` take a developer id in the path —
+`/analysis/developers/{id}/insights`, `/career/developers/{id}/gap/{role}` —
+and returned that person's skill profile, soft-skill assessment, peer
+percentile and promotion readiness to whoever asked, signed in or not.
+
+Both now require a token, and the endpoints addressed at a person require the
+caller to share an active workspace with them. A stranger's id answers 404
+rather than 403: the id is a UUID like any other, and "forbidden" would
+confirm that the person exists. A membership row left behind for historical
+attribution, with its status flipped to removed, no longer counts as sharing
+a workspace.
+
+The endpoints that score a group — task matching, the peer benchmark, the
+what-if scenarios, team skill gaps — ranged over `select(Developer)`, every
+developer on the platform. Their pool is now the caller and the people they
+share an active workspace with, and naming a `workspace_id` you are not a
+member of is refused rather than filtered.
+
+### Security: anyone could read or rewrite anyone's learning log
+
+Every endpoint under `/learning/activities` takes a `developer_id` query
+parameter and trusted it: listing, editing and deleting another person's
+learning activities needed nothing but their id. The parameter must now match
+the caller.
+
+### Security: workflow webhooks accepted invented events
+
+The four receivers under `/workspaces/{id}/workflow-events/webhooks/` resume
+workflows that are waiting on an outside signal — a form submitted, a meeting
+booked, an email opened. They took no authentication, so knowing a workspace
+id was enough to drive another tenant's automations with made-up data.
+
+They are called by form tools and calendars, which cannot hold a user's
+token, so they authenticate with a per-workspace secret derived from the
+server key — the scheme the CRM automation webhooks already use, with no
+migration and no state to lose. Send it as `X-Aexy-Webhook-Secret`, or as a
+`secret` query parameter for senders that cannot set headers. One workspace's
+secret does not open another's.
+
+`GET /workflow-events/webhook-urls`, which lists those URLs and now returns
+the secret alongside them, requires workspace membership.
+
+### Security: two seeding endpoints said "admin only" and asked for nothing
+
+`POST /career/roles/seed` and `POST /gamification/badges/seed` write
+predefined rows into shared tables. One carried the comment "admin only in
+production". Both now require a platform admin. The rest of `/gamification`
+requires a token.
+
+### Fixed: the webhook URL list always failed
+
+`GET /workflow-events/webhook-urls` read `settings.api_base_url`, which has
+never existed, so the endpoint raised `AttributeError` on every call — a 500
+where the setup instructions should have been. It now builds the URLs from
+`BACKEND_URL`, and includes the `/api/v1` prefix the printed URLs were
+missing.
+
 ## [0.39.0] - 2026-09-11
 
 Moving a task to another project can leave the original as it is, and the two
@@ -65,10 +140,18 @@ Typing "@" in a task description did open the list of people — below the
 editor, with `position: absolute`. On a 1280×720 laptop with a long
 description the list started at y≈660 and was 211px tall: the header row was
 visible and none of the names were, which reads as "mentions don't work".
-The list is now anchored to the caret and flips above it when the space below
-is short, so it stays on screen wherever the cursor is. It also takes
-ArrowUp/ArrowDown/Enter, and the `mention:` links it inserts render with their
-href (the editor's link extension was stripping the unknown protocol).
+The list is now driven by the editor's own suggestion plugin
+(`@tiptap/suggestion`, the same mechanism as the docs slash menu): the query is
+read from the document rather than reconstructed from keystrokes, so it
+survives IME composition, paste and a mouse-moved caret; the list is placed
+next to the caret by tippy and flips above it when the space below is short.
+It takes ArrowUp/ArrowDown/Home/End, Tab and Enter (a bare "@" then Enter is
+still a new line), and the `mention:` links it inserts render with their href
+(the editor's link extension was stripping the unknown protocol). The set of
+mentioned people is read back from the text on every change, so deleting
+"@Ada" un-mentions Ada and a description opened with mentions in it reports
+them. As with most editors, "@" now triggers only at the start of a word — an
+email address typed mid-sentence no longer opens the list.
 
 The updates composer had no mentions at all. It now offers the same list on
 "@", inserts the name, and notifies the people named.

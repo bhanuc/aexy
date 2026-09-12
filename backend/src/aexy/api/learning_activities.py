@@ -3,6 +3,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from aexy.api.access_guard import require_own_developer_id
+from aexy.api.developers import get_current_developer_id
 from aexy.core.database import get_db
 from aexy.schemas.learning_activity import (
     ActivityCompleteRequest,
@@ -24,13 +26,19 @@ from aexy.schemas.learning_activity import (
 )
 from aexy.services.learning_activity_service import LearningActivityService
 
-router = APIRouter(prefix="/learning/activities")
+# One person's learning log, addressed throughout by a `developer_id` query
+# parameter. It has to be the caller's own: until this guard, anyone could
+# read, edit or delete anyone else's, signed in or not.
+router = APIRouter(
+    prefix="/learning/activities",
+    dependencies=[Depends(get_current_developer_id)],
+)
 
 
 @router.post("", response_model=ActivityLogResponse, status_code=status.HTTP_201_CREATED)
 async def create_activity(
     data: ActivityLogCreate,
-    developer_id: str,
+    developer_id: str = Depends(require_own_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new learning activity.
@@ -50,7 +58,7 @@ async def create_activity(
 
 @router.get("", response_model=ActivityHistory)
 async def list_activities(
-    developer_id: str,
+    developer_id: str = Depends(require_own_developer_id),
     activity_type: ActivityType | None = None,
     source: ActivitySource | None = None,
     activity_status: ActivityStatus | None = Query(None, alias="status"),
@@ -104,7 +112,7 @@ async def list_activities(
 
 @router.get("/stats", response_model=ActivityStats)
 async def get_activity_stats(
-    developer_id: str,
+    developer_id: str = Depends(require_own_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Get aggregate activity statistics for a developer.
@@ -122,7 +130,7 @@ async def get_activity_stats(
 
 @router.get("/daily-summaries", response_model=list[DailyActivitySummary])
 async def get_daily_summaries(
-    developer_id: str,
+    developer_id: str = Depends(require_own_developer_id),
     days: int = Query(30, ge=1, le=365),
     db: AsyncSession = Depends(get_db),
 ):
@@ -143,7 +151,7 @@ async def get_daily_summaries(
 @router.get("/{activity_id}", response_model=ActivityLogWithSessions)
 async def get_activity(
     activity_id: str,
-    developer_id: str,
+    developer_id: str = Depends(require_own_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Get a specific activity with time sessions.
@@ -172,7 +180,7 @@ async def get_activity(
 async def update_activity(
     activity_id: str,
     data: ActivityLogUpdate,
-    developer_id: str,
+    developer_id: str = Depends(require_own_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Update an activity.
@@ -201,7 +209,7 @@ async def update_activity(
 @router.delete("/{activity_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_activity(
     activity_id: str,
-    developer_id: str,
+    developer_id: str = Depends(require_own_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Delete an activity.
@@ -224,7 +232,7 @@ async def delete_activity(
 @router.post("/{activity_id}/start", response_model=ActivityLogResponse)
 async def start_activity(
     activity_id: str,
-    developer_id: str,
+    developer_id: str = Depends(require_own_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Start an activity.
@@ -253,7 +261,7 @@ async def start_activity(
 async def update_progress(
     activity_id: str,
     data: ActivityProgressUpdate,
-    developer_id: str,
+    developer_id: str = Depends(require_own_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Update activity progress.
@@ -283,7 +291,7 @@ async def update_progress(
 async def complete_activity(
     activity_id: str,
     data: ActivityCompleteRequest | None = None,
-    developer_id: str = "",
+    developer_id: str = Depends(require_own_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Complete an activity and earn points.
@@ -314,7 +322,7 @@ async def complete_activity(
 async def start_time_session(
     activity_id: str,
     data: TimeSessionCreate | None = None,
-    developer_id: str = "",
+    developer_id: str = Depends(require_own_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Start a time tracking session for an activity.
@@ -344,7 +352,7 @@ async def start_time_session(
 async def end_time_session(
     activity_id: str,
     data: TimeSessionEnd | None = None,
-    developer_id: str = "",
+    developer_id: str = Depends(require_own_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """End the current time tracking session.
@@ -375,7 +383,7 @@ async def end_time_session(
 @router.get("/by-path/{path_id}", response_model=list[ActivityLogResponse])
 async def get_activities_for_path(
     path_id: str,
-    developer_id: str,
+    developer_id: str = Depends(require_own_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Get all activities for a specific learning path.
@@ -396,7 +404,7 @@ async def get_activities_for_path(
 @router.get("/by-milestone/{milestone_id}", response_model=list[ActivityLogResponse])
 async def get_activities_for_milestone(
     milestone_id: str,
-    developer_id: str,
+    developer_id: str = Depends(require_own_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Get all activities for a specific milestone.

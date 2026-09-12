@@ -12,12 +12,58 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from aexy.core.database import get_db
 from aexy.core.config import get_settings
+from aexy.api.access_guard import require_workspace_member
 from aexy.api.developers import get_current_developer
 from aexy.models.developer import Developer
 from aexy.services.workflow_event_service import WorkflowEventService
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+# =============================================================================
+# WEBHOOK AUTHENTICATION
+# =============================================================================
+#
+# The receivers below are called by outside systems — a form tool, a calendar,
+# an email provider — so they cannot carry a user's bearer token. Until this
+# guard they carried nothing: anyone who knew a workspace id could post
+# "form submitted" or "meeting booked" events into it and resume that
+# workspace's waiting workflows with made-up data.
+#
+# Each workspace has a secret derived from the server key, the same scheme
+# the CRM automation webhooks use (see api/webhooks.py) — no migration, no
+# state to lose. It is shown alongside the URLs at GET /webhook-urls and is
+# presented either as a header or, for tools that cannot set headers, as a
+# `secret` query parameter.
+
+WEBHOOK_SECRET_HEADER = "X-Aexy-Webhook-Secret"
+
+
+def derive_workflow_webhook_secret(workspace_id: str) -> str:
+    return hmac.new(
+        settings.secret_key.encode("utf-8"),
+        f"workflow-events:{workspace_id}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+async def verify_webhook_secret(
+    workspace_id: str,
+    presented_header: str | None = Header(default=None, alias=WEBHOOK_SECRET_HEADER),
+    secret: str | None = None,
+) -> None:
+    presented = presented_header or secret
+    if not presented or not hmac.compare_digest(
+        presented, derive_workflow_webhook_secret(workspace_id)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=(
+                "Missing or invalid webhook secret. Send the workspace's webhook "
+                f"secret in the {WEBHOOK_SECRET_HEADER} header (or a `secret` query "
+                "parameter); it is shown with the webhook URLs."
+            ),
+        )
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/workflow-events")
 
@@ -63,6 +109,7 @@ class SupportedEventType(BaseModel):
 async def receive_email_tracking_event(
     workspace_id: str,
     request: Request,
+    _: None = Depends(verify_webhook_secret),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -119,6 +166,7 @@ async def receive_email_tracking_event(
 async def receive_form_submission(
     workspace_id: str,
     request: Request,
+    _: None = Depends(verify_webhook_secret),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -150,6 +198,7 @@ async def receive_form_submission(
 async def receive_meeting_event(
     workspace_id: str,
     request: Request,
+    _: None = Depends(verify_webhook_secret),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -206,6 +255,7 @@ async def receive_custom_webhook(
     workspace_id: str,
     webhook_id: str,
     request: Request,
+    _: None = Depends(verify_webhook_secret),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -293,6 +343,7 @@ async def trigger_event(
 @router.get("/types", response_model=list[SupportedEventType])
 async def get_supported_event_types(
     workspace_id: str,
+    _: None = Depends(require_workspace_member()),
     db: AsyncSession = Depends(get_db),
     current_user: Developer = Depends(get_current_developer),
 ):
@@ -303,15 +354,23 @@ async def get_supported_event_types(
 @router.get("/webhook-urls")
 async def get_webhook_urls(
     workspace_id: str,
+    _: None = Depends(require_workspace_member()),
     db: AsyncSession = Depends(get_db),
     current_user: Developer = Depends(get_current_developer),
 ):
-    """Get webhook URLs for this workspace."""
-    base_url = settings.api_base_url or "https://api.example.com"
+    """The URLs an outside system posts to, and the secret it must present.
+
+    `settings.api_base_url` never existed, so this endpoint raised
+    AttributeError on every call — a 500 where the setup instructions should
+    be. The URLs it printed also omitted the API prefix.
+    """
+    base_url = f"{settings.backend_url}{settings.api_v1_prefix}"
 
     return {
         "email_tracking": f"{base_url}/workspaces/{workspace_id}/workflow-events/webhooks/email-tracking",
         "form_submission": f"{base_url}/workspaces/{workspace_id}/workflow-events/webhooks/form-submission",
         "meeting": f"{base_url}/workspaces/{workspace_id}/workflow-events/webhooks/meeting",
         "custom_webhook_template": f"{base_url}/workspaces/{workspace_id}/workflow-events/webhooks/custom/{{webhook_id}}",
+        "secret": derive_workflow_webhook_secret(workspace_id),
+        "secret_header": WEBHOOK_SECRET_HEADER,
     }
