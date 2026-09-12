@@ -2,3 +2,6 @@
 # Credential backups must never be committed
 .env.bak*
 .env.bak-*
+
+# AI evaluation outputs
+tests/ai/.logs/

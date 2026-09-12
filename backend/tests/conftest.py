@@ -127,12 +127,6 @@ requires_postgres = pytest.mark.skipif(
 )
 
 
-@pytest.fixture(scope="session")
-def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
-    """Create an event loop for the test session."""
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
 
 
 async def _reset_pg_schema(conn):
@@ -152,7 +146,7 @@ async def _reset_pg_schema(conn):
     await conn.run_sync(Base.metadata.create_all)
 
 
-@pytest_asyncio.fixture(scope="session", autouse=True)
+@pytest_asyncio.fixture(scope="function", autouse=True)
 async def _pg_schema_once():
     """For Postgres: build the schema ONCE per session.
 
