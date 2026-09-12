@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from aexy.models.integrations import LinearIntegration
 from aexy.models.sprint import Sprint, SprintTask
+from aexy.services.markdown_to_tiptap import text_to_tiptap
 from aexy.services.remote_team_matching import (
     match_remote_items_to_teams,
     normalize_remote_pairs,
@@ -666,8 +667,13 @@ class LinearIntegrationService:
 
         if existing_task:
             # Update existing task
+            description_changed = existing_task.description != description
             existing_task.title = title
             existing_task.description = description
+            # See the note in the Jira service: the editor renders
+            # `description_json`, so the two representations have to move
+            # together. Linear sends Markdown, which the converter handles.
+            existing_task.description_json = text_to_tiptap(description)
             existing_task.status = mapped_status
             existing_task.priority = priority
             existing_task.story_points = story_points
@@ -676,6 +682,13 @@ class LinearIntegrationService:
             existing_task.last_synced_at = datetime.now(timezone.utc)
             existing_task.sync_status = "synced"
             await self.db.flush()
+            if description_changed:
+                # See the note in the Jira service: `update_task` is what
+                # copies a description onto synced peers, and an integration
+                # write does not go through it.
+                from aexy.services.content_sync_service import propagate_description
+
+                await propagate_description(self.db, existing_task, actor_id=None)
             logger.info(f"Updated task from Linear issue {identifier}")
             return "updated"
         else:
@@ -688,6 +701,7 @@ class LinearIntegrationService:
                 source_url=source_url,
                 title=title,
                 description=description,
+                description_json=text_to_tiptap(description),
                 priority=priority,
                 story_points=story_points,
                 labels=labels,

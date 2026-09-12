@@ -1447,6 +1447,25 @@ class SprintTaskService:
         """
         if source_action not in ("archive", "mark_done", "keep"):
             raise TaskValidationError("invalid_source_action")
+
+        # Archiving the original and keeping it in sync are contradictory
+        # instructions. An archived task is off every board, so mirroring
+        # comments and files into it writes them where nobody can read them —
+        # and deleting an attachment on the live side would then reach into
+        # the archive to delete it there too. Worse, the sync branch also
+        # suppresses the "Moved to" breadcrumb (the two descriptions have to
+        # match), so the pair would be archived *and* traceless.
+        #
+        # "Mark done" is different and keeps the choice: a done task is still
+        # on the board, and a team that closes its copy may well want to keep
+        # seeing the other side's comments.
+        #
+        # `synced_task_peers` also drops archived tasks from the group, which
+        # is what covers archiving the original *later*. This line stays
+        # because the link row should not claim a sync that will never happen,
+        # and because the dialog tells the operator the box is ignored.
+        if source_action == "archive":
+            sync_content = False
         if subtask_strategy not in ("block", "cascade", "orphan"):
             raise TaskValidationError("invalid_subtask_strategy")
 

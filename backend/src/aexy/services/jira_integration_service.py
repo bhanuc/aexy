@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from aexy.models.integrations import JiraIntegration
 from aexy.models.sprint import Sprint, SprintTask
+from aexy.services.markdown_to_tiptap import text_to_tiptap
 from aexy.services.remote_team_matching import (
     match_remote_items_to_teams,
     normalize_remote_pairs,
@@ -565,8 +566,15 @@ class JiraIntegrationService:
 
         if existing_task:
             # Update existing task
+            description_changed = existing_task.description != description
             existing_task.title = title
             existing_task.description = description
+            # The editor renders `description_json`, not this plain text, so
+            # writing one without the other left the task showing its *old*
+            # description while the row held the new one. Rebuilt from the
+            # incoming text through the same converter every non-editor writer
+            # uses.
+            existing_task.description_json = text_to_tiptap(description)
             existing_task.status = mapped_status
             existing_task.priority = priority
             existing_task.labels = labels
@@ -574,6 +582,15 @@ class JiraIntegrationService:
             existing_task.last_synced_at = datetime.now(timezone.utc)
             existing_task.sync_status = "synced"
             await self.db.flush()
+            if description_changed:
+                # A task moved to another project can be kept in sync with its
+                # original. That copy happens in `update_task`, which an
+                # integration write goes around — so an edit made in Jira
+                # reached one side of a synced pair and not the other, and the
+                # two silently drifted. No actor: nobody here pressed save.
+                from aexy.services.content_sync_service import propagate_description
+
+                await propagate_description(self.db, existing_task, actor_id=None)
             logger.info(f"Updated task from Jira issue {issue_key}")
             return "updated"
         else:
@@ -586,6 +603,7 @@ class JiraIntegrationService:
                 source_url=source_url,
                 title=title,
                 description=description,
+                description_json=text_to_tiptap(description),
                 priority=priority,
                 labels=labels,
                 status=mapped_status,

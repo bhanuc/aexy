@@ -155,7 +155,7 @@ async def test_sync_flags_the_link_and_writes_no_breadcrumbs(db_session: AsyncSe
     doc = {"type": "doc", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "same"}]}]}
     task = await _task(db_session, ws, src, description="same", description_json=doc)
 
-    copy = await _move(db_session, task, dst, dev, source_action="archive", sync_content=True)
+    copy = await _move(db_session, task, dst, dev, source_action="mark_done", sync_content=True)
     await db_session.commit()
 
     link = (
@@ -167,7 +167,9 @@ async def test_sync_flags_the_link_and_writes_no_breadcrumbs(db_session: AsyncSe
     assert link.sync_content is True
 
     original = await _fresh(db_session, task.id)
-    assert original.is_archived is True
+    # Closed, but still on the board — which is why sync is allowed here.
+    assert original.is_archived is False
+    assert original.completed_at is not None
     # Both descriptions are the same text — no "Moved to" / "Moved from".
     assert original.description == "same"
     assert copy.description == "same"
@@ -218,6 +220,66 @@ async def test_peers_are_transitive_and_bounded(db_session: AsyncSession) -> Non
     await db_session.commit()
     assert set(await sync.synced_task_peers(db_session, task.id)) == {second.id, third.id}
     assert set(await sync.synced_task_peers(db_session, third.id)) == {task.id, second.id}
+
+
+@pytest.mark.asyncio
+async def test_an_archived_task_is_not_a_peer(db_session: AsyncSession) -> None:
+    """Archiving is the other half of the rule the move dialog states.
+
+    The dialog refuses "archive the original" together with "keep in sync",
+    but a task can be archived at any time afterwards. Left in the group it
+    would collect mirrored comments and files where nobody can read them, and
+    deleting an attachment on the live side would reach into the archive.
+    """
+    ws, dev = await _workspace(db_session)
+    a = await _project(db_session, ws, "A")
+    b = await _project(db_session, ws, "B")
+    task = await _task(db_session, ws, a)
+    second = await _move(db_session, task, b, dev)
+    await db_session.commit()
+    assert await sync.synced_task_peers(db_session, task.id) == [second.id]
+
+    await SprintTaskService(db_session).archive_task(second.id, actor_id=dev.id)
+    await db_session.commit()
+    assert await sync.synced_task_peers(db_session, task.id) == []
+
+
+@pytest.mark.asyncio
+async def test_unarchiving_puts_the_task_back_in_the_group(db_session: AsyncSession) -> None:
+    """The link row is untouched by archiving, so the pair resumes rather than
+    needing to be relinked by hand."""
+    ws, dev = await _workspace(db_session)
+    a = await _project(db_session, ws, "A")
+    b = await _project(db_session, ws, "B")
+    task = await _task(db_session, ws, a)
+    second = await _move(db_session, task, b, dev)
+    service = SprintTaskService(db_session)
+    await service.archive_task(second.id, actor_id=dev.id)
+    await db_session.commit()
+    assert await sync.synced_task_peers(db_session, task.id) == []
+
+    await service.unarchive_task(second.id, actor_id=dev.id)
+    await db_session.commit()
+    assert await sync.synced_task_peers(db_session, task.id) == [second.id]
+
+
+@pytest.mark.asyncio
+async def test_the_walk_passes_through_an_archived_middle(db_session: AsyncSession) -> None:
+    """A moved twice with sync on is a group of three. Archiving the middle
+    one leaves two live tasks that were deliberately linked, so they stay in
+    sync with each other — only the archived member drops out."""
+    ws, dev = await _workspace(db_session)
+    a = await _project(db_session, ws, "A")
+    b = await _project(db_session, ws, "B")
+    c = await _project(db_session, ws, "C")
+    task = await _task(db_session, ws, a)
+    second = await _move(db_session, task, b, dev)
+    third = await _move(db_session, second, c, dev)
+    await SprintTaskService(db_session).archive_task(second.id, actor_id=dev.id)
+    await db_session.commit()
+
+    assert await sync.synced_task_peers(db_session, task.id) == [third.id]
+    assert await sync.synced_task_peers(db_session, third.id) == [task.id]
 
 
 # ── description ──────────────────────────────────────────────────────────────
@@ -657,3 +719,72 @@ def test_every_action_the_service_writes_is_in_the_response_literal() -> None:
     source = Path(__file__).resolve().parents[2] / "src/aexy/services/sprint_task_service.py"
     written = set(re.findall(r'action="([a-z_]+)"', source.read_text()))
     assert written <= allowed, sorted(written - allowed)
+
+
+@pytest.mark.asyncio
+async def test_archiving_the_original_refuses_to_keep_it_in_sync(db_session: AsyncSession) -> None:
+    """Archive and "keep in sync" are contradictory instructions.
+
+    An archived task is off every board, so mirroring comments and files into
+    it writes them where nobody can read them — and removing an attachment on
+    the live side would reach into the archive to delete it there too. The
+    sync branch also suppresses the "Moved to" breadcrumb, because the two
+    descriptions have to match, so the pair would end up archived *and*
+    traceless. The ticked box is ignored rather than honoured.
+    """
+    ws, dev = await _workspace(db_session)
+    src, dst = await _project(db_session, ws, "Ops"), await _project(db_session, ws, "Tech")
+    task = await _task(db_session, ws, src, description="original text")
+
+    copy = await _move(db_session, task, dst, dev, source_action="archive", sync_content=True)
+    await db_session.commit()
+
+    link = (
+        await db_session.execute(
+            select(TaskDependency).where(TaskDependency.dependent_task_id == copy.id)
+        )
+    ).scalar_one()
+    assert link.sync_content is False
+
+    original = await _fresh(db_session, task.id)
+    assert original.is_archived is True
+    # The breadcrumb the sync branch would have suppressed is written, so the
+    # archived task still says where the work went.
+    assert "Moved to" in (original.description or "")
+    assert await sync.synced_task_peers(db_session, task.id) == []
+
+
+@pytest.mark.asyncio
+async def test_an_integration_edit_reaches_the_synced_peer(db_session: AsyncSession) -> None:
+    """Jira and Linear write `task.description` straight onto the row.
+
+    Propagation lives in `update_task`, which those writes go around — so an
+    edit made in Jira landed on one side of a synced pair and the two drifted
+    with nothing to say why.
+    """
+    from aexy.services.content_sync_service import propagate_description
+
+    ws, dev = await _workspace(db_session)
+    src, dst = await _project(db_session, ws, "Ops"), await _project(db_session, ws, "Tech")
+    task = await _task(db_session, ws, src, description="before")
+    copy = await _move(db_session, task, dst, dev, sync_content=True)
+    await db_session.commit()
+
+    # What the integration does: assign, flush, then propagate.
+    task.description = "edited in Jira"
+    await db_session.flush()
+    await propagate_description(db_session, task, actor_id=None)
+    await db_session.commit()
+
+    assert (await _fresh(db_session, copy.id)).description == "edited in Jira"
+    rows = (
+        await db_session.execute(
+            select(TaskActivity).where(
+                TaskActivity.task_id == copy.id,
+                TaskActivity.action == "description_synced",
+            )
+        )
+    ).scalars().all()
+    assert len(rows) == 1
+    # Nobody pressed save, so the history row names no actor.
+    assert rows[0].actor_id is None

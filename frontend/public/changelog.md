@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.2] - 2026-09-12
+
+Two gaps in the content sync added in 0.39.0.
+
+### Fixed: archiving the original and keeping it in sync are contradictory
+
+"Move to project…" let you archive the original *and* tick "keep description,
+comments and attachments in sync". An archived task is off every board, so the
+mirrored comments and files landed where nobody could read them, and removing
+an attachment on the live side reached into the archive to delete it there
+too. The sync branch also suppresses the "Moved to" breadcrumb — the two
+descriptions have to match — so the pair ended up archived *and* traceless.
+
+Archiving the original now turns sync off, and the breadcrumb is written, so
+the archived task still says where the work went. The checkbox is disabled
+with that explanation rather than silently ignored. "Mark done" keeps the
+choice: a done task is still on the board, and a team that closes its copy may
+well want to keep seeing the other side's comments.
+
+The rule also holds when the archiving happens *later*. A task can be archived
+from the board, the API or a bulk action long after the move, so an archived
+task is simply never a sync peer — the group is worked out in one place and
+that is where the rule lives, rather than at whichever door was noticed.
+Unarchiving puts it back: the link is untouched, so the pair resumes instead
+of having to be relinked by hand. A task moved twice and then archived in the
+middle leaves the two live tasks still in step with each other.
+
+### Fixed: a Jira or Linear edit reached only one side of a synced pair
+
+Copying a description onto synced peers happens in `update_task`. The Jira and
+Linear importers assign `task.description` straight onto the row, so an edit
+made in either tool landed on one task and not its twin, and the two drifted
+with nothing in the history to say why. Both now propagate, with a history row
+on the receiving task that names no actor — because nobody pressed save.
+
+A description lives in two columns: the plain text, and the rich document the
+editor actually renders. The importers wrote only the first, so an edit made
+in Jira or Linear was stored but never shown — the task went on displaying its
+previous description on both sides of the pair. Both columns are now written
+together, through the same converter every other non-editor writer uses, which
+also means a task created from a Linear issue keeps its Markdown structure
+instead of opening an empty editor.
+
 ## [0.39.1] - 2026-09-12
 
 Seven groups of API endpoints answered callers who presented no credentials at
@@ -71,6 +114,14 @@ the secret alongside them, requires workspace membership.
 predefined rows into shared tables. One carried the comment "admin only in
 production". Both now require a platform admin. The rest of `/gamification`
 requires a token.
+
+### Fixed: a meeting webhook crashed on a body it should accept
+
+`POST /workflow-events/webhooks/meeting` read nested objects out of the body
+without checking they were objects. Senders disagree: Calendly puts an object
+under `event`, others put the event *name* there, and `"booked".get("uuid")`
+is an `AttributeError` — a 500 on a webhook, which the sender then retries
+forever. Every nested lookup now reads as empty rather than raising.
 
 ### Fixed: the webhook URL list always failed
 

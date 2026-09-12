@@ -211,3 +211,18 @@ def markdown_to_tiptap(markdown: str) -> dict[str, Any]:
         )
 
     return {"type": "doc", "content": nodes}
+
+
+def text_to_tiptap(text: str | None) -> dict[str, Any] | None:
+    """An editor document for text written outside the editor, or ``None``.
+
+    The companion to :func:`markdown_to_tiptap` for callers holding a field
+    that may be empty. A task's description lives in two columns — the plain
+    text and the TipTap document the editor actually renders — and a writer
+    that sets one without the other leaves the task showing the older of the
+    two. ``None`` for empty rather than an empty document, so "no description"
+    and "a description that is blank" stay the same thing.
+    """
+    if not text or not text.strip():
+        return None
+    return markdown_to_tiptap(text)
