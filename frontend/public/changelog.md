@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.5] - 2026-09-12
+
+Automations built before the builder was fixed can run again.
+
+### Fixed: legacy automations failed every run, or ran against an empty config
+
+Two artefacts were baked into automations saved before the automation builder
+was corrected (0.8.x, "every module in the builder"):
+
+- **A dead action id.** Old templates offered `send_notification`, which the
+  executor never implemented. Every run of such an automation failed the step
+  as "Action type 'send_notification' is not supported" — and because the
+  executor fails the whole run on any step error, the automation had a 100%
+  failure rate for its entire life. A live "Missed Standup Follow-up" automation
+  had failed all 186 of its runs this way.
+- **Doubly-wrapped config.** The old canvas-to-payload path saved node config as
+  `{"config": {...}}`. The action handlers read their keys off the top level, so
+  every such step ran against an empty config — a create_task step ignored its
+  title and produced "Automated Task", a send_email step lost its body.
+
+The executor now unwraps the double nesting (a lone dict under `config` is
+unambiguous — no real action uses that shape) and routes `send_notification` to
+`notify_user`, defaulting the recipient to the developer the trigger names when
+the stored config named none. Automations created after the builder fix are
+unaffected; this is purely so the ones created before it stop failing.
 ## [0.39.4] - 2026-09-12
 
 Two ways to attribute an action to the wrong person, closed.
