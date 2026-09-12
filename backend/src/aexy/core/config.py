@@ -368,6 +368,12 @@ class LLMSettings(BaseSettings):
         return limits_map.get(provider, ProviderRateLimitSettings())
 
 
+# The shipped development JWT secret. main.py refuses to boot a non-debug
+# server still using it: it signs every session token, so the default means
+# anyone can forge one.
+DEFAULT_SECRET_KEY = "dev-secret-key-change-in-production"
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
@@ -475,7 +481,7 @@ class Settings(BaseSettings):
         return self.github_private_key.replace("\\n", "\n")
 
     # JWT
-    secret_key: str = "dev-secret-key-change-in-production"
+    secret_key: str = DEFAULT_SECRET_KEY
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 10080  # 7 days for development
 

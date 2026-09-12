@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.4] - 2026-09-12
+
+Two ways to attribute an action to the wrong person, closed.
+
+### Fixed: compliance recorded whoever the caller named as the actor
+
+Every mutating `/compliance/*` endpoint — creating an assignment, acknowledging
+or completing a training, waiving or verifying a certification — took the acting
+identity as a plain `developer_id`/`actor_id` query parameter. The caller chose
+it. Any authenticated member with compliance access could therefore attribute an
+action to another developer: mark someone else's mandatory training as
+completed, with the audit log naming that developer as the one who did it. In a
+module whose whole value is a trustworthy training record, that is the record
+being forged from the inside.
+
+The actor now comes from the authenticated token (`get_current_developer_id`),
+not the query string. `developer_id` survives only where it names whose data to
+read — a list filter or a report subject — never who is acting. A new test
+enumerates the compliance routes so a future endpoint cannot reintroduce the
+parameter without failing.
+
+### Fixed: nothing stopped a production server booting on the default JWT secret
+
+`SECRET_KEY` defaulted to a shipped development value and nothing checked it.
+That secret signs every session token, so a deployment that forgot to set one
+would sign — and accept — tokens anyone could forge. Startup now refuses to
+come up when `DEBUG` is off and `SECRET_KEY` is still the default, naming the
+variable to set. Debug and test runs, where the default is expected, are
+unaffected.
+
 ## [0.39.3] - 2026-09-12
 
 Five checks that had stopped doing their job.
