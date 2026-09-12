@@ -7,11 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.39.3] - 2026-09-12
 
-Four checks that had stopped doing their job.
+Five checks that had stopped doing their job.
 
 ### Fixed: a ledger of ungated routes had quietly stopped counting
 
-Two tests read `route.path` and `route.dependencies` straight off `app.routes`.
+Three tests read `route.path` and `route.dependencies` straight off `app.routes`.
 FastAPI 0.141 made `include_router` lazy: `app.routes` now holds router
 placeholders with no path of their own, which broke both — but differently.
 One raised an `AttributeError` and failed loudly. The other used
@@ -21,8 +21,22 @@ One raised an `AttributeError` and failed loudly. The other used
 The walk now lives in one place, accumulates the dependencies added at each
 mount (which is where the mistake it looks for is made), covers websocket
 routes as well as HTTP ones, and refuses to return an empty list. Re-measured
-against the real tree the count is 290 — the declared ceiling was right all
-along, it had just gone blind.
+against the real tree the count is 280 — the declared ceiling was right about
+the whole set; this is the part of it the test is actually for, with the
+`/platform-admin` routes excluded. They take a workspace id because they act
+*on* a tenant, and they answer only to `ADMIN_EMAILS`, which is a stricter
+test than any app guard rather than a looser one.
+
+### Fixed: the document access floors were checking nothing at all
+
+The third reader of `app.routes` enumerates every `{document_id}` route so
+that each one's minimum access level is a decision rather than a default. It
+has a guard against finding nothing, and that guard did fail — but the damage
+was quieter than one red test suggests. The list feeds
+`@pytest.mark.parametrize`, and an empty list generates *no cases*: ninety-two
+per-route assertions, the ones keeping a write endpoint from sitting at read
+level, had silently had nothing to assert. They run again, and all of them
+pass — the floors had not drifted, the check had just stopped looking.
 
 ### Fixed: two tests still asserted a behaviour that was deliberately removed
 
