@@ -110,6 +110,9 @@ class PlatformStatsService:
         values: dict[str, Any] = {}
         values.update(await self._growth(day))
         values.update(await self._llm_spend(day))
+        values.update(await self._churn(day))
+
+        existing = await self.on_day(day)
 
         if is_today:
             values.update(await self._subscriptions())
@@ -120,6 +123,17 @@ class PlatformStatsService:
                 notes.extend(revenue_notes)
             else:
                 notes.append("revenue section skipped by request")
+            values["is_partial"] = False
+        elif existing is not None and not existing.is_partial:
+            # This day was snapshotted while it was current, so it already
+            # holds the subscription and revenue figures a later pass cannot
+            # recover. Refresh what *is* recomputable — signups, cancellations,
+            # AI spend, which is the point of coming back to a finished day —
+            # and leave the rest, the notes included. Overwriting them here
+            # marked a day that has real data as partial, and the growth chart
+            # then erased its revenue line.
+            notes = list(existing.notes or [])
+            values["is_partial"] = False
         else:
             # Subscription state, seats and the month-to-date bill describe
             # now. Recomputing them for a past day would silently stamp
@@ -128,6 +142,7 @@ class PlatformStatsService:
                 "historical day: subscription, seat, revenue and invoice "
                 "figures are not recoverable after the fact and are left at zero"
             )
+            values["is_partial"] = True
 
         if is_today:
             # Adoption is a trailing-window count over tables that still carry
@@ -143,7 +158,6 @@ class PlatformStatsService:
         values["notes"] = notes
         values["computed_at"] = datetime.now(timezone.utc)
 
-        existing = await self.on_day(day)
         if existing is None:
             self.db.add(PlatformDailyStats(day=day, **values))
             created = True
@@ -348,24 +362,32 @@ class PlatformStatsService:
                 WorkspaceMember.is_billable.is_(True),
             )
         )
-        # Cancellations are dated, so this one is a real daily figure. It
-        # comes off the Stripe-synced table, the only one that records when.
-        yesterday = datetime.now(timezone.utc) - timedelta(days=1)
-        canceled = await self.db.scalar(
-            select(func.count(Subscription.id)).where(
-                Subscription.canceled_at.isnot(None),
-                Subscription.canceled_at >= yesterday,
-            )
-        )
-
         return {
             "subscriptions_by_status": by_status,
             "mrr_cents": float(mrr or 0),
             "paying_workspaces": int(paying or 0),
             "trialing_workspaces": int(trialing or 0),
             "billable_seats": int(seats or 0),
-            "subscriptions_canceled": int(canceled or 0),
         }
+
+    async def _churn(self, day: date) -> dict[str, Any]:
+        """Subscriptions cancelled on `day`.
+
+        Dated, and therefore a real per-day figure that survives being asked
+        about later — which is exactly what this table exists for. It sat in
+        `_subscriptions` on a rolling `now - 24h` window, which made it the one
+        number computed over a window that had nothing to do with the day the
+        row is keyed by, and which left every backfilled day at zero. It comes
+        off the Stripe-synced table, the only one that records when.
+        """
+        start, end = _day_bounds(day)
+        canceled = await self.db.scalar(
+            select(func.count(Subscription.id)).where(
+                Subscription.canceled_at >= start,
+                Subscription.canceled_at < end,
+            )
+        )
+        return {"subscriptions_canceled": int(canceled or 0)}
 
     async def _invoices(self) -> dict[str, Any]:
         now = datetime.now(timezone.utc)

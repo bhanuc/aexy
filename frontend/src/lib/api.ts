@@ -5574,6 +5574,12 @@ export interface PlatformBillingTotals {
   by_plan_tier: Record<string, number>;
   by_billing_model: Record<string, number>;
   top_workspaces: PlatformBillingSummaryRow[];
+  /** When these were computed, if they came from the daily snapshot rather
+   *  than a live pass. Null means computed now. */
+  computed_at?: string | null;
+  /** True when the snapshot behind them is old enough that the daily job has
+   *  probably stopped — the period still says "this month" either way. */
+  is_stale?: boolean;
 }
 
 // Platform-admin billing API (admin-only)
@@ -19027,7 +19033,10 @@ export interface PlatformStatsSeries {
 export interface PlatformSnapshotRefresh {
   day: string;
   created: boolean;
-  backfilled: number;
+  /** A backfill runs on the queue, not in the request — a year of it is
+   *  thousands of queries that a proxy timeout would roll back in full. */
+  backfill_queued: boolean;
+  backfill_days: number;
   notes: string[];
 }
 
@@ -19042,8 +19051,13 @@ export interface ModuleAdoptionPoint {
 export interface ModuleAdoption {
   days: number;
   window_days: number;
-  /** So a module count reads as a share, not just a number. */
+  /** Workspaces that did *anything* in the same window each point counts
+   *  over — the denominator a module's share has to be against. Dividing by
+   *  "workspaces that exist" understates every module on a platform with
+   *  dormant tenants. */
   active_workspaces: number;
+  /** Every workspace not switched off, for context beside the share. */
+  total_workspaces: number;
   points: ModuleAdoptionPoint[];
   /** Modules with no honest usage signal — named, not reported as zero. */
   not_measured: string[];

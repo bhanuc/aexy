@@ -90,12 +90,22 @@ SCHEDULES: list[dict] = [
     # area shows was live, and a live figure cannot be asked about the past —
     # nothing records that a workspace *was* active thirty days ago. Miss a
     # day and that day is gone, so this runs daily and is idempotent per day.
+    #
+    # Cron, not `interval`, and the time of day is the whole point. A bare
+    # 24-hour interval is aligned to the Unix epoch (Temporal fires when
+    # `(now - offset) % every == 0`), so with no offset it fires at 00:00 UTC
+    # — and the snapshot describes the day it runs on. Taken at midnight, the
+    # day it is describing is zero seconds old: every dated figure in it
+    # (signups, developers created, the whole day's AI spend) would be
+    # recorded as zero, permanently, because nothing recomputes a past day.
+    # 23:50 leaves the day essentially complete and still finishes inside it.
     {
         "id": "snapshot-platform-stats",
         "activity": "snapshot_platform_stats",
         "input_module": "aexy.temporal.activities.platform",
         "input_class": "SnapshotPlatformStatsInput",
-        "interval": timedelta(hours=24),
+        "cron": ["50 23 * * *"],
+        "time_zone_name": "UTC",
         "queue": TaskQueue.ANALYSIS,
     },
     # Phase 3 — weekly AI digests + embedding catch-up across all

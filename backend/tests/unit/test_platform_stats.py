@@ -398,6 +398,70 @@ class TestWhatAPastDayCannotKnow:
             any("historical day" in note for note in r.notes) for r in results
         )
 
+    async def test_a_partial_day_is_flagged_by_a_column_not_by_its_prose(
+        self, db_session
+    ):
+        """The chart and the KPI comparison both branch on this. Recovering it
+        by searching `notes` for a phrase meant that rewording a log message
+        silently turned every backfilled day back into real data."""
+        owner = await _developer(db_session, "owner@example.com", created=_ago(60))
+        await _workspace(db_session, "one", created=_ago(60), owner=owner)
+        await db_session.commit()
+
+        service = PlatformStatsService(db_session)
+        await service.backfill(3)
+        await service.compute_day(include_revenue=False)
+        await db_session.commit()
+
+        rows = {r.day: r for r in await service.series(30)}
+        today = datetime.now(timezone.utc).date()
+        assert rows[today].is_partial is False
+        assert all(row.is_partial for day, row in rows.items() if day != today)
+
+    async def test_a_backfill_does_not_downgrade_a_day_that_was_written_live(
+        self, db_session
+    ):
+        """Yesterday's row was written while it was current, so it holds the
+        subscription figures a later pass cannot recover. Re-running it marked
+        it partial and the growth chart then erased its revenue line."""
+        owner = await _developer(db_session, "owner@example.com", created=_ago(60))
+        ws = await _workspace(db_session, "ws", created=_ago(60), owner=owner)
+        db_session.add(
+            WorkspaceSubscription(
+                workspace_id=ws.id, billing_model="per_seat", status="active",
+                base_fee_monthly_cents=5000,
+            )
+        )
+        await db_session.commit()
+
+        service = PlatformStatsService(db_session)
+        yesterday = (TODAY - timedelta(days=1)).date()
+
+        # Stand in for "written while it was today": the same values a live
+        # run would have recorded.
+        await service.compute_day(include_revenue=False)
+        await db_session.commit()
+        live = await service.latest()
+        live.day = yesterday
+        await db_session.commit()
+
+        assert live.mrr_cents == 5000
+        assert live.is_partial is False
+
+        # A second workspace appears, then the day is revisited.
+        await _workspace(db_session, "late", created=_ago(1), owner=owner)
+        await db_session.commit()
+        await service.compute_day(yesterday)
+        await db_session.commit()
+
+        row = await service.on_day(yesterday)
+        # What it could not recover is left exactly as it was found …
+        assert row.mrr_cents == 5000
+        assert row.is_partial is False
+        assert not any("historical day" in note for note in row.notes)
+        # … and what it *can* recompute is brought up to date.
+        assert row.workspaces_total == 2
+
 
 @pytest.mark.asyncio
 class TestSeries:
@@ -452,6 +516,42 @@ class TestCancellations:
         await db_session.commit()
 
         assert (await service.latest()).subscriptions_canceled == 1
+
+    async def test_a_cancellation_is_still_countable_after_the_fact(self, db_session):
+        """`canceled_at` is dated, so churn is one of the few figures a past
+        day can be asked about. It sat on a rolling `now - 24h` window inside
+        the section that only runs for today, which left every backfilled day
+        at zero and attributed a midnight run's count to the wrong day."""
+        owner = await _developer(db_session, "owner@example.com", created=_ago(60))
+        billing = CustomerBilling(developer_id=owner.id)
+        db_session.add(billing)
+        await db_session.flush()
+        db_session.add_all(
+            [
+                Subscription(
+                    customer_id=billing.id, status="canceled",
+                    stripe_subscription_id="sub_four_days_ago",
+                    stripe_price_id="price_test",
+                    canceled_at=_ago(4),
+                ),
+                Subscription(
+                    customer_id=billing.id, status="canceled",
+                    stripe_subscription_id="sub_five_days_ago",
+                    stripe_price_id="price_test",
+                    canceled_at=_ago(5),
+                ),
+            ]
+        )
+        await db_session.commit()
+
+        service = PlatformStatsService(db_session)
+        await service.backfill(7)
+        await db_session.commit()
+
+        by_day = {row.day: row.subscriptions_canceled for row in await service.series(30)}
+        assert by_day[_ago(4).date()] == 1
+        assert by_day[_ago(5).date()] == 1
+        assert by_day[_ago(3).date()] == 0
 
 
 @pytest.mark.asyncio
@@ -759,3 +859,59 @@ class TestWorkspaceDetail:
         # Only modules with something in them, so the page shows use rather
         # than a wall of zeros.
         assert detail["module_usage"] == {"sprints": 1}
+
+
+class TestKpiComparison:
+    """A backfilled day stores zero for what it could not recover. Comparing
+    against it reported the whole of MRR as growth since last month — the same
+    mistake `is_partial` exists to prevent, made on the headline cards while
+    the chart beside them was already breaking its line."""
+
+    class _Row:
+        def __init__(self, **fields):
+            self.is_partial = fields.pop("is_partial", False)
+            for key, value in fields.items():
+                setattr(self, key, value)
+
+    def test_a_complete_previous_day_is_compared(self):
+        from aexy.api.platform_admin import _kpi
+
+        kpi = _kpi(self._Row(mrr_cents=1500), self._Row(mrr_cents=1000), "mrr_cents")
+
+        assert kpi.previous == 1000
+        assert kpi.delta == 500
+        assert kpi.delta_pct == 50.0
+
+    def test_a_partial_previous_day_offers_no_comparison_for_money(self):
+        from aexy.api.platform_admin import _kpi
+
+        kpi = _kpi(
+            self._Row(mrr_cents=1500),
+            self._Row(mrr_cents=0, is_partial=True),
+            "mrr_cents",
+        )
+
+        assert kpi.value == 1500
+        assert kpi.previous is None
+        assert kpi.delta is None
+
+    def test_a_partial_previous_day_still_compares_what_it_does_know(self):
+        """Signups and AI spend are dated, so a backfilled day recovers them in
+        full. Only the figures that describe *now* are missing."""
+        from aexy.api.platform_admin import _kpi
+
+        kpi = _kpi(
+            self._Row(workspaces_total=40),
+            self._Row(workspaces_total=25, is_partial=True),
+            "workspaces_total",
+        )
+
+        assert kpi.previous == 25
+        assert kpi.delta == 15
+
+    def test_no_previous_day_at_all_offers_no_comparison(self):
+        from aexy.api.platform_admin import _kpi
+
+        kpi = _kpi(self._Row(mrr_cents=1500), None, "mrr_cents")
+
+        assert kpi.previous is None

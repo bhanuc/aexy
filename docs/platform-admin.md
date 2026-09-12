@@ -49,8 +49,16 @@ tables records that a workspace *was* active thirty days ago, and a plan's
 price today is not the price it was billed at.
 
 So one row is written per day into `platform_daily_stats` by a Temporal
-schedule (`snapshot-platform-stats`, every 24 hours), and the dashboard reads
-it.
+schedule (`snapshot-platform-stats`), and the dashboard reads it.
+
+**The time of day matters.** The snapshot describes the day it runs on, so it
+runs at 23:50 UTC, when that day is essentially complete. A plain 24-hour
+interval would not do: Temporal aligns interval schedules to the Unix epoch,
+so one with no offset fires at 00:00 UTC — and a snapshot taken then describes
+a day that is zero seconds old, recording every dated figure in it (signups,
+people joining, the whole day's AI spend) as zero, permanently. The job also
+revisits *yesterday* before writing today, which finishes the last ten minutes
+and covers a night when the worker was down.
 
 What a row holds:
 
@@ -82,16 +90,30 @@ is the separate "Revenue this month" figure.
 the table existed. Only the parts that still carry their date can be
 recovered: signups, cancellations and AI spend. Subscription state, seat
 counts and the month-to-date bill describe *now*, so a past day is left at
-zero and marked partial rather than stamped with today's numbers. The growth
-charts break the line across those days instead of drawing a drop to zero that
-never happened.
+zero and marked partial (`is_partial`) rather than stamped with today's
+numbers. The growth charts break the line across those days instead of drawing
+a drop to zero that never happened, and a headline card offers no comparison
+against one rather than reporting the whole of MRR as growth.
+
+Revisiting a day that *was* written while it was current never downgrades it:
+the recomputable figures are refreshed and the rest — including the note
+saying what is missing — is left exactly as found.
+
+The backfill runs on the queue, not in the request. A year of it is hundreds
+of passes and thousands of queries in one transaction, which a proxy timeout
+or a closed tab would roll back in full, with nothing written and no way to
+tell how far it got. The response says a backfill was queued; today's row is
+still computed inline, because that is what the caller is waiting for.
 
 ### Freshness
 
 If the newest snapshot is more than 36 hours old, the dashboard says so at the
-top. That usually means the Temporal worker is not running the analysis queue.
-**Refresh** on the dashboard writes today's row immediately — useful on first
-setup, or after changing a plan.
+top, and so does the platform billing page — its totals are served from the
+snapshot, and its period heading reads "this month" whether the numbers are
+from last night or three weeks ago. `?live=true` on `/billing/totals` forces
+the slow per-workspace pass. That staleness usually means the Temporal worker
+is not running the analysis queue. **Refresh** on the dashboard writes today's
+row immediately — useful on first setup, or after changing a plan.
 
 ## Module adoption
 
@@ -99,6 +121,13 @@ The matrix is module against day: how many workspaces created something in
 each module in the trailing 30 days, and how many things they created. The
 count matters as much as the reach — 1 of 13 workspaces with 600 documents is
 a different story from 1 of 13 with three.
+
+The share is against workspaces that did *anything* in that same 30-day
+window, not against every workspace on the platform. The two have to mean the
+same thing or the percentage is nonsense: three of forty, when thirty of the
+forty have been dormant for months, reads as 8% adoption where the honest
+figure is 30%. The page prints both numbers so the denominator is never a
+guess.
 
 Each module's signal is the table whose rows mean somebody did that module's
 **work**, not the table that means somebody configured it. Creating a chat

@@ -92,7 +92,12 @@ class PlatformStatsSeriesResponse(BaseModel):
 class PlatformSnapshotRefreshResponse(BaseModel):
     day: date
     created: bool
-    backfilled: int = 0
+    #: A backfill is queued rather than run in the request: a year of it is
+    #: thousands of queries in one transaction, and a proxy timeout would roll
+    #: back the lot. False when one was asked for and the queue was unreachable.
+    backfill_queued: bool = False
+    #: How many days the queued backfill will cover. Zero when none was queued.
+    backfill_days: int = 0
     notes: list[str] = Field(default_factory=list)
 
 
@@ -114,9 +119,15 @@ class ModuleAdoptionPoint(BaseModel):
 class ModuleAdoptionResponse(BaseModel):
     days: int
     window_days: int
-    #: Active workspaces right now, so a module count means something as a
-    #: share rather than only as a number.
+    #: Workspaces that did *anything* inside the same trailing window each
+    #: point is counted over — the denominator for a module's share. It has to
+    #: be this and not "workspaces that exist", or a platform with dormant
+    #: tenants reports every module as barely adopted.
     active_workspaces: int
+    #: Every workspace that has not been switched off, for context beside the
+    #: share: "9 of 30 active, 112 in total" is a different story from
+    #: "9 of 30 active, 31 in total".
+    total_workspaces: int = 0
     points: list[ModuleAdoptionPoint] = Field(default_factory=list)
     #: Modules with nothing that separates "somebody used this" from "somebody
     #: switched it on". Named rather than reported as zero.

@@ -159,7 +159,8 @@
       "reach": "Workspaces",
       "volume": "Things created",
       "notMeasured": "Not measured",
-      "notMeasuredHint": "These modules have nothing that separates \"somebody used this\" from \"somebody switched it on\", so they are left out rather than reported as zero."
+      "notMeasuredHint": "These modules have nothing that separates \"somebody used this\" from \"somebody switched it on\", so they are left out rather than reported as zero.",
+      "denominator": "Shares are against the {active} workspaces active in that window, of {total} in total."
     },
     "aiSpend": {
       "title": "AI spend",
@@ -205,6 +206,23 @@
       "modules": "Modules in use",
       "modulesHint": "Things created in each module in the last 30 days.",
       "noModules": "Nothing created in any measured module in the last 30 days."
-    }
+    },
+    "nav": {
+      "dashboard": "Dashboard",
+      "growth": "Growth",
+      "adoption": "Adoption",
+      "aiSpend": "AI spend",
+      "emails": "Email logs",
+      "notifications": "Notifications",
+      "feedback": "Feedback",
+      "workspaces": "Workspaces",
+      "users": "Users",
+      "aiBenchmarking": "AI benchmarking",
+      "plans": "Plans",
+      "billing": "Billing",
+      "planOverrides": "Plan overrides",
+      "invoices": "Invoices"
+    },
+    "platformAdmin": "Platform admin"
   }
 }

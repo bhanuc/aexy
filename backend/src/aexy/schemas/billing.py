@@ -539,3 +539,11 @@ class PlatformBillingTotals(BaseModel):
     by_plan_tier: dict[str, float]
     by_billing_model: dict[str, float]
     top_workspaces: list[PlatformBillingSummaryRow]
+    #: When these figures were computed, when they come from the daily
+    #: snapshot rather than a live pass. None means they were computed now.
+    computed_at: datetime | None = None
+    #: True when the snapshot behind them is old enough that the daily job has
+    #: probably stopped. The period below still says "this month", so without
+    #: this there is nothing to distinguish last night's numbers from numbers
+    #: three weeks old.
+    is_stale: bool = False

@@ -35,6 +35,7 @@ import { useDocumentSpaces } from "@/hooks/useDocumentSpaces";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useSidebarBadges } from "@/hooks/useSidebarBadges";
 import { useAdmin } from "@/hooks/useAdmin";
+import { useTranslations } from "next-intl";
 import { useSidebarLayout } from "@/hooks/useSidebarLayout";
 import { useSidebarStore } from "@/stores/sidebarStore";
 import { useAppAccess } from "@/hooks/useAppAccess";
@@ -112,6 +113,7 @@ export function Sidebar({ className, user, logout }: SidebarProps) {
     // reachable only by typing /admin. Shown to the people ADMIN_EMAILS names
     // and to nobody else.
     const { isAdmin: isPlatformAdmin } = useAdmin();
+    const tAdmin = useTranslations("admin");
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const params = useParams();
@@ -1093,10 +1095,10 @@ export function Sidebar({ className, user, logout }: SidebarProps) {
                                         "group flex items-center gap-x-3 rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground text-amber-500 transition-all",
                                         isCollapsed && "justify-center px-2"
                                     )}
-                                    title="Platform admin"
+                                    title={tAdmin("platformAdmin")}
                                 >
                                     <Shield className="h-4 w-4 shrink-0" />
-                                    {!isCollapsed && <span>Platform admin</span>}
+                                    {!isCollapsed && <span>{tAdmin("platformAdmin")}</span>}
                                 </Link>
                             )}
                             <Link

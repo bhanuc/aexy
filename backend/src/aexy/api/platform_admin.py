@@ -1596,9 +1596,22 @@ async def admin_get_billing_totals(
         # A snapshot from a previous month describes a period that has closed;
         # it cannot stand in for this one.
         if snapshot is not None and snapshot.day >= period_start.date():
+            computed_at = snapshot.computed_at
+            if computed_at is not None and computed_at.tzinfo is None:
+                computed_at = computed_at.replace(tzinfo=timezone.utc)
             return PlatformBillingTotals(
                 period_start=period_start,
                 period_end=period_end,
+                # Where the numbers came from and when. This endpoint used to
+                # compute live on every call, so "current" was true by
+                # construction; served from a snapshot it can be a month old
+                # if the daily job has stopped, and the caller has no other
+                # way to tell. `?live=true` forces the slow path.
+                computed_at=computed_at,
+                is_stale=(
+                    computed_at is None
+                    or datetime.now(timezone.utc) - computed_at > STALE_AFTER
+                ),
                 total_revenue_cents=snapshot.revenue_cents,
                 total_base_cost_cents=snapshot.base_cost_cents,
                 total_margin_cents=snapshot.margin_cents,
@@ -1629,9 +1642,35 @@ async def admin_get_billing_totals(
 STALE_AFTER = timedelta(hours=36)
 
 
+#: Fields a snapshot can only know on the day it describes. A backfilled row
+#: stores zero for these because the source rows no longer say what they were,
+#: not because they were zero — so they have nothing to compare against.
+UNRECOVERABLE_FIELDS = frozenset(
+    {
+        "mrr_cents",
+        "revenue_cents",
+        "base_cost_cents",
+        "margin_cents",
+        "paying_workspaces",
+        "trialing_workspaces",
+        "billable_seats",
+        "invoices_open",
+        "invoices_open_cents",
+        "invoices_overdue",
+        "invoices_overdue_cents",
+    }
+)
+
+
 def _kpi(current: Any, previous: Any, field: str) -> PlatformKpi:
     value = float(getattr(current, field, 0) or 0)
-    if previous is None:
+    # A partial day stores zero for what it could not recover. Comparing
+    # against it reported the whole of MRR as growth since last month, which
+    # is the exact mistake `is_partial` exists to prevent — the chart already
+    # breaks its line there; the cards were still drawing one.
+    if previous is None or (
+        getattr(previous, "is_partial", False) and field in UNRECOVERABLE_FIELDS
+    ):
         return PlatformKpi(value=value)
     before = float(getattr(previous, field, 0) or 0)
     delta = value - before
@@ -1755,12 +1794,12 @@ async def admin_stats_series(
             llm_tokens=row.llm_tokens,
             llm_billed_cents=row.llm_billed_cents,
             llm_base_cost_cents=row.llm_base_cost_cents,
-            # A backfilled day carries a note saying which sections it could
-            # not recover. The chart uses this to break the line instead of
-            # drawing a drop to zero that never happened.
-            is_partial=any(
-                "historical day" in note for note in (row.notes or [])
-            ),
+            # A backfilled day could not recover its subscription and revenue
+            # figures. The chart uses this to break the line instead of
+            # drawing a drop to zero that never happened. A column, not a
+            # phrase found inside `notes`: rewording a log message should not
+            # quietly change what the chart draws.
+            is_partial=row.is_partial,
         )
         for row in rows
     ]
@@ -1777,23 +1816,43 @@ async def admin_stats_refresh(
 
     The schedule writes one a day; this exists so the page is usable before
     the first run, and so an admin who has just changed a plan can see the
-    effect without waiting until tomorrow. `backfill_days` fills in earlier
-    days as far as the source rows allow — signups, cancellations and AI
-    spend are dated and so recoverable; subscription and revenue figures are
-    not, and those days are marked partial.
+    effect without waiting until tomorrow. Today's row is computed inline —
+    it is a handful of aggregates and a billing pass, and the caller is
+    waiting to see the result.
+
+    `backfill_days` is a different shape of work: a year is 365 of those
+    passes, thousands of queries in one transaction that a proxy timeout or a
+    closed tab would roll back in full, with nothing written and no way to
+    tell how far it got. It goes on the queue, where it already has a
+    30-minute budget and a retry policy, and the response says so.
     """
     from aexy.services.platform_stats_service import PlatformStatsService
+    from aexy.temporal.activities.platform import SnapshotPlatformStatsInput
+    from aexy.temporal.dispatch import dispatch
+    from aexy.temporal.task_queues import TaskQueue
+
+    queued = False
+    if backfill_days:
+        try:
+            await dispatch(
+                "snapshot_platform_stats",
+                SnapshotPlatformStatsInput(backfill_days=backfill_days),
+                task_queue=TaskQueue.ANALYSIS,
+            )
+            queued = True
+        except Exception:
+            # Temporal being unreachable should not cost the admin today's
+            # snapshot, which is the part they were waiting for.
+            logger.exception("Could not queue a platform stats backfill")
 
     service = PlatformStatsService(db)
-    filled = 0
-    if backfill_days:
-        filled = len(await service.backfill(backfill_days))
     result = await service.compute_day()
     await db.commit()
     return PlatformSnapshotRefreshResponse(
         day=result.day,
         created=result.created,
-        backfilled=filled,
+        backfill_queued=queued,
+        backfill_days=backfill_days if queued else 0,
         notes=result.notes,
     )
 
@@ -1816,14 +1875,32 @@ async def admin_stats_adoption(
         PlatformStatsService,
     )
 
-    rows = await PlatformStatsService(db).module_adoption(days)
-    active = await db.scalar(
-        select(func.count(Workspace.id)).where(Workspace.is_active.is_(True))
+    service = PlatformStatsService(db)
+    rows = await service.module_adoption(days)
+
+    # The denominator has to mean the same thing as the numerator. Each row
+    # counts workspaces that did that module's work inside the trailing
+    # window, so the share is against workspaces that did *anything* in that
+    # window — not against every workspace that exists and has not been
+    # switched off. Dividing by the second understated every module: three of
+    # forty when thirty of them had been dormant for months reads as 8%
+    # adoption where the honest figure is 30%.
+    total = int(
+        await db.scalar(
+            select(func.count(Workspace.id)).where(Workspace.is_active.is_(True))
+        )
+        or 0
     )
+    latest = await service.latest()
+    # No snapshot yet, or a genuinely silent window: fall back to the live
+    # count so the page shows a share rather than dividing by zero.
+    active = (latest.workspaces_active_30d if latest is not None else 0) or total
+
     return ModuleAdoptionResponse(
         days=days,
         window_days=ACTIVITY_WINDOW_DAYS,
-        active_workspaces=int(active or 0),
+        active_workspaces=active,
+        total_workspaces=total,
         points=[
             {
                 "day": row.day,

@@ -236,7 +236,8 @@
           "providerCost": "Provider cost",
           "margin": "Margin",
           "total": "Total"
-        }
+        },
+        "staleTotals": "These totals come from the last daily snapshot, which is more than a day and a half old — the snapshot job may have stopped."
       },
       "postpaid": {
         "title": "Postpaid Billing",

@@ -52,7 +52,18 @@ Two things it is careful about:
   zero that never happened.
 - **"No comparison yet" is not "no change".** When no snapshot reaches back
   far enough the card says so, rather than showing a 0% move that reads as
-  flat. A percentage is omitted when the earlier value was zero.
+  flat. A percentage is omitted when the earlier value was zero. The same
+  holds when the day thirty days back is a backfilled one: its zero means "we
+  could not know", so the card offers no comparison rather than reporting the
+  whole of MRR as growth.
+- **The snapshot runs at the end of the day it describes**, at 23:50 UTC, and
+  revisits yesterday before writing today. A plain daily interval fires at
+  midnight UTC, and a snapshot taken then describes a day zero seconds old —
+  every signup and every penny of that day's AI spend would be recorded as
+  zero and never revisited.
+- **Cancellations are counted on the day they happened**, so they can be
+  filled in for a past day like the other dated figures rather than being a
+  rolling twenty-four hours attributed to whichever day the job ran on.
 
 ### Changed: "active workspaces" now means somebody did something
 
@@ -78,6 +89,12 @@ channel is configuration and happens once, so chat counts messages.
 Eleven modules have nothing that separates use from configuration. They are
 named on the page as "not measured" rather than reported as zero, because a
 module nobody can measure must not read as a module nobody uses.
+
+A module's reach is a share of the workspaces that did *anything* in the same
+window — not of every workspace on the platform. The two have to mean the same
+thing, or the percentage misleads: three of forty, when thirty of them have
+been dormant for months, reads as 8% adoption where the honest figure is 30%.
+Both numbers are on the page.
 
 ### Added: where the AI money goes
 
@@ -110,6 +127,11 @@ full billing breakdown per workspace, uncached, on every request — work that
 grows with the tenant count and that the nightly job already does. It now
 reads one row. `?live=true` forces the old path, and so does asking for a
 period the snapshot does not cover.
+
+The totals now carry when they were computed and whether that is stale, and
+the platform billing page says so — its period heading reads "this month"
+whether the numbers are from last night or three weeks ago, so without it
+there was nothing to tell the two apart.
 
 ### Fixed: the dashboard said the wrong thing when it had nothing to say
 

@@ -146,7 +146,7 @@ async def snapshot_platform_stats(input: SnapshotPlatformStatsInput) -> dict[str
     per-workspace billing-breakdown loop that `/billing/totals` used to run on
     every page load.
     """
-    from datetime import date
+    from datetime import date, datetime, timedelta, timezone
 
     from aexy.services.platform_stats_service import PlatformStatsService
 
@@ -157,6 +157,20 @@ async def snapshot_platform_stats(input: SnapshotPlatformStatsInput) -> dict[str
         filled = 0
         if input.backfill_days:
             filled = len(await service.backfill(input.backfill_days))
+
+        # Finish yesterday before describing today. The schedule runs at 23:50
+        # so that the day being written is essentially complete, but "23:50" is
+        # not "midnight" and a worker that was down at 23:50 wrote nothing at
+        # all. Coming back to yesterday picks up both: its dated figures —
+        # signups, cancellations, AI spend — are recomputable in full, and a
+        # day already written while it was current keeps the subscription and
+        # revenue figures that cannot be recovered.
+        if day is None:
+            # UTC, like every other day boundary here — `date.today()`
+            # would be the worker's local day.
+            yesterday = datetime.now(timezone.utc).date() - timedelta(days=1)
+            await service.compute_day(yesterday)
+
         result = await service.compute_day(day)
         await db.commit()
         logger.info(

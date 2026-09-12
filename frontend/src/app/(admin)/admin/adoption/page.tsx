@@ -44,7 +44,11 @@ export default function ModuleAdoptionPage() {
     return { modules, dayColumns, latest: byDay.get(dayColumns[0]) };
   }, [data]);
 
+  // The denominator is workspaces that did *anything* in the same window each
+  // row counts over, not every workspace that exists — dividing by the second
+  // understates every module on a platform with dormant tenants.
   const total = data?.active_workspaces ?? 0;
+  const allWorkspaces = data?.total_workspaces ?? 0;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -54,6 +58,11 @@ export default function ModuleAdoptionPage() {
           <p className="mt-1 text-muted-foreground">
             {t("adoption.description", { days: data?.window_days ?? 30 })}
           </p>
+          {total > 0 && (
+            <p className="mt-1 text-sm text-muted-foreground" data-testid="adoption-denominator">
+              {t("adoption.denominator", { active: total, total: allWorkspaces })}
+            </p>
+          )}
         </div>
         <div className="flex gap-1 rounded-lg border border-border bg-muted p-1">
           {RANGES.map((range) => (

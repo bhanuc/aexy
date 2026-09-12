@@ -18,6 +18,7 @@ from uuid import uuid4
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     Date,
     DateTime,
     Float,
@@ -108,6 +109,14 @@ class PlatformDailyStats(Base):
     #: Sections that could not be computed, so a zero meaning "we did not
     #: know" is never read as a zero meaning "there was none".
     notes: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
+
+    #: True when this row is missing figures that cannot be recovered after
+    #: the fact — subscription state, seats, the month-to-date bill. A flag
+    #: rather than a phrase inside `notes`: charts and comparisons branch on
+    #: this, and prose that anyone might reword is not something to branch on.
+    is_partial: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
 
     computed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
