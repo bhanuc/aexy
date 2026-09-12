@@ -14,13 +14,14 @@ dependencies close the API hole:
 """
 
 from fastapi import Depends, HTTPException, Request, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from aexy.api.developers import get_current_developer
+from aexy.api.developers import get_current_developer, get_current_developer_id
 from aexy.core.database import get_db
 from aexy.models.app_definitions import APP_CATALOG
 from aexy.models.developer import Developer
+from aexy.models.workspace import WorkspaceMember
 from aexy.models.permissions import PERMISSIONS
 from aexy.models.documentation import Document
 from aexy.models.sprint import Sprint
@@ -317,3 +318,118 @@ def require_app_access_document_scoped(app_id: str):
             await ensure_app_enabled(db, str(workspace_id), app_id)
 
     return _guard
+
+
+# =============================================================================
+# Who may look at whom
+# =============================================================================
+#
+# Several routers take a developer id in the URL — /analysis/developers/{id},
+# /career/developers/{id}/gap/{role} — or as a query parameter, and answered
+# whoever asked. The rule they need is the one the rest of the product already
+# lives by: you can see a person if you share an active workspace with them,
+# and you can only write your own personal records.
+
+
+def shared_workspace_developer_ids(developer_id: str):
+    """Ids of everyone holding an active seat in a workspace where
+    ``developer_id`` also holds one. Subquery-shaped, for ``.in_()``.
+
+    Active only: a removed member's row is kept for attribution and must not
+    keep granting a view of their former colleagues.
+    """
+    my_workspaces = select(WorkspaceMember.workspace_id).where(
+        WorkspaceMember.developer_id == developer_id,
+        WorkspaceMember.status == "active",
+    )
+    return select(WorkspaceMember.developer_id).where(
+        WorkspaceMember.workspace_id.in_(my_workspaces),
+        WorkspaceMember.status == "active",
+    )
+
+
+def accessible_developers_stmt(developer_id: str):
+    """``select(Developer)`` narrowed to the caller and the people they share
+    an active workspace with — what replaces a bare ``select(Developer)`` in
+    anything that scores, matches or compares developers."""
+    return select(Developer).where(
+        or_(
+            Developer.id == developer_id,
+            Developer.id.in_(shared_workspace_developer_ids(developer_id)),
+        )
+    )
+
+
+async def shares_active_workspace(
+    db: AsyncSession, developer_id: str, other_developer_id: str
+) -> bool:
+    if str(developer_id) == str(other_developer_id):
+        return True
+    stmt = (
+        shared_workspace_developer_ids(str(developer_id))
+        .where(WorkspaceMember.developer_id == str(other_developer_id))
+        .limit(1)
+    )
+    return (await db.execute(stmt)).first() is not None
+
+
+async def require_developer_access(
+    developer_id: str,
+    current_developer_id: str = Depends(get_current_developer_id),
+    db: AsyncSession = Depends(get_db),
+) -> str:
+    """Route guard for a ``{developer_id}`` path parameter.
+
+    Answers 404, not 403: a stranger's id is a valid UUID like any other, and
+    "forbidden" would confirm that the person exists.
+    """
+    if not await shares_active_workspace(db, current_developer_id, developer_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Developer not found"
+        )
+    return developer_id
+
+
+async def require_own_developer_id(
+    developer_id: str,
+    current_developer_id: str = Depends(get_current_developer_id),
+) -> str:
+    """Route guard for personal data addressed by a ``developer_id`` query
+    parameter: it has to be the caller's own id."""
+    if str(developer_id) != str(current_developer_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only act on your own records",
+        )
+    return developer_id
+
+
+async def ensure_active_member(
+    db: AsyncSession, workspace_id: str, developer_id: str
+) -> None:
+    """403 unless ``developer_id`` holds an active seat in ``workspace_id``."""
+    stmt = select(WorkspaceMember.id).where(
+        WorkspaceMember.workspace_id == str(workspace_id),
+        WorkspaceMember.developer_id == str(developer_id),
+        WorkspaceMember.status == "active",
+    ).limit(1)
+    if (await db.execute(stmt)).first() is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not a member of this workspace",
+        )
+
+
+async def ensure_workspace_role(
+    db: AsyncSession, workspace_id: str, developer_id: str, min_role: str
+) -> None:
+    """403 unless ``developer_id`` holds at least ``min_role`` in the workspace."""
+    from aexy.services.workspace_service import WorkspaceService
+
+    if not await WorkspaceService(db).check_permission(
+        str(workspace_id), str(developer_id), min_role
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"This requires the {min_role} role in this workspace",
+        )

@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from aexy.api.platform_admin import get_platform_admin
 from aexy.cache import get_analysis_cache
 from aexy.core.config import get_settings
 from aexy.core.database import get_db
@@ -63,7 +64,15 @@ async def get_temporal_stats() -> dict[str, Any]:
             "error": str(e),
         }
 
-router = APIRouter(prefix="/admin", tags=["admin"])
+# Platform-wide operations — LLM spend across every tenant, cache flushes,
+# batch triggers, provider config. Nothing here is per-workspace, so the only
+# sensible caller is a platform admin (ADMIN_EMAILS). Until this line every
+# endpoint took requests from anyone, signed in or not.
+router = APIRouter(
+    prefix="/admin",
+    tags=["admin"],
+    dependencies=[Depends(get_platform_admin)],
+)
 
 
 # Response models
