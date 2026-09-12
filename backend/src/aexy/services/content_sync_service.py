@@ -61,10 +61,23 @@ SYNCED_FROM_TICKET_KEY = "synced_from_ticket_id"
 
 
 async def synced_task_peers(db: AsyncSession, task_id: str) -> list[str]:
-    """Every task kept in sync with ``task_id``, excluding itself.
+    """Every *live* task kept in sync with ``task_id``, excluding itself.
 
     Walks ``duplicates`` links with ``sync_content`` in both directions,
     transitively, up to ``MAX_PEER_GROUP`` members.
+
+    An archived task is never a peer. Archiving and syncing are contradictory:
+    an archived task is off every board, so mirroring comments and files into
+    it writes them where nobody can read them, and deleting an attachment on
+    the live side would reach into the archive to delete it there too. The
+    move dialog refuses the combination up front, but a task can be archived
+    at any time afterwards — through the board, the API, a bulk action — so
+    the rule belongs here, in the one function every read and write goes
+    through, rather than at whichever door happened to be noticed.
+
+    The walk still *passes through* an archived task: A moved to B and B moved
+    to C, with B later archived, leaves A and C two live tasks that were
+    deliberately linked. Only the archived member drops out of the group.
     """
     seen: set[str] = {str(task_id)}
     queue: deque[str] = deque([str(task_id)])
@@ -93,7 +106,21 @@ async def synced_task_peers(db: AsyncSession, task_id: str) -> list[str]:
                     seen.add(other)
                     queue.append(other)
     seen.discard(str(task_id))
-    return sorted(seen)
+    if not seen:
+        return []
+    live = (
+        (
+            await db.execute(
+                select(SprintTask.id).where(
+                    SprintTask.id.in_(sorted(seen)),
+                    SprintTask.is_archived.is_(False),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return sorted(str(row) for row in live)
 
 
 async def synced_tickets_for_tasks(

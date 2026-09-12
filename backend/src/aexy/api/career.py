@@ -3,6 +3,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from aexy.api.access_guard import (
+    ensure_active_member,
+    ensure_workspace_role,
+    require_developer_access,
+)
+from aexy.api.developers import get_current_developer_id
+from aexy.api.platform_admin import get_platform_admin
 from aexy.core.database import get_db
 from aexy.models.developer import Developer
 from aexy.schemas.career import (
@@ -18,12 +25,19 @@ from aexy.schemas.career import (
 from aexy.services.career_progression import CareerProgressionService
 from aexy.services.developer_service import DeveloperService
 
-router = APIRouter(prefix="/career")
+# Career ladders name people and score them against a role. Signed in at
+# minimum; the readiness and gap endpoints additionally require that the
+# caller shares a workspace with the person they are asking about.
+router = APIRouter(
+    prefix="/career",
+    dependencies=[Depends(get_current_developer_id)],
+)
 
 
 @router.get("/roles", response_model=list[dict])
 async def list_roles(
     organization_id: str | None = None,
+    current_developer_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """List all available career roles (predefined + custom).
@@ -35,6 +49,9 @@ async def list_roles(
     Returns:
         List of career roles.
     """
+    if organization_id:
+        await ensure_active_member(db, organization_id, current_developer_id)
+
     service = CareerProgressionService(db)
     roles = await service.get_all_roles(organization_id)
     return roles
@@ -43,6 +60,7 @@ async def list_roles(
 @router.post("/roles", response_model=CareerRoleResponse, status_code=status.HTTP_201_CREATED)
 async def create_custom_role(
     role_data: CareerRoleCreate,
+    current_developer_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Create a custom role for an organization.
@@ -59,6 +77,9 @@ async def create_custom_role(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="organization_id is required for custom roles",
         )
+    await ensure_workspace_role(
+        db, role_data.organization_id, current_developer_id, "admin"
+    )
 
     service = CareerProgressionService(db)
     role = await service.create_custom_role(
@@ -93,6 +114,7 @@ async def create_custom_role(
 @router.get("/roles/{role_id}", response_model=dict | None)
 async def get_role(
     role_id: str,
+    current_developer_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Get a role by ID.
@@ -113,6 +135,9 @@ async def get_role(
             detail="Role not found",
         )
 
+    if role.organization_id:
+        await ensure_active_member(db, role.organization_id, current_developer_id)
+
     return {
         "id": str(role.id),
         "name": role.name,
@@ -130,6 +155,7 @@ async def get_role(
 @router.get("/roles/{role_id}/requirements", response_model=RoleRequirements | None)
 async def get_role_requirements(
     role_id: str,
+    current_developer_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Get detailed requirements for a role.
@@ -142,6 +168,9 @@ async def get_role_requirements(
         Role requirements.
     """
     service = CareerProgressionService(db)
+    role = await service.get_role_by_id(role_id)
+    if role is not None and role.organization_id:
+        await ensure_active_member(db, role.organization_id, current_developer_id)
     requirements = await service.get_role_requirements(role_id=role_id)
 
     if not requirements:
@@ -166,6 +195,8 @@ async def get_role_requirements(
 async def suggest_next_roles(
     developer_id: str,
     organization_id: str | None = None,
+    _: str = Depends(require_developer_access),
+    current_developer_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Suggest next career steps for a developer.
@@ -178,6 +209,12 @@ async def suggest_next_roles(
     Returns:
         List of role suggestions.
     """
+    # Same parameter, same rule as `list_roles`: it reaches
+    # `get_all_roles(organization_id)`, so naming a workspace you are not in
+    # would list that company's custom ladder by name and level.
+    if organization_id:
+        await ensure_active_member(db, organization_id, current_developer_id)
+
     dev_service = DeveloperService(db)
     developer = await dev_service.get_by_id(developer_id)
 
@@ -221,6 +258,7 @@ async def suggest_next_roles(
 async def get_promotion_readiness(
     developer_id: str,
     role_id: str,
+    _: str = Depends(require_developer_access),
     db: AsyncSession = Depends(get_db),
 ):
     """Check promotion readiness for a target role.
@@ -269,6 +307,7 @@ async def get_promotion_readiness(
 async def compare_developer_to_role(
     developer_id: str,
     role_id: str,
+    _: str = Depends(require_developer_access),
     db: AsyncSession = Depends(get_db),
 ):
     """Compare a developer's skills to a role's requirements.
@@ -323,6 +362,7 @@ async def compare_developer_to_role(
 
 @router.post("/roles/seed")
 async def seed_predefined_roles(
+    _: Developer = Depends(get_platform_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """Seed predefined roles into the database.

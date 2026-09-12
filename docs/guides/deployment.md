@@ -404,6 +404,10 @@ module "elasticache" {
 - [ ] Rate limiting enabled
 - [ ] Webhook signatures validated
 - [ ] JWT tokens properly configured
+- [ ] `ADMIN_EMAILS` set to the people who should reach the platform admin
+      area, and to nobody else
+- [ ] Workflow webhook senders configured with the workspace secret from
+      `GET /workspaces/{ws}/workflow-events/webhook-urls`
 
 ### Database
 
@@ -461,6 +465,16 @@ JWT_EXPIRE_MINUTES=1440
 
 # CORS
 CORS_ORIGINS=https://aexy.io,https://app.aexy.io
+
+# Platform admins — the only callers of /api/v1/admin/* and
+# /api/v1/platform-admin/*. Comma-separated, matched case-insensitively
+# against the signed-in developer's email. Leave it empty and nobody is a
+# platform admin, which is the safe default rather than a broken one.
+ADMIN_EMAILS=ops@aexy.io,root@aexy.io
+
+# Signs the per-workspace workflow webhook secrets, among other things.
+# Changing it invalidates every webhook secret already handed out.
+SECRET_KEY=your-production-secret-key
 
 # Frontend
 NEXT_PUBLIC_API_URL=https://api.aexy.io/api

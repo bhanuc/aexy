@@ -79,6 +79,50 @@ Workflows orchestrate via Temporal activities under the hood — `WorkflowServic
 
 `WorkflowExecution.steps_executed` is the authoritative log of what happened — the workflow engine reads/writes this state, and the UI displays it as a visual timeline.
 
+### Resuming a workflow from outside (`api/workflow_events.py`)
+
+A wait node can wait on a signal from another system rather than a timer. Four
+receivers turn such a signal into an event the waiting executions subscribe to:
+
+```
+POST /workspaces/{ws}/workflow-events/webhooks/email-tracking
+POST /workspaces/{ws}/workflow-events/webhooks/form-submission
+POST /workspaces/{ws}/workflow-events/webhooks/meeting
+POST /workspaces/{ws}/workflow-events/webhooks/custom/{webhook_id}
+```
+
+The caller is a form tool or a calendar, which cannot hold a user's bearer
+token, so these authenticate with a **per-workspace secret** instead, derived
+from `SECRET_KEY`. A sender proves it holds that secret in one of two ways:
+
+* **Sign the body** — HMAC-SHA256 of the raw request body with the secret, in
+  `X-Aexy-Signature: sha256=<hex>`. This is what the CRM automation triggers
+  use, and it is the better of the two: the secret itself never travels, so a
+  captured request cannot be replayed with a different payload.
+* **Present the secret** — in the `X-Aexy-Webhook-Secret` header, for senders
+  that can set a header but cannot compute an HMAC.
+
+The secret is **never** accepted as a query parameter. A URL is written to the
+access log of every proxy and CDN it passes through, and this secret cannot be
+rotated on its own — it is derived from `SECRET_KEY`, so rotating it means
+rotating the server key and signing everyone out. Treat a leak accordingly.
+
+A secret opens only its own workspace; anything else is a 401. The receivers
+are rate-limited per workspace, so a leaked secret cannot fan out workflows
+without bound.
+
+`GET /workspaces/{ws}/workflow-events/webhook-urls` returns the four URLs, the
+secret, and which header to put it in. It requires workspace membership.
+
+The receivers accept the shapes senders actually send: SendGrid posts a JSON
+*array* of events and every one in the batch is handled; a key that arrives as
+`null`, a string where an object was expected, or a number where a name was
+expected reads as empty rather than raising. A 500 here is worse than it looks
+— the sender retries it forever.
+
+Until 0.39.1 these four took no authentication at all, so knowing a workspace
+id was enough to resume another tenant's workflows with invented data.
+
 ## AI Agent integration with automations
 
 Automations can call AI agents at three points (`api/automation_agents.py:51-94`):

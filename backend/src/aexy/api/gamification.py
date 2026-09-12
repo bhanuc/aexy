@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from aexy.core.database import get_db
 from aexy.api.developers import get_current_developer
+from aexy.api.platform_admin import get_platform_admin
 from aexy.models.developer import Developer
 from aexy.services.gamification_service import GamificationService
 from aexy.schemas.gamification import (
@@ -20,7 +21,11 @@ from aexy.schemas.gamification import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/gamification", tags=["gamification"])
+router = APIRouter(
+    prefix="/gamification",
+    tags=["gamification"],
+    dependencies=[Depends(get_current_developer)],
+)
 
 
 @router.get("/profile", response_model=GamificationProfileWithBadges)
@@ -96,8 +101,10 @@ async def check_and_award_badges(
 @router.post("/badges/seed")
 async def seed_badges(
     db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[Developer, Depends(get_platform_admin)],
 ) -> dict:
-    """Seed predefined badges (admin only in production)."""
+    """Seed the predefined badge set. Platform admins only — the docstring
+    said "admin only in production" while the endpoint asked for nothing."""
     service = GamificationService(db)
     created = await service.seed_badges()
     return {

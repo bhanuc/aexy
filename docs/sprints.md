@@ -106,8 +106,10 @@ destination board and links the two. You choose what happens to the original:
 - **Archive original** — hidden from the board, restorable from the archive.
 - **Mark original as Done** — stays visible in the Done column.
 
-**Keep description, comments and attachments in sync** is on by default. While
-it is on, the two tasks share those three things: rewrite the description on
+**Keep description, comments and attachments in sync** is on by default,
+except when you archive the original — an archived task is off every board, so
+there is nothing to keep in step, and the option is disabled. While sync is
+on, the two tasks share those three things: rewrite the description on
 either board and the other follows; an update or comment written on one is
 read on the other, labelled with where it was written; a file attached to one
 appears on both, and removing it removes it from both. Nothing else is shared
@@ -117,6 +119,10 @@ of the move is that the two boards run the work independently.
 With sync off you get the older behaviour: the copy starts with a *Moved from*
 line, the closed original gets a *Moved to* line, and from then on they drift
 apart. Either way the pair appear under **Linked tasks** in the task's detail.
+
+An edit made in Jira or Linear counts as an edit: if the task is synced with
+another, the imported description reaches both. The receiving task's history
+records the change with no author, because nobody in Aexy typed it.
 
 A ticket that was converted into a task follows the same rule with its task:
 internal notes on the ticket become comments on the task and vice versa,
