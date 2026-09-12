@@ -90,6 +90,7 @@ export function MoveToProjectModal({
   const [targetProjectId, setTargetProjectId] = useState<string>("");
   const [sourceAction, setSourceAction] = useState<SourceAction>("keep");
   const [syncContent, setSyncContent] = useState(true);
+  const syncDisabled = sourceAction === "archive";
   const [subtaskStrategy, setSubtaskStrategy] = useState<SubtaskStrategy>("block");
   const [targetStatusSlug, setTargetStatusSlug] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
@@ -145,7 +146,7 @@ export function MoveToProjectModal({
           source_action: sourceAction,
           subtask_strategy: "block",  // bulk skips per-task subtask handling
           target_status_slug: targetStatusSlug || undefined,
-          sync_content: syncContent,
+          sync_content: syncContent && !syncDisabled,
         });
       } else {
         await single.mutateAsync({
@@ -154,7 +155,7 @@ export function MoveToProjectModal({
           source_action: sourceAction,
           subtask_strategy: showSubtaskRadio ? subtaskStrategy : "block",
           target_status_slug: targetStatusSlug || undefined,
-          sync_content: syncContent,
+          sync_content: syncContent && !syncDisabled,
         });
       }
       onMoved?.();
@@ -282,17 +283,25 @@ export function MoveToProjectModal({
               </div>
             </div>
 
+            {/* Archiving the original and keeping it in sync are contradictory:
+                an archived task is off every board, so mirrored comments and
+                files would land where nobody can read them. The server ignores
+                the flag for "archive"; saying so here beats silently dropping
+                a box the operator ticked. */}
             <label
               data-testid="move-sync-content"
-              className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition ${
-                syncContent
-                  ? "border-primary-500 bg-primary-900/20"
-                  : "border-border hover:border-foreground/30"
+              className={`flex items-start gap-3 p-3 rounded-lg border transition ${
+                syncDisabled
+                  ? "border-border opacity-60 cursor-not-allowed"
+                  : syncContent
+                    ? "border-primary-500 bg-primary-900/20 cursor-pointer"
+                    : "border-border hover:border-foreground/30 cursor-pointer"
               }`}
             >
               <input
                 type="checkbox"
-                checked={syncContent}
+                checked={syncContent && !syncDisabled}
+                disabled={syncDisabled}
                 onChange={(e) => setSyncContent(e.target.checked)}
                 className="mt-1"
               />
@@ -302,8 +311,9 @@ export function MoveToProjectModal({
                   Keep description, comments and attachments in sync
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  Edits on either task appear on the other. Status, assignee,
-                  dates and points stay separate for each board.
+                  {syncDisabled
+                    ? "Not available when the original is archived — an archived task is off every board, so there is nothing to keep in step."
+                    : "Edits on either task appear on the other. Status, assignee, dates and points stay separate for each board."}
                 </div>
               </div>
             </label>

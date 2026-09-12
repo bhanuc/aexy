@@ -195,6 +195,49 @@ test.describe("Content sync between a moved task and its original (live)", () =>
     await expect(dialog.getByTestId("work-update-origin").first()).toContainText(`#${task.task_key}`);
   });
 
+  test("archiving the original refuses to keep it in sync, and says where the work went", async ({
+    request,
+  }) => {
+    const stamp = Date.now();
+    const source = await createProject(request, `sync-arch-src-${stamp}`);
+    const target = await createProject(request, `sync-arch-dst-${stamp}`);
+    projectIds.push(source.id, target.id);
+
+    const task = await createTask(request, source.id, `Archive me ${stamp}`);
+    const resp = await request.post(
+      `${API_BASE}/teams/${source.id}/tasks/${task.id}/move-to-project`,
+      {
+        headers: authHeaders(),
+        data: {
+          target_project_id: target.id,
+          source_action: "archive",
+          // Ticked, and deliberately ignored: an archived task is off every
+          // board, so there is nothing to keep in step.
+          sync_content: true,
+        },
+      },
+    );
+    expect(resp.ok(), await resp.text()).toBe(true);
+    const copy = await resp.json();
+
+    const links = await (
+      await request.get(`${API_BASE}/dependencies/tasks/${copy.id}`, {
+        headers: authHeaders(),
+      })
+    ).json();
+    const link = links.items.find(
+      (l: { dependency_type: string }) => l.dependency_type === "duplicates",
+    );
+    expect(link, "the copy should still be linked to the original").toBeTruthy();
+    expect(link.sync_content, "archive must not leave sync on").toBe(false);
+
+    // With sync off the breadcrumb is written, so the archived task says
+    // where the work went instead of being closed without a trace.
+    const original = await getTask(request, source.id, task.id);
+    expect(original.is_archived).toBe(true);
+    expect(original.description ?? "").toContain("Moved to");
+  });
+
   test("the History of a moved task loads and names the move", async ({ request }) => {
     const stamp = Date.now();
     const source = await createProject(request, `e2e-hist-src-${stamp}`);

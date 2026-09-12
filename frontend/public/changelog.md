@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.2] - 2026-09-12
+
+Two gaps in the content sync added in 0.39.0.
+
+### Fixed: archiving the original and keeping it in sync are contradictory
+
+"Move to project…" let you archive the original *and* tick "keep description,
+comments and attachments in sync". An archived task is off every board, so the
+mirrored comments and files landed where nobody could read them, and removing
+an attachment on the live side reached into the archive to delete it there
+too. The sync branch also suppresses the "Moved to" breadcrumb — the two
+descriptions have to match — so the pair ended up archived *and* traceless.
+
+Archiving the original now turns sync off, and the breadcrumb is written, so
+the archived task still says where the work went. The checkbox is disabled
+with that explanation rather than silently ignored. "Mark done" keeps the
+choice: a done task is still on the board, and a team that closes its copy may
+well want to keep seeing the other side's comments.
+
+### Fixed: a Jira or Linear edit reached only one side of a synced pair
+
+Copying a description onto synced peers happens in `update_task`. The Jira and
+Linear importers assign `task.description` straight onto the row, so an edit
+made in either tool landed on one task and not its twin, and the two drifted
+with nothing in the history to say why. Both now propagate, with a history row
+on the receiving task that names no actor — because nobody pressed save.
+
 ## [0.39.0] - 2026-09-11
 
 Moving a task to another project can leave the original as it is, and the two
@@ -65,10 +92,18 @@ Typing "@" in a task description did open the list of people — below the
 editor, with `position: absolute`. On a 1280×720 laptop with a long
 description the list started at y≈660 and was 211px tall: the header row was
 visible and none of the names were, which reads as "mentions don't work".
-The list is now anchored to the caret and flips above it when the space below
-is short, so it stays on screen wherever the cursor is. It also takes
-ArrowUp/ArrowDown/Enter, and the `mention:` links it inserts render with their
-href (the editor's link extension was stripping the unknown protocol).
+The list is now driven by the editor's own suggestion plugin
+(`@tiptap/suggestion`, the same mechanism as the docs slash menu): the query is
+read from the document rather than reconstructed from keystrokes, so it
+survives IME composition, paste and a mouse-moved caret; the list is placed
+next to the caret by tippy and flips above it when the space below is short.
+It takes ArrowUp/ArrowDown/Home/End, Tab and Enter (a bare "@" then Enter is
+still a new line), and the `mention:` links it inserts render with their href
+(the editor's link extension was stripping the unknown protocol). The set of
+mentioned people is read back from the text on every change, so deleting
+"@Ada" un-mentions Ada and a description opened with mentions in it reports
+them. As with most editors, "@" now triggers only at the start of a word — an
+email address typed mid-sentence no longer opens the list.
 
 The updates composer had no mentions at all. It now offers the same list on
 "@", inserts the name, and notifies the people named.
