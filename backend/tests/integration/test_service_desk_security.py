@@ -240,8 +240,14 @@ async def test_settings_reports_how_wide_the_callers_view_is(client, tenants):
     assert (await client.get(f"{b}/settings", headers=tenants["admin"])).json()["scope"] == "all"
     # in the sales department → sees the sales queue
     assert (await client.get(f"{b}/settings", headers=tenants["sales"])).json()["scope"] == "function"
-    # a member of no department → nothing can match
-    assert (await client.get(f"{b}/settings", headers=tenants["plain"])).json()["scope"] == "none"
+    # A member of no desk department sees what is assigned to them and what
+    # they logged, which is why the floor is "assigned" rather than "none".
+    # It used to be "none", alongside a message saying no ticket could ever be
+    # routed to them — which an engineer outside the desk's functions would
+    # read while holding a ticket somebody had just handed them. Their list is
+    # still empty here because nothing has been assigned yet, not because
+    # nothing can be.
+    assert (await client.get(f"{b}/settings", headers=tenants["plain"])).json()["scope"] == "assigned"
     assert (await client.get(f"{b}/tickets", headers=tenants["plain"])).json() == []
 
 

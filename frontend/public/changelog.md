@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.3] - 2026-09-12
+
+Four checks that had stopped doing their job.
+
+### Fixed: a ledger of ungated routes had quietly stopped counting
+
+Two tests read `route.path` and `route.dependencies` straight off `app.routes`.
+FastAPI 0.141 made `include_router` lazy: `app.routes` now holds router
+placeholders with no path of their own, which broke both — but differently.
+One raised an `AttributeError` and failed loudly. The other used
+`getattr(route, "path", "")`, matched nothing, counted zero ungated routes and
+**passed**. A ledger that cannot fail is not a ledger.
+
+The walk now lives in one place, accumulates the dependencies added at each
+mount (which is where the mistake it looks for is made), covers websocket
+routes as well as HTTP ones, and refuses to return an empty list. Re-measured
+against the real tree the count is 290 — the declared ceiling was right all
+along, it had just gone blind.
+
+### Fixed: two tests still asserted a behaviour that was deliberately removed
+
+Service Desk used to report a scope of `"none"` for somebody in no desk
+department, alongside a message saying no ticket could ever be routed to them.
+That stopped being true when assignment began granting visibility on its own —
+the message was being read by engineers holding a ticket somebody had just
+handed them — and the floor became `"assigned"`.
+
+The API test and the browser test were never updated, so one failed on every
+run and the other checked for a message the product no longer shows. Both now
+assert what the product does: an assigned-only caller is told the other
+tickets have their own owners, and a stale `"none"` from an older server falls
+back to neutral wording rather than to the removed claim.
+
+### Fixed: the documentation screenshot suite did not type-check
+
+`test.skip()` ends a run at runtime, which the compiler cannot see, so the
+value guarded by one was still possibly-undefined on the next line. It was the
+only type error in the project; `tsc` is now clean.
+
 ## [0.39.0] - 2026-09-11
 
 Moving a task to another project can leave the original as it is, and the two
@@ -65,10 +104,18 @@ Typing "@" in a task description did open the list of people — below the
 editor, with `position: absolute`. On a 1280×720 laptop with a long
 description the list started at y≈660 and was 211px tall: the header row was
 visible and none of the names were, which reads as "mentions don't work".
-The list is now anchored to the caret and flips above it when the space below
-is short, so it stays on screen wherever the cursor is. It also takes
-ArrowUp/ArrowDown/Enter, and the `mention:` links it inserts render with their
-href (the editor's link extension was stripping the unknown protocol).
+The list is now driven by the editor's own suggestion plugin
+(`@tiptap/suggestion`, the same mechanism as the docs slash menu): the query is
+read from the document rather than reconstructed from keystrokes, so it
+survives IME composition, paste and a mouse-moved caret; the list is placed
+next to the caret by tippy and flips above it when the space below is short.
+It takes ArrowUp/ArrowDown/Home/End, Tab and Enter (a bare "@" then Enter is
+still a new line), and the `mention:` links it inserts render with their href
+(the editor's link extension was stripping the unknown protocol). The set of
+mentioned people is read back from the text on every change, so deleting
+"@Ada" un-mentions Ada and a description opened with mentions in it reports
+them. As with most editors, "@" now triggers only at the start of a word — an
+email address typed mid-sentence no longer opens the list.
 
 The updates composer had no mentions at all. It now offers the same list on
 "@", inserts the name, and notifies the people named.

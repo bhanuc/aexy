@@ -289,23 +289,48 @@ test.describe("Service Desk UI", () => {
     await expect(page.getByRole("button", { name: "Save hours" })).toHaveCount(0);
   });
 
-  test("tickets page explains an empty list caused by no department", async ({ page }) => {
-    await setup(page);
-    // A caller in no department: the row filter can never match, so the list is
-    // empty for a reason that has nothing to do with how busy the desk is.
+  async function settingsWithScope(page: import("@playwright/test").Page, scope: string) {
     await page.route(`${API_BASE}/workspaces/ws-1/service-desk/settings`, (route) =>
       route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ ai_classification_enabled: false, can_manage: false, scope: "none", working_hours_start: "09:30", working_hours_end: "18:30" }),
+        body: JSON.stringify({ ai_classification_enabled: false, can_manage: false, scope, working_hours_start: "09:30", working_hours_end: "18:30" }),
       }),
     );
     await page.route(`${API_BASE}/workspaces/ws-1/service-desk/tickets**`, (route) =>
       route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
     );
+  }
+
+  test("tickets page tells an assigned-only caller that the rest have owners", async ({ page }) => {
+    await setup(page);
+    // Somebody outside the desk's own departments still sees what is assigned
+    // to them, so an empty list means "none assigned right now" rather than
+    // "nothing can ever reach you".
+    await settingsWithScope(page, "assigned");
 
     await page.goto("/service-desk/tickets");
-    await expect(page.getByText(/not in a department yet/i)).toBeVisible({ timeout: 15000 });
+    await expect(
+      page.getByText(/tickets assigned to you, and none are open/i),
+    ).toBeVisible({ timeout: 15000 });
+  });
+
+  test("tickets page does not claim nothing can reach a caller an old server called scoped-out", async ({
+    page,
+  }) => {
+    await setup(page);
+    // `scope: "none"` is no longer emitted — assignment grants visibility on
+    // its own — and the message it used to produce ("you're not in a
+    // department, no tickets can be routed to you") was being read by
+    // engineers holding a ticket somebody had just handed them. A stale value
+    // from an older server must fall back to the neutral wording.
+    await settingsWithScope(page, "none");
+
+    await page.goto("/service-desk/tickets");
+    await expect(page.getByText(/New email requests will appear here/i)).toBeVisible({
+      timeout: 15000,
+    });
+    await expect(page.getByText(/not in a department yet/i)).toHaveCount(0);
   });
 
   test("tickets page does not cry misconfiguration when the desk is merely quiet", async ({ page }) => {

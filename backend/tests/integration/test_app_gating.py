@@ -170,15 +170,15 @@ def test_the_chat_socket_is_not_behind_an_http_dependency():
     """
     from aexy.main import app
 
-    sockets = [
-        r for r in app.routes if r.path.endswith("/chat/ws")
-    ]
+    from tests.support.routes import mounted_routes
+
+    sockets = [r for r in mounted_routes(app) if r.path.endswith("/chat/ws")]
     assert sockets, "the chat websocket route is missing"
     for route in sockets:
-        names = [d.dependency.__name__ for d in getattr(route, "dependencies", [])]
-        assert not any("guard" in n or "app_access" in n for n in names), (
-            f"{route.path} carries an HTTP auth dependency: {names}"
-        )
+        assert not any(
+            "guard" in name or "app_access" in name
+            for name in route.dependency_names
+        ), f"{route.path} carries an HTTP auth dependency: {route.dependency_names}"
 
 
 def test_the_unguarded_surface_is_declared_rather_than_discovered():
@@ -196,18 +196,24 @@ def test_the_unguarded_surface_is_declared_rather_than_discovered():
     """
     from aexy.main import app
 
-    unguarded = 0
-    for route in app.routes:
-        path = getattr(route, "path", "")
-        if "{workspace_id}/" not in path:
-            continue
-        names = [
-            getattr(d.dependency, "__name__", "")
-            for d in getattr(route, "dependencies", [])
-        ]
-        if not any(n == "_guard" for n in names):
-            unguarded += 1
+    from tests.support.routes import mounted_routes
 
+    unguarded = sum(
+        1
+        for route in mounted_routes(app)
+        if "{workspace_id}/" in route.path
+        and "_guard" not in route.dependency_names
+    )
+
+    # This count went to zero and stayed there for a while without anyone
+    # noticing. FastAPI 0.141 made `include_router` lazy, so `app.routes`
+    # stopped holding routes and started holding `_IncludedRouter` objects
+    # with no `.path`; the `getattr(route, "path", "")` here matched nothing,
+    # counted nothing, and passed. A ledger that cannot fail is not a ledger.
+    # The walk now lives in `tests/support/routes.py` and refuses to return an
+    # empty list. Re-measured against the real tree it is 290 — the number
+    # below was right all along, it had just gone blind.
+    #
     # Raise this only with a reason, and lower it whenever a router moves
     # behind its module.
     #
