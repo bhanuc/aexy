@@ -72,6 +72,14 @@ predefined rows into shared tables. One carried the comment "admin only in
 production". Both now require a platform admin. The rest of `/gamification`
 requires a token.
 
+### Fixed: a meeting webhook crashed on a body it should accept
+
+`POST /workflow-events/webhooks/meeting` read nested objects out of the body
+without checking they were objects. Senders disagree: Calendly puts an object
+under `event`, others put the event *name* there, and `"booked".get("uuid")`
+is an `AttributeError` — a 500 on a webhook, which the sender then retries
+forever. Every nested lookup now reads as empty rather than raising.
+
 ### Fixed: the webhook URL list always failed
 
 `GET /workflow-events/webhook-urls` read `settings.api_base_url`, which has

@@ -356,3 +356,28 @@ class TestWorkflowWebhookSecret:
     async def test_the_secret_is_stable_and_distinct_per_workspace(self):
         assert self._secret() == self._secret()
         assert self._secret() != self._secret(self.OTHER)
+
+
+class TestWebhookBodiesOfAnyShape:
+    """Senders disagree about shape, and a 500 on a webhook is retried forever."""
+
+    def test_a_nested_object_is_returned(self):
+        assert workflow_events._nested({"event": {"uuid": "abc"}}, "event") == {
+            "uuid": "abc"
+        }
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            # Calendly sends `event` as an object; others send the event name.
+            {"event": "booked"},
+            {"event": None},
+            {"event": ["booked"]},
+            {"event": 3},
+            {},
+            "not a body at all",
+            None,
+        ],
+    )
+    def test_anything_else_reads_as_empty_rather_than_raising(self, body):
+        assert workflow_events._nested(body, "event") == {}

@@ -39,6 +39,19 @@ settings = get_settings()
 WEBHOOK_SECRET_HEADER = "X-Aexy-Webhook-Secret"
 
 
+def _nested(payload: Any, key: str) -> dict[str, Any]:
+    """A nested object from a webhook body, or `{}` if it is anything else.
+
+    Webhook senders disagree about shape: one sends `{"event": {"uuid": …}}`,
+    another sends `{"event": "booked"}`. Reading `.get()` off the second is an
+    AttributeError and a 500 on a request the sender will keep retrying.
+    """
+    if not isinstance(payload, dict):
+        return {}
+    value = payload.get(key)
+    return value if isinstance(value, dict) else {}
+
+
 def derive_workflow_webhook_secret(workspace_id: str) -> str:
     return hmac.new(
         settings.secret_key.encode("utf-8"),
@@ -221,20 +234,26 @@ async def receive_meeting_event(
     }
     normalized_type = event_type_map.get(event_type.lower(), f"meeting.{event_type}")
 
-    # Extract meeting data
-    payload = body.get("payload", body)
-    invitee = payload.get("invitee", {})
+    # Extract meeting data. Every nested lookup goes through `_nested`: the
+    # same key can arrive as an object from one sender and a string from
+    # another — Calendly sends `event` as an object, others send the event
+    # *name* there — and `"booked".get(...)` is an AttributeError, which
+    # surfaced as a 500 on a webhook the sender then retries forever.
+    payload = _nested(body, "payload") or body
+    invitee = _nested(payload, "invitee")
+    event_block = _nested(payload, "event")
+    event_type_block = _nested(payload, "event_type")
 
     event_data = {
-        "meeting_id": payload.get("event", {}).get("uuid") or payload.get("meeting_id"),
-        "calendar_id": payload.get("event_type", {}).get("uuid") or payload.get("calendar_id"),
+        "meeting_id": event_block.get("uuid") or payload.get("meeting_id"),
+        "calendar_id": event_type_block.get("uuid") or payload.get("calendar_id"),
         "record_id": (
-            payload.get("tracking", {}).get("record_id")
+            _nested(payload, "tracking").get("record_id")
             or invitee.get("record_id")
             or body.get("record_id")
         ),
-        "meeting_type": payload.get("event_type", {}).get("name"),
-        "scheduled_at": payload.get("event", {}).get("start_time"),
+        "meeting_type": event_type_block.get("name"),
+        "scheduled_at": event_block.get("start_time"),
         "invitee_email": invitee.get("email"),
         "invitee_name": invitee.get("name"),
         "raw_event": body,
