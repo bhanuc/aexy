@@ -5,6 +5,9 @@ import { useAuth } from "@/hooks/useAuth";
 import {
   platformAdminApi,
   AdminDashboardStats,
+  PlatformOverview,
+  PlatformSnapshotRefresh,
+  PlatformStatsSeries,
   PaginatedAdminEmailLogs,
   PaginatedAdminNotifications,
   PaginatedAdminWorkspaces,
@@ -154,5 +157,54 @@ export function useAdminUsers(params?: {
     queryFn: () => platformAdminApi.getUsers(params),
     enabled: isAdmin,
     staleTime: 60 * 1000,
+  });
+}
+
+
+/**
+ * Headline platform numbers, each against what it was `comparisonDays` ago.
+ *
+ * Served from the daily snapshot, so it is cheap and — unlike everything it
+ * replaces — can say whether a figure is going up.
+ */
+export function usePlatformOverview(comparisonDays = 30) {
+  const { isAdmin } = useAdmin();
+
+  return useQuery<PlatformOverview>({
+    queryKey: ["platform-stats-overview", comparisonDays],
+    queryFn: () => platformAdminApi.getStatsOverview(comparisonDays),
+    enabled: isAdmin,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** The daily series behind the growth and revenue charts. */
+export function usePlatformStatsSeries(days = 90) {
+  const { isAdmin } = useAdmin();
+
+  return useQuery<PlatformStatsSeries>({
+    queryKey: ["platform-stats-series", days],
+    queryFn: () => platformAdminApi.getStatsSeries(days),
+    enabled: isAdmin,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Recompute today's snapshot now. The schedule writes one a day; this is for
+ * the first run, and for an admin who has just changed a plan and wants to
+ * see it without waiting until tomorrow.
+ */
+export function useRefreshPlatformStats() {
+  const queryClient = useQueryClient();
+
+  return useMutation<PlatformSnapshotRefresh, unknown, number | undefined>({
+    mutationFn: (backfillDays) => platformAdminApi.refreshStats(backfillDays ?? 0),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["platform-stats-overview"] });
+      queryClient.invalidateQueries({ queryKey: ["platform-stats-series"] });
+      // The billing totals card reads the same snapshot.
+      queryClient.invalidateQueries({ queryKey: ["platform-billing-totals"] });
+    },
   });
 }

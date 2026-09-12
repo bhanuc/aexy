@@ -2,83 +2,33 @@
 
 import Link from "next/link";
 import {
-  Building2,
-  Users,
-  Mail,
-  Bell,
-  Loader2,
   AlertCircle,
+  AlertTriangle,
+  Bell,
+  Building2,
   CheckCircle2,
-  XCircle,
   ChevronRight,
+  Loader2,
+  Mail,
+  RefreshCw,
   TrendingUp,
+  Users,
+  XCircle,
 } from "lucide-react";
-import { useAdminDashboardStats, useAdminEmailLogs } from "@/hooks/useAdmin";
+import { useTranslations } from "next-intl";
 import { formatDistanceToNow } from "date-fns";
 
-function StatCard({
-  title,
-  value,
-  icon: Icon,
-  href,
-  trend,
-}: {
-  title: string;
-  value: string | number;
-  icon: React.ElementType;
-  href?: string;
-  trend?: string;
-}) {
-  const content = (
-    <div className="bg-muted rounded-xl border border-border p-5 hover:border-border transition group">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-muted-foreground text-sm">{title}</p>
-          <p className="text-2xl font-bold text-foreground mt-1">{value}</p>
-          {trend && (
-            <p className="text-emerald-400 text-sm mt-1 flex items-center gap-1">
-              <TrendingUp className="h-3 w-3" />
-              {trend}
-            </p>
-          )}
-        </div>
-        <div className="p-2.5 bg-accent rounded-lg group-hover:bg-muted transition">
-          <Icon className="h-5 w-5 text-foreground" />
-        </div>
-      </div>
-    </div>
-  );
-
-  if (href) {
-    return <Link href={href}>{content}</Link>;
-  }
-
-  return content;
-}
-
-function DeliveryRateBar({ rate }: { rate: number }) {
-  const percentage = Math.round(rate * 100);
-  const getColor = () => {
-    if (percentage >= 95) return "bg-emerald-500";
-    if (percentage >= 85) return "bg-yellow-500";
-    return "bg-red-500";
-  };
-
-  return (
-    <div className="space-y-2">
-      <div className="flex justify-between text-sm">
-        <span className="text-muted-foreground">Email Delivery Rate (30 days)</span>
-        <span className="text-foreground font-medium">{percentage}%</span>
-      </div>
-      <div className="h-2 bg-accent rounded-full overflow-hidden">
-        <div
-          className={`h-full ${getColor()} transition-all duration-500`}
-          style={{ width: `${percentage}%` }}
-        />
-      </div>
-    </div>
-  );
-}
+import {
+  useAdminEmailLogs,
+  usePlatformOverview,
+  useRefreshPlatformStats,
+} from "@/hooks/useAdmin";
+import {
+  BreakdownList,
+  KpiCard,
+  formatCents,
+  formatCount,
+} from "@/components/admin/platformStats";
 
 function StatusBadge({ status }: { status: string }) {
   const config: Record<string, { color: string; icon: React.ElementType }> = {
@@ -88,9 +38,7 @@ function StatusBadge({ status }: { status: string }) {
     bounced: { color: "text-orange-400 bg-orange-400/10", icon: AlertCircle },
     pending: { color: "text-yellow-400 bg-yellow-400/10", icon: AlertCircle },
   };
-
   const { color, icon: Icon } = config[status] || config.pending;
-
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${color}`}>
       <Icon className="h-3 w-3" />
@@ -100,162 +48,282 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function AdminDashboardPage() {
-  const { data: stats, isLoading: statsLoading, error: statsError } = useAdminDashboardStats();
+  const t = useTranslations("admin");
+  const { data: overview, isLoading, error } = usePlatformOverview(30);
+  const refresh = useRefreshPlatformStats();
   const { data: recentEmails, isLoading: emailsLoading } = useAdminEmailLogs({
     page: 1,
     per_page: 5,
     status_filter: "failed",
   });
 
-  if (statsLoading) {
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
       </div>
     );
   }
 
-  if (statsError) {
+  if (error) {
     return (
-      <div className="flex items-center justify-center h-64 text-red-400">
-        <AlertCircle className="h-5 w-5 mr-2" />
-        Failed to load dashboard stats
+      <div className="flex h-64 items-center justify-center text-red-400">
+        <AlertCircle className="mr-2 h-5 w-5" />
+        {t("failedToLoadStats")}
       </div>
     );
   }
 
+  const unpaid = (overview?.invoices_open ?? 0) > 0;
+
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      {/* Page Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Admin Dashboard</h1>
-        <p className="text-muted-foreground mt-1">Platform-wide monitoring and management</p>
+    <div className="mx-auto max-w-6xl space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">{t("title")}</h1>
+          <p className="mt-1 text-muted-foreground">
+            {overview?.as_of
+              ? t("platform.asOf", { date: overview.as_of })
+              : t("description")}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/admin/growth"
+            className="flex items-center gap-2 rounded-lg border border-border bg-muted px-3 py-2 text-sm text-foreground transition hover:bg-accent"
+          >
+            <TrendingUp className="h-4 w-4" />
+            {t("platform.growthLink")}
+          </Link>
+          <button
+            type="button"
+            onClick={() => refresh.mutate(undefined)}
+            disabled={refresh.isPending}
+            data-testid="platform-stats-refresh"
+            className="flex items-center gap-2 rounded-lg border border-border bg-muted px-3 py-2 text-sm text-foreground transition hover:bg-accent disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${refresh.isPending ? "animate-spin" : ""}`} />
+            {t("platform.refresh")}
+          </button>
+        </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Total Workspaces"
-          value={stats?.total_workspaces || 0}
-          icon={Building2}
-          href="/admin/workspaces"
+      {/* The figures below are a snapshot. If the job that writes it stopped,
+          saying so beats quietly showing last week's numbers as today's. */}
+      {overview?.is_stale && (
+        <div
+          data-testid="platform-stats-stale"
+          className="flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+          <p className="text-foreground">{t("platform.stale")}</p>
+        </div>
+      )}
+
+      {overview?.notes?.map((note) => (
+        <div
+          key={note}
+          className="rounded-xl border border-border bg-muted p-4 text-sm text-muted-foreground"
+        >
+          {note}
+        </div>
+      ))}
+
+      {/* Money */}
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          {t("platform.moneyHeading")}
+        </h2>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <KpiCard
+            label={t("platform.mrr")}
+            kpi={overview?.mrr_cents}
+            format="cents"
+            hint={t("platform.mrrHint")}
+          />
+          <KpiCard
+            label={t("platform.revenue")}
+            kpi={overview?.revenue_cents}
+            format="cents"
+            hint={t("platform.revenueHint")}
+          />
+          <KpiCard
+            label={t("platform.margin")}
+            kpi={overview?.margin_cents}
+            format="cents"
+            hint={t("platform.marginHint", {
+              cost: formatCents(overview?.base_cost_cents?.value ?? 0),
+            })}
+          />
+          <KpiCard
+            label={t("platform.payingWorkspaces")}
+            kpi={overview?.paying_workspaces}
+            hint={t("platform.trialing", {
+              count: formatCount(overview?.trialing_workspaces?.value ?? 0),
+            })}
+          />
+        </div>
+      </section>
+
+      {/* Reach */}
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          {t("platform.reachHeading")}
+        </h2>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <KpiCard label={t("platform.workspaces")} kpi={overview?.workspaces_total} />
+          <KpiCard
+            label={t("platform.activeWorkspaces")}
+            kpi={overview?.workspaces_active_30d}
+            hint={t("platform.activeHint")}
+          />
+          <KpiCard label={t("platform.developers")} kpi={overview?.developers_total} />
+          <KpiCard
+            label={t("platform.seats")}
+            kpi={overview?.billable_seats}
+            hint={t("platform.seatsHint")}
+          />
+        </div>
+      </section>
+
+      {/* Splits */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <BreakdownList
+          title={t("platform.revenueByTier")}
+          entries={overview?.revenue_by_plan_tier ?? {}}
+          empty={t("platform.noRevenue")}
         />
-        <StatCard
-          title="Total Users"
-          value={stats?.total_users || 0}
-          icon={Users}
-          href="/admin/users"
+        <BreakdownList
+          title={t("platform.revenueByModel")}
+          entries={overview?.revenue_by_billing_model ?? {}}
+          empty={t("platform.noRevenue")}
         />
-        <StatCard
-          title="Emails Sent"
-          value={stats?.total_emails_sent?.toLocaleString() || 0}
-          icon={Mail}
-          href="/admin/emails"
-          trend={`${stats?.emails_sent_today || 0} today`}
-        />
-        <StatCard
-          title="Notifications"
-          value={stats?.total_notifications?.toLocaleString() || 0}
-          icon={Bell}
-          href="/admin/notifications"
+        <BreakdownList
+          title={t("platform.workspacesByTier")}
+          entries={overview?.workspaces_by_plan_tier ?? {}}
+          format="count"
+          empty={t("platform.noWorkspaces")}
         />
       </div>
 
-      {/* Delivery Rate */}
-      <div className="bg-muted rounded-xl border border-border p-5">
-        <DeliveryRateBar rate={stats?.email_delivery_rate || 1} />
-        <div className="mt-4 flex gap-6 text-sm">
-          <div>
-            <span className="text-muted-foreground">Sent Today:</span>
-            <span className="text-foreground ml-2">{stats?.emails_sent_today || 0}</span>
-          </div>
-          <div>
-            <span className="text-muted-foreground">This Week:</span>
-            <span className="text-foreground ml-2">{stats?.emails_sent_this_week || 0}</span>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Failed Today:</span>
-            <span className="text-red-400 ml-2">{stats?.emails_failed_today || 0}</span>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Active Workspaces (30d):</span>
-            <span className="text-foreground ml-2">{stats?.active_workspaces_30d || 0}</span>
+      {/* What needs chasing */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div
+          className={`rounded-xl border p-5 ${
+            (overview?.invoices_overdue ?? 0) > 0
+              ? "border-red-500/40 bg-red-500/5"
+              : "border-border bg-muted"
+          }`}
+        >
+          <h3 className="text-sm font-medium text-foreground">
+            {t("platform.unpaidHeading")}
+          </h3>
+          {unpaid ? (
+            <div className="mt-2 space-y-1 text-sm">
+              <p className="text-foreground">
+                {t("platform.invoicesOpen", {
+                  count: overview?.invoices_open ?? 0,
+                  amount: formatCents(overview?.invoices_open_cents ?? 0),
+                })}
+              </p>
+              {(overview?.invoices_overdue ?? 0) > 0 && (
+                <p className="text-red-400">
+                  {t("platform.invoicesOverdue", {
+                    count: overview?.invoices_overdue ?? 0,
+                    amount: formatCents(overview?.invoices_overdue_cents ?? 0),
+                  })}
+                </p>
+              )}
+              <Link
+                href="/settings/admin-invoices"
+                className="inline-block pt-1 text-blue-400 hover:underline"
+              >
+                {t("platform.viewInvoices")}
+              </Link>
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-muted-foreground">
+              {t("platform.noUnpaid")}
+            </p>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-border bg-muted p-5">
+          <h3 className="text-sm font-medium text-foreground">
+            {t("platform.aiHeading")}
+          </h3>
+          <p className="mt-1 text-2xl font-bold text-foreground">
+            {formatCents(overview?.llm_billed_cents?.value ?? 0)}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {t("platform.aiHint")}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+            {Object.entries(overview?.subscriptions_by_status ?? {}).map(
+              ([status, count]) => (
+                <span key={status} className="text-muted-foreground">
+                  {status.replace(/_/g, " ")}:{" "}
+                  <span className="text-foreground">{count}</span>
+                </span>
+              ),
+            )}
           </div>
         </div>
       </div>
 
-      {/* Quick Links */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Link
-          href="/admin/emails"
-          className="flex items-center justify-between bg-muted rounded-xl border border-border p-4 hover:border-blue-500/50 transition group"
-        >
-          <div className="flex items-center gap-3">
-            <Mail className="h-5 w-5 text-blue-400" />
-            <span className="text-foreground">Email Delivery</span>
-          </div>
-          <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition" />
-        </Link>
-        <Link
-          href="/admin/notifications"
-          className="flex items-center justify-between bg-muted rounded-xl border border-border p-4 hover:border-purple-500/50 transition group"
-        >
-          <div className="flex items-center gap-3">
-            <Bell className="h-5 w-5 text-purple-400" />
-            <span className="text-foreground">Notifications</span>
-          </div>
-          <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition" />
-        </Link>
-        <Link
-          href="/admin/workspaces"
-          className="flex items-center justify-between bg-muted rounded-xl border border-border p-4 hover:border-emerald-500/50 transition group"
-        >
-          <div className="flex items-center gap-3">
-            <Building2 className="h-5 w-5 text-emerald-400" />
-            <span className="text-foreground">Workspaces</span>
-          </div>
-          <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition" />
-        </Link>
-        <Link
-          href="/admin/users"
-          className="flex items-center justify-between bg-muted rounded-xl border border-border p-4 hover:border-amber-500/50 transition group"
-        >
-          <div className="flex items-center gap-3">
-            <Users className="h-5 w-5 text-amber-400" />
-            <span className="text-foreground">Users</span>
-          </div>
-          <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition" />
-        </Link>
+      {/* Operational shortcuts */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        {[
+          { href: "/admin/billing", icon: Building2, label: t("platform.billingLink") },
+          { href: "/admin/workspaces", icon: Building2, label: t("quickLinks.workspaces") },
+          { href: "/admin/users", icon: Users, label: t("quickLinks.users") },
+          { href: "/admin/emails", icon: Mail, label: t("quickLinks.emailDelivery") },
+        ].map((link) => (
+          <Link
+            key={link.href}
+            href={link.href}
+            className="group flex items-center justify-between rounded-xl border border-border bg-muted p-4 transition hover:border-blue-500/50"
+          >
+            <div className="flex items-center gap-3">
+              <link.icon className="h-5 w-5 text-blue-400" />
+              <span className="text-foreground">{link.label}</span>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground transition group-hover:text-foreground" />
+          </Link>
+        ))}
       </div>
 
-      {/* Recent Failed Emails */}
-      <div className="bg-muted rounded-xl border border-border">
-        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-foreground">Recent Failed Emails</h2>
+      {/* Recent failed emails — the one operational signal worth the space. */}
+      <div className="rounded-xl border border-border bg-muted">
+        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">
+            <Bell className="h-4 w-4 text-muted-foreground" />
+            {t("email.recentFailedEmails")}
+          </h2>
           <Link href="/admin/emails?status=failed" className="text-sm text-blue-400 hover:underline">
-            View All
+            {t("email.viewAll")}
           </Link>
         </div>
         <div className="divide-y divide-border">
           {emailsLoading ? (
-            <div className="p-8 flex justify-center">
+            <div className="flex justify-center p-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : recentEmails?.items?.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">
-              <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-emerald-500" />
-              <p>No failed emails</p>
+              <CheckCircle2 className="mx-auto mb-2 h-8 w-8 text-emerald-500" />
+              <p>{t("email.noFailedEmails")}</p>
             </div>
           ) : (
             recentEmails?.items?.map((email) => (
-              <div key={email.id} className="px-5 py-4 flex items-center justify-between">
-                <div className="flex-1 min-w-0">
-                  <p className="text-foreground truncate">{email.recipient_email}</p>
-                  <p className="text-muted-foreground text-sm truncate">{email.subject}</p>
+              <div key={email.id} className="flex items-center justify-between px-5 py-4">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-foreground">{email.recipient_email}</p>
+                  <p className="truncate text-sm text-muted-foreground">{email.subject}</p>
                 </div>
                 <div className="flex items-center gap-4">
                   <StatusBadge status={email.status} />
-                  <span className="text-muted-foreground text-sm whitespace-nowrap">
+                  <span className="whitespace-nowrap text-sm text-muted-foreground">
                     {formatDistanceToNow(new Date(email.created_at), { addSuffix: true })}
                   </span>
                 </div>

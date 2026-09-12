@@ -18952,6 +18952,85 @@ export interface AdminCheckResponse {
   platform_org_id: string | null;
 }
 
+// ============================================================================
+// Platform statistics (daily snapshots)
+// ============================================================================
+//
+// Every platform figure the admin area showed was computed live, and a live
+// figure cannot be asked about the past. These read the daily snapshot table
+// instead, which is what makes "is MRR growing?" answerable.
+
+export interface PlatformKpi {
+  value: number;
+  /** null when no snapshot exists that far back — show "no comparison yet". */
+  previous: number | null;
+  delta: number | null;
+  delta_pct: number | null;
+}
+
+export interface PlatformOverview {
+  as_of: string | null;
+  computed_at: string | null;
+  /** The daily job has not run recently; every figure is older than it looks. */
+  is_stale: boolean;
+  comparison_days: number;
+  mrr_cents: PlatformKpi;
+  revenue_cents: PlatformKpi;
+  margin_cents: PlatformKpi;
+  base_cost_cents: PlatformKpi;
+  paying_workspaces: PlatformKpi;
+  trialing_workspaces: PlatformKpi;
+  workspaces_total: PlatformKpi;
+  workspaces_active_30d: PlatformKpi;
+  developers_total: PlatformKpi;
+  billable_seats: PlatformKpi;
+  llm_billed_cents: PlatformKpi;
+  subscriptions_by_status: Record<string, number>;
+  revenue_by_plan_tier: Record<string, number>;
+  revenue_by_billing_model: Record<string, number>;
+  workspaces_by_plan_tier: Record<string, number>;
+  invoices_open: number;
+  invoices_open_cents: number;
+  invoices_overdue: number;
+  invoices_overdue_cents: number;
+  notes: string[];
+}
+
+export interface PlatformStatsPoint {
+  day: string;
+  workspaces_total: number;
+  workspaces_created: number;
+  workspaces_active_30d: number;
+  developers_total: number;
+  developers_created: number;
+  paying_workspaces: number;
+  trialing_workspaces: number;
+  subscriptions_canceled: number;
+  billable_seats: number;
+  mrr_cents: number;
+  revenue_cents: number;
+  base_cost_cents: number;
+  margin_cents: number;
+  llm_requests: number;
+  llm_tokens: number;
+  llm_billed_cents: number;
+  llm_base_cost_cents: number;
+  /** Backfilled day: its subscription and revenue figures are not recoverable. */
+  is_partial: boolean;
+}
+
+export interface PlatformStatsSeries {
+  days: number;
+  points: PlatformStatsPoint[];
+}
+
+export interface PlatformSnapshotRefresh {
+  day: string;
+  created: boolean;
+  backfilled: number;
+  notes: string[];
+}
+
 export interface AdminDashboardStats {
   total_workspaces: number;
   total_users: number;
@@ -19124,6 +19203,28 @@ export const platformAdminApi = {
     search?: string;
   }): Promise<PaginatedAdminUsers> => {
     const response = await api.get("/platform-admin/users", { params });
+    return response.data;
+  },
+
+  // Platform statistics
+  getStatsOverview: async (comparisonDays = 30): Promise<PlatformOverview> => {
+    const response = await api.get("/platform-admin/stats/overview", {
+      params: { comparison_days: comparisonDays },
+    });
+    return response.data;
+  },
+
+  getStatsSeries: async (days = 90): Promise<PlatformStatsSeries> => {
+    const response = await api.get("/platform-admin/stats/series", {
+      params: { days },
+    });
+    return response.data;
+  },
+
+  refreshStats: async (backfillDays = 0): Promise<PlatformSnapshotRefresh> => {
+    const response = await api.post("/platform-admin/stats/refresh", null, {
+      params: { backfill_days: backfillDays },
+    });
     return response.data;
   },
 };

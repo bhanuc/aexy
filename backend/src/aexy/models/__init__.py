@@ -620,6 +620,7 @@ from aexy.models.feedback import Feedback, FeedbackKind, FeedbackStatus, Feedbac
 from aexy.models.llm_prompt_log import LLMPromptLog
 from aexy.models.llm_analysis_cache import LlmAnalysisCache
 from aexy.models.insights_snapshot import InsightsSnapshot
+from aexy.models.platform_stats import PlatformDailyStats
 from aexy.models.chat import (
     ChatChannel,
     ChatChannelMember,
@@ -1257,6 +1258,7 @@ __all__ = [
     # LLM Analysis Cache + Insights Snapshots (GitHub AI pipeline)
     "LlmAnalysisCache",
     "InsightsSnapshot",
+    "PlatformDailyStats",
     # Team Chat
     "ChatChannel",
     "ChatChannelMember",

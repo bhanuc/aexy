@@ -3,7 +3,6 @@
     "title": "Admin Dashboard",
     "description": "Platform-wide monitoring and management",
     "failedToLoadStats": "Failed to load dashboard stats",
-
     "stats": {
       "totalWorkspaces": "Total Workspaces",
       "totalUsers": "Total Users",
@@ -11,7 +10,6 @@
       "notifications": "Notifications",
       "todayCount": "{count} today"
     },
-
     "email": {
       "deliveryRate": "Email Delivery Rate (30 days)",
       "sentToday": "Sent Today",
@@ -23,26 +21,22 @@
       "viewAll": "View All",
       "noFailedEmails": "No failed emails"
     },
-
     "quickLinks": {
       "emailDelivery": "Email Delivery",
       "notifications": "Notifications",
       "workspaces": "Workspaces",
       "users": "Users"
     },
-
     "users": {
       "title": "Users",
       "totalUsers": "Total Users",
       "manageUsers": "Manage Users"
     },
-
     "workspaces": {
       "title": "Workspaces",
       "totalWorkspaces": "Total Workspaces",
       "manageWorkspaces": "Manage Workspaces"
     },
-
     "aiBenchmarking": {
       "title": "AI Benchmarking",
       "description": "Performance metrics across Ask AI, Agents, and Automations",
@@ -61,7 +55,6 @@
       "tokenUsage": "Token Usage",
       "feedbackDistribution": "Feedback Distribution"
     },
-
     "status": {
       "sent": "Sent",
       "delivered": "Delivered",
@@ -69,18 +62,85 @@
       "bounced": "Bounced",
       "pending": "Pending"
     },
-
     "timeRange": {
       "7days": "7 days",
       "30days": "30 days",
       "90days": "90 days"
     },
-
     "groupBy": {
       "hour": "Hour",
       "day": "Day",
       "week": "Week",
       "month": "Month"
+    },
+    "platform": {
+      "asOf": "Platform snapshot for {date}",
+      "refresh": "Refresh",
+      "growthLink": "Growth",
+      "billingLink": "Billing",
+      "stale": "This snapshot is more than a day and a half old, so the daily job may not be running. Every figure below is older than it looks.",
+      "noComparison": "No comparison yet",
+      "noChange": "No change",
+      "moneyHeading": "Money",
+      "reachHeading": "Reach",
+      "mrr": "MRR",
+      "mrrHint": "Recurring only — base fee plus seats, no usage",
+      "revenue": "Revenue this month",
+      "revenueHint": "Charged so far this billing period",
+      "margin": "Margin",
+      "marginHint": "After {cost} of provider cost",
+      "payingWorkspaces": "Paying workspaces",
+      "trialing": "{count} on trial",
+      "workspaces": "Workspaces",
+      "activeWorkspaces": "Active workspaces",
+      "activeHint": "Changed a document, task or project, posted an update, or used AI in the last 30 days",
+      "developers": "People",
+      "seats": "Billable seats",
+      "seatsHint": "Active members counted for billing",
+      "revenueByTier": "Revenue by plan tier",
+      "revenueByModel": "Revenue by billing model",
+      "workspacesByTier": "Workspaces by plan tier",
+      "noRevenue": "No revenue recorded for this period.",
+      "noWorkspaces": "No active workspaces.",
+      "unpaidHeading": "Unpaid",
+      "invoicesOpen": "{count} open invoice(s), {amount}",
+      "invoicesOverdue": "{count} overdue, {amount}",
+      "viewInvoices": "Manage invoices →",
+      "noUnpaid": "Nothing outstanding.",
+      "aiHeading": "AI billed today",
+      "aiHint": "What tenants were charged for AI on the snapshot day"
+    },
+    "growth": {
+      "title": "Growth",
+      "description": "How the platform has moved, from the daily snapshots.",
+      "days": "{count}d",
+      "failed": "Failed to load the growth series",
+      "notEnoughData": "Not enough history yet",
+      "notEnoughDataHint": "A trend needs at least two daily snapshots. One is written every day; use Refresh on the overview to write today's now.",
+      "signups": "New signups",
+      "signupsHint": "Workspaces and people created each day",
+      "newWorkspaces": "New workspaces",
+      "newDevelopers": "New people",
+      "totals": "Workspaces over time",
+      "totalsHint": "Total against those active in the trailing 30 days",
+      "workspaces": "Total workspaces",
+      "active": "Active (30d)",
+      "mrr": "Recurring revenue",
+      "mrrHint": "Gaps are days filled in after the fact, whose billing figures cannot be recovered",
+      "mrrSeries": "MRR",
+      "revenueSeries": "Billed this month",
+      "marginSeries": "Margin",
+      "aiCost": "AI spend",
+      "aiCostHint": "What was billed for AI each day against what the providers charged",
+      "aiBilled": "Billed",
+      "aiCostSeries": "Provider cost",
+      "customers": "Paying customers",
+      "customersHint": "Paying workspaces and the seats they carry",
+      "paying": "Paying workspaces",
+      "seats": "Billable seats",
+      "churn": "Cancellations",
+      "churnHint": "Subscriptions cancelled each day",
+      "canceled": "Cancelled"
     }
   }
 }

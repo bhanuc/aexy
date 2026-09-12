@@ -21,6 +21,7 @@ We're on a mission to bring positive change by building world-class tools actual
 - [Tracker ingest API](./api/tracker-ingest.md) - Aexy Tracker device enrollment + idempotent event ingest contract
 
 ### For administrators
+- [Platform admin](./platform-admin.md) - The cross-tenant view: billing, growth, and who can see it
 - [Setting up a workspace](./guides/workspace-setup.md) - The first hour: people, apps, departments, modules
 - [Roles, permissions & app access](./guides/roles-and-access.md) - Why two colleagues see different things, and how to change it
 - [Email and inbox setup](./guides/email-setup.md) - Mail arriving and mail leaving, and which module reads which

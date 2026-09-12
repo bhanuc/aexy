@@ -86,6 +86,18 @@ SCHEDULES: list[dict] = [
         "interval": timedelta(hours=24),
         "queue": TaskQueue.ANALYSIS,
     },
+    # Writes one row of platform_daily_stats. Every platform figure the admin
+    # area shows was live, and a live figure cannot be asked about the past —
+    # nothing records that a workspace *was* active thirty days ago. Miss a
+    # day and that day is gone, so this runs daily and is idempotent per day.
+    {
+        "id": "snapshot-platform-stats",
+        "activity": "snapshot_platform_stats",
+        "input_module": "aexy.temporal.activities.platform",
+        "input_class": "SnapshotPlatformStatsInput",
+        "interval": timedelta(hours=24),
+        "queue": TaskQueue.ANALYSIS,
+    },
     # Phase 3 — weekly AI digests + embedding catch-up across all
     # AI-enabled workspaces. Single fan-out activity; per-developer and
     # per-repo digests are then dispatched onto the analysis queue.

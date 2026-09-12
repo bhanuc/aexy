@@ -3,7 +3,6 @@
     "title": "Admin Dashboard",
     "description": "प्लेटफ़ॉर्म-व्यापी निगरानी और प्रबंधन",
     "failedToLoadStats": "Dashboard आंकड़े लोड करने में विफल",
-
     "stats": {
       "totalWorkspaces": "कुल Workspaces",
       "totalUsers": "कुल उपयोगकर्ता",
@@ -11,7 +10,6 @@
       "notifications": "सूचनाएं",
       "todayCount": "आज {count}"
     },
-
     "email": {
       "deliveryRate": "Email Delivery Rate (30 दिन)",
       "sentToday": "आज भेजे गए",
@@ -23,26 +21,22 @@
       "viewAll": "सभी देखें",
       "noFailedEmails": "कोई विफल Email नहीं"
     },
-
     "quickLinks": {
       "emailDelivery": "Email Delivery",
       "notifications": "सूचनाएं",
       "workspaces": "Workspaces",
       "users": "उपयोगकर्ता"
     },
-
     "users": {
       "title": "उपयोगकर्ता",
       "totalUsers": "कुल उपयोगकर्ता",
       "manageUsers": "उपयोगकर्ता प्रबंधित करें"
     },
-
     "workspaces": {
       "title": "Workspaces",
       "totalWorkspaces": "कुल Workspaces",
       "manageWorkspaces": "Workspaces प्रबंधित करें"
     },
-
     "aiBenchmarking": {
       "title": "AI Benchmarking",
       "description": "Ask AI, Agents और Automations की प्रदर्शन मेट्रिक्स",
@@ -61,7 +55,6 @@
       "tokenUsage": "Token Usage",
       "feedbackDistribution": "Feedback Distribution"
     },
-
     "status": {
       "sent": "भेजा गया",
       "delivered": "डिलीवर किया गया",
@@ -69,18 +62,85 @@
       "bounced": "Bounced",
       "pending": "लंबित"
     },
-
     "timeRange": {
       "7days": "7 दिन",
       "30days": "30 दिन",
       "90days": "90 दिन"
     },
-
     "groupBy": {
       "hour": "घंटा",
       "day": "दिन",
       "week": "सप्ताह",
       "month": "महीना"
+    },
+    "platform": {
+      "asOf": "{date} का प्लेटफ़ॉर्म स्नैपशॉट",
+      "refresh": "रीफ़्रेश करें",
+      "growthLink": "वृद्धि",
+      "billingLink": "बिलिंग",
+      "stale": "यह स्नैपशॉट डेढ़ दिन से ज़्यादा पुराना है, इसलिए दैनिक जॉब शायद नहीं चल रहा। नीचे के सभी आँकड़े दिखने से ज़्यादा पुराने हैं।",
+      "noComparison": "अभी तुलना उपलब्ध नहीं",
+      "noChange": "कोई बदलाव नहीं",
+      "moneyHeading": "पैसा",
+      "reachHeading": "पहुँच",
+      "mrr": "MRR",
+      "mrrHint": "केवल आवर्ती — बेस शुल्क और सीटें, उपयोग शामिल नहीं",
+      "revenue": "इस महीने का राजस्व",
+      "revenueHint": "इस बिलिंग अवधि में अब तक लिया गया शुल्क",
+      "margin": "मार्जिन",
+      "marginHint": "{cost} प्रोवाइडर लागत के बाद",
+      "payingWorkspaces": "भुगतान करने वाले workspace",
+      "trialing": "{count} ट्रायल पर",
+      "workspaces": "Workspaces",
+      "activeWorkspaces": "सक्रिय workspaces",
+      "activeHint": "पिछले 30 दिनों में document, task या project बदला, update लिखा, या AI इस्तेमाल किया",
+      "developers": "लोग",
+      "seats": "बिल योग्य सीटें",
+      "seatsHint": "बिलिंग में गिने जाने वाले सक्रिय सदस्य",
+      "revenueByTier": "प्लान टियर के अनुसार राजस्व",
+      "revenueByModel": "बिलिंग मॉडल के अनुसार राजस्व",
+      "workspacesByTier": "प्लान टियर के अनुसार workspaces",
+      "noRevenue": "इस अवधि के लिए कोई राजस्व दर्ज नहीं।",
+      "noWorkspaces": "कोई सक्रिय workspace नहीं।",
+      "unpaidHeading": "बकाया",
+      "invoicesOpen": "{count} खुले invoice, {amount}",
+      "invoicesOverdue": "{count} अतिदेय, {amount}",
+      "viewInvoices": "Invoice प्रबंधित करें →",
+      "noUnpaid": "कुछ भी बकाया नहीं।",
+      "aiHeading": "आज बिल किया गया AI",
+      "aiHint": "स्नैपशॉट वाले दिन AI के लिए tenants से लिया गया शुल्क"
+    },
+    "growth": {
+      "title": "वृद्धि",
+      "description": "दैनिक स्नैपशॉट से, प्लेटफ़ॉर्म कैसे बदला है।",
+      "days": "{count} दिन",
+      "failed": "वृद्धि श्रृंखला लोड नहीं हो सकी",
+      "notEnoughData": "अभी पर्याप्त इतिहास नहीं",
+      "notEnoughDataHint": "रुझान के लिए कम से कम दो दैनिक स्नैपशॉट चाहिए। हर दिन एक लिखा जाता है; आज का अभी लिखने के लिए overview पर Refresh दबाएँ।",
+      "signups": "नए साइनअप",
+      "signupsHint": "हर दिन बने workspaces और लोग",
+      "newWorkspaces": "नए workspaces",
+      "newDevelopers": "नए लोग",
+      "totals": "समय के साथ workspaces",
+      "totalsHint": "कुल बनाम पिछले 30 दिनों में सक्रिय",
+      "workspaces": "कुल workspaces",
+      "active": "सक्रिय (30 दिन)",
+      "mrr": "आवर्ती राजस्व",
+      "mrrHint": "खाली जगह वे दिन हैं जो बाद में भरे गए, जिनके बिलिंग आँकड़े वापस नहीं पाए जा सकते",
+      "mrrSeries": "MRR",
+      "revenueSeries": "इस महीने बिल किया गया",
+      "marginSeries": "मार्जिन",
+      "aiCost": "AI खर्च",
+      "aiCostHint": "हर दिन AI के लिए बिल किया गया बनाम प्रोवाइडर की लागत",
+      "aiBilled": "बिल किया गया",
+      "aiCostSeries": "प्रोवाइडर लागत",
+      "customers": "भुगतान करने वाले ग्राहक",
+      "customersHint": "भुगतान करने वाले workspaces और उनकी सीटें",
+      "paying": "भुगतान करने वाले workspaces",
+      "seats": "बिल योग्य सीटें",
+      "churn": "रद्दीकरण",
+      "churnHint": "हर दिन रद्द हुई subscriptions",
+      "canceled": "रद्द"
     }
   }
 }

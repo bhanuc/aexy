@@ -34,6 +34,13 @@ from aexy.schemas.billing import (
     WorkspacePlanOverrideCreate,
     WorkspacePlanOverrideResponse,
 )
+from aexy.schemas.platform_stats import (
+    PlatformKpi,
+    PlatformOverviewResponse,
+    PlatformSnapshotRefreshResponse,
+    PlatformStatsPoint,
+    PlatformStatsSeriesResponse,
+)
 from aexy.services.developer_service import DeveloperService
 from aexy.services.limits_service import LimitsService
 
@@ -1471,39 +1478,19 @@ async def admin_get_billing_summary(
     )
 
 
-@router.get(
-    "/billing/totals",
-    response_model=PlatformBillingTotals,
-)
-async def admin_get_billing_totals(
-    period: str = "current",
-    admin: Developer = Depends(get_platform_admin),
-    db: AsyncSession = Depends(get_db),
+async def _billing_totals_live(
+    db: AsyncSession, period_start: datetime, period_end: datetime
 ) -> PlatformBillingTotals:
-    """Aggregate totals across all workspaces for the period.
+    """Price every active workspace, now.
 
-    Used by the platform-admin overview cards (MRR, top customers).
+    One `BillingBreakdownService` pass per workspace. This is what the
+    endpoint used to do on every request; it is now the fallback for periods
+    no snapshot covers, and what the nightly snapshot itself records.
     """
     from aexy.services.billing_breakdown_service import BillingBreakdownService
 
-    if period == "previous":
-        now = datetime.now(timezone.utc)
-        this_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        if this_start.month == 1:
-            period_start = this_start.replace(year=this_start.year - 1, month=12)
-        else:
-            period_start = this_start.replace(month=this_start.month - 1)
-        period_end = this_start
-    else:
-        now = datetime.now(timezone.utc)
-        period_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        if now.month == 12:
-            period_end = period_start.replace(year=now.year + 1, month=1)
-        else:
-            period_end = period_start.replace(month=now.month + 1)
-
     ws_result = await db.execute(
-        select(Workspace).where(Workspace.is_active == True)  # noqa: E712
+        select(Workspace).where(Workspace.is_active.is_(True))
     )
     workspaces = list(ws_result.scalars().all())
 
@@ -1551,7 +1538,6 @@ async def admin_get_billing_totals(
         )
 
     rows.sort(key=lambda r: r.total_cents, reverse=True)
-    top = rows[:10]
 
     return PlatformBillingTotals(
         period_start=period_start,
@@ -1559,8 +1545,250 @@ async def admin_get_billing_totals(
         total_revenue_cents=total_revenue,
         total_base_cost_cents=total_base_cost,
         total_margin_cents=total_margin,
-        workspace_count=len(workspaces),
+        workspace_count=len(rows),
         by_plan_tier=by_tier,
         by_billing_model=by_model,
-        top_workspaces=top,
+        top_workspaces=rows[:10],
+    )
+
+
+@router.get(
+    "/billing/totals",
+    response_model=PlatformBillingTotals,
+)
+async def admin_get_billing_totals(
+    period: str = "current",
+    live: bool = False,
+    admin: Developer = Depends(get_platform_admin),
+    db: AsyncSession = Depends(get_db),
+) -> PlatformBillingTotals:
+    """Aggregate totals across all workspaces for the period.
+
+    Served from last night's `platform_daily_stats` row for the current
+    period. Computing it meant a full billing breakdown per workspace on
+    every request, uncached — work that grows with the tenant count and that
+    the nightly snapshot already does. `live=true` forces the slow path, and
+    so does asking for a period the snapshot does not cover.
+    """
+    now = datetime.now(timezone.utc)
+    if period == "previous":
+        this_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if this_start.month == 1:
+            period_start = this_start.replace(year=this_start.year - 1, month=12)
+        else:
+            period_start = this_start.replace(month=this_start.month - 1)
+        period_end = this_start
+    else:
+        period_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if now.month == 12:
+            period_end = period_start.replace(year=now.year + 1, month=1)
+        else:
+            period_end = period_start.replace(month=now.month + 1)
+
+    if period != "previous" and not live:
+        from aexy.services.platform_stats_service import PlatformStatsService
+
+        snapshot = await PlatformStatsService(db).latest()
+        # A snapshot from a previous month describes a period that has closed;
+        # it cannot stand in for this one.
+        if snapshot is not None and snapshot.day >= period_start.date():
+            return PlatformBillingTotals(
+                period_start=period_start,
+                period_end=period_end,
+                total_revenue_cents=snapshot.revenue_cents,
+                total_base_cost_cents=snapshot.base_cost_cents,
+                total_margin_cents=snapshot.margin_cents,
+                workspace_count=snapshot.revenue_workspace_count,
+                by_plan_tier=snapshot.revenue_by_plan_tier or {},
+                by_billing_model=snapshot.revenue_by_billing_model or {},
+                top_workspaces=[
+                    PlatformBillingSummaryRow.model_validate(row)
+                    for row in (snapshot.top_workspaces or [])
+                ],
+            )
+
+    return await _billing_totals_live(db, period_start, period_end)
+
+
+# =============================================================================
+# PLATFORM STATISTICS (daily snapshots)
+# =============================================================================
+#
+# Everything above computes live and so can only describe this instant. These
+# read `platform_daily_stats`, which a daily Temporal job writes, because the
+# questions worth asking — is MRR growing, are signups accelerating, how many
+# workspaces cancelled — are about change over time and cannot be recovered
+# from the live tables afterwards.
+
+#: A snapshot older than this means the daily job is not running, and every
+#: figure on the page is staler than its label suggests.
+STALE_AFTER = timedelta(hours=36)
+
+
+def _kpi(current: Any, previous: Any, field: str) -> PlatformKpi:
+    value = float(getattr(current, field, 0) or 0)
+    if previous is None:
+        return PlatformKpi(value=value)
+    before = float(getattr(previous, field, 0) or 0)
+    delta = value - before
+    # A move from zero has no meaningful percentage — "up 100%" from nothing
+    # is noise, not growth.
+    delta_pct = (delta / before * 100.0) if before else None
+    return PlatformKpi(
+        value=value, previous=before, delta=delta, delta_pct=delta_pct
+    )
+
+
+@router.get("/stats/overview", response_model=PlatformOverviewResponse)
+async def admin_stats_overview(
+    comparison_days: int = Query(30, ge=1, le=365),
+    admin: Developer = Depends(get_platform_admin),
+    db: AsyncSession = Depends(get_db),
+) -> PlatformOverviewResponse:
+    """Headline platform numbers, each against what it was `comparison_days` ago."""
+    from aexy.services.platform_stats_service import (
+        PlatformStatsService,
+        plan_tier_counts,
+    )
+
+    service = PlatformStatsService(db)
+    current = await service.latest()
+    tiers = await plan_tier_counts(db)
+
+    if current is None:
+        # Nothing written yet: a fresh install, or the job has never run. Say
+        # so with empty KPIs rather than inventing zeros that look like data.
+        empty = PlatformKpi(value=0.0)
+        return PlatformOverviewResponse(
+            is_stale=True,
+            comparison_days=comparison_days,
+            mrr_cents=empty,
+            revenue_cents=empty,
+            margin_cents=empty,
+            base_cost_cents=empty,
+            paying_workspaces=empty,
+            trialing_workspaces=empty,
+            workspaces_total=empty,
+            workspaces_active_30d=empty,
+            developers_total=empty,
+            billable_seats=empty,
+            llm_billed_cents=empty,
+            workspaces_by_plan_tier=tiers,
+            notes=[
+                (
+                    "No platform snapshot has been written yet. The daily job "
+                    "fills this in; use Refresh to write one now."
+                )
+            ],
+        )
+
+    previous = await service.on_day(
+        current.day - timedelta(days=comparison_days)
+    )
+    computed_at = current.computed_at
+    if computed_at is not None and computed_at.tzinfo is None:
+        computed_at = computed_at.replace(tzinfo=timezone.utc)
+    is_stale = (
+        computed_at is None
+        or datetime.now(timezone.utc) - computed_at > STALE_AFTER
+    )
+
+    return PlatformOverviewResponse(
+        as_of=current.day,
+        computed_at=computed_at,
+        is_stale=is_stale,
+        comparison_days=comparison_days,
+        mrr_cents=_kpi(current, previous, "mrr_cents"),
+        revenue_cents=_kpi(current, previous, "revenue_cents"),
+        margin_cents=_kpi(current, previous, "margin_cents"),
+        base_cost_cents=_kpi(current, previous, "base_cost_cents"),
+        paying_workspaces=_kpi(current, previous, "paying_workspaces"),
+        trialing_workspaces=_kpi(current, previous, "trialing_workspaces"),
+        workspaces_total=_kpi(current, previous, "workspaces_total"),
+        workspaces_active_30d=_kpi(current, previous, "workspaces_active_30d"),
+        developers_total=_kpi(current, previous, "developers_total"),
+        billable_seats=_kpi(current, previous, "billable_seats"),
+        llm_billed_cents=_kpi(current, previous, "llm_billed_cents"),
+        subscriptions_by_status=current.subscriptions_by_status or {},
+        revenue_by_plan_tier=current.revenue_by_plan_tier or {},
+        revenue_by_billing_model=current.revenue_by_billing_model or {},
+        workspaces_by_plan_tier=tiers,
+        invoices_open=current.invoices_open,
+        invoices_open_cents=current.invoices_open_cents,
+        invoices_overdue=current.invoices_overdue,
+        invoices_overdue_cents=current.invoices_overdue_cents,
+        notes=list(current.notes or []),
+    )
+
+
+@router.get("/stats/series", response_model=PlatformStatsSeriesResponse)
+async def admin_stats_series(
+    days: int = Query(90, ge=7, le=730),
+    admin: Developer = Depends(get_platform_admin),
+    db: AsyncSession = Depends(get_db),
+) -> PlatformStatsSeriesResponse:
+    """The daily series behind the growth and revenue charts, oldest first."""
+    from aexy.services.platform_stats_service import PlatformStatsService
+
+    rows = await PlatformStatsService(db).series(days)
+    points = [
+        PlatformStatsPoint(
+            day=row.day,
+            workspaces_total=row.workspaces_total,
+            workspaces_created=row.workspaces_created,
+            workspaces_active_30d=row.workspaces_active_30d,
+            developers_total=row.developers_total,
+            developers_created=row.developers_created,
+            paying_workspaces=row.paying_workspaces,
+            trialing_workspaces=row.trialing_workspaces,
+            subscriptions_canceled=row.subscriptions_canceled,
+            billable_seats=row.billable_seats,
+            mrr_cents=row.mrr_cents,
+            revenue_cents=row.revenue_cents,
+            base_cost_cents=row.base_cost_cents,
+            margin_cents=row.margin_cents,
+            llm_requests=row.llm_requests,
+            llm_tokens=row.llm_tokens,
+            llm_billed_cents=row.llm_billed_cents,
+            llm_base_cost_cents=row.llm_base_cost_cents,
+            # A backfilled day carries a note saying which sections it could
+            # not recover. The chart uses this to break the line instead of
+            # drawing a drop to zero that never happened.
+            is_partial=any(
+                "historical day" in note for note in (row.notes or [])
+            ),
+        )
+        for row in rows
+    ]
+    return PlatformStatsSeriesResponse(days=days, points=points)
+
+
+@router.post("/stats/refresh", response_model=PlatformSnapshotRefreshResponse)
+async def admin_stats_refresh(
+    backfill_days: int = Query(0, ge=0, le=365),
+    admin: Developer = Depends(get_platform_admin),
+    db: AsyncSession = Depends(get_db),
+) -> PlatformSnapshotRefreshResponse:
+    """Recompute today's snapshot now.
+
+    The schedule writes one a day; this exists so the page is usable before
+    the first run, and so an admin who has just changed a plan can see the
+    effect without waiting until tomorrow. `backfill_days` fills in earlier
+    days as far as the source rows allow — signups, cancellations and AI
+    spend are dated and so recoverable; subscription and revenue figures are
+    not, and those days are marked partial.
+    """
+    from aexy.services.platform_stats_service import PlatformStatsService
+
+    service = PlatformStatsService(db)
+    filled = 0
+    if backfill_days:
+        filled = len(await service.backfill(backfill_days))
+    result = await service.compute_day()
+    await db.commit()
+    return PlatformSnapshotRefreshResponse(
+        day=result.day,
+        created=result.created,
+        backfilled=filled,
+        notes=result.notes,
     )

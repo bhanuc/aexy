@@ -15,6 +15,9 @@ import {
   Loader2,
   BarChart2,
   Receipt,
+  TrendingUp,
+  SlidersHorizontal,
+  FileText,
 } from "lucide-react";
 
 import { useAuth } from "@/hooks/useAuth";
@@ -26,6 +29,11 @@ const adminNavItems = [
     title: "Dashboard",
     href: "/admin",
     icon: LayoutDashboard,
+  },
+  {
+    title: "Growth",
+    href: "/admin/growth",
+    icon: TrendingUp,
   },
   {
     title: "Email Logs",
@@ -66,6 +74,19 @@ const adminNavItems = [
     title: "Billing",
     href: "/admin/billing",
     icon: Receipt,
+  },
+  // These two are platform-admin tools that happen to live under /settings.
+  // Listing them here means there is one place to look for staff tooling
+  // rather than two.
+  {
+    title: "Plan overrides",
+    href: "/settings/plan-overrides",
+    icon: SlidersHorizontal,
+  },
+  {
+    title: "Invoices",
+    href: "/settings/admin-invoices",
+    icon: FileText,
   },
 ];
 
