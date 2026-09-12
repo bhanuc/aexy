@@ -21,6 +21,22 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan - create tables on startup."""
+    # Refuse to boot a real server still signing JWTs with the shipped default
+    # secret: it signs every session token, so the default lets anyone forge
+    # one. Skipped in debug and under pytest, where the default is expected.
+    import sys as _sys
+    from aexy.core.config import DEFAULT_SECRET_KEY
+
+    if (
+        not settings.debug
+        and "pytest" not in _sys.modules
+        and settings.secret_key == DEFAULT_SECRET_KEY
+    ):
+        raise RuntimeError(
+            "SECRET_KEY is the built-in development default while DEBUG is off. "
+            "Set SECRET_KEY to a strong random value before starting in production."
+        )
+
     # Import models to register them with Base
     from aexy import models  # noqa: F401
 

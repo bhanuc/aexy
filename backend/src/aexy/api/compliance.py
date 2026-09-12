@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aexy.core.database import get_db
+from aexy.api.developers import get_current_developer_id
 from aexy.schemas.compliance import (
     AppliesToEnum,
     AssignmentStatusEnum,
@@ -63,7 +64,7 @@ router = APIRouter(prefix="/compliance")
 async def create_mandatory_training(
     data: MandatoryTrainingCreate,
     workspace_id: str,
-    developer_id: str,
+    developer_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new mandatory training requirement.
@@ -159,7 +160,7 @@ async def update_mandatory_training(
     training_id: str,
     data: MandatoryTrainingUpdate,
     workspace_id: str,
-    developer_id: str,
+    developer_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Update a mandatory training.
@@ -195,7 +196,7 @@ async def update_mandatory_training(
 async def delete_mandatory_training(
     training_id: str,
     workspace_id: str,
-    developer_id: str,
+    developer_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Delete (deactivate) a mandatory training.
@@ -229,7 +230,7 @@ async def delete_mandatory_training(
 async def create_assignment(
     data: TrainingAssignmentCreate,
     workspace_id: str,
-    developer_id: str,
+    developer_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Create a single training assignment.
@@ -256,7 +257,7 @@ async def create_assignment(
 async def bulk_create_assignments(
     data: TrainingAssignmentBulkCreate,
     workspace_id: str,
-    developer_id: str,
+    developer_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Create multiple training assignments.
@@ -417,7 +418,7 @@ async def update_assignment(
     assignment_id: str,
     data: TrainingAssignmentUpdate,
     workspace_id: str,
-    developer_id: str,
+    developer_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Update a training assignment.
@@ -453,7 +454,7 @@ async def update_assignment(
 async def acknowledge_assignment(
     assignment_id: str,
     workspace_id: str,
-    developer_id: str,
+    developer_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Developer acknowledges a training assignment.
@@ -488,7 +489,7 @@ async def acknowledge_assignment(
 async def start_assignment(
     assignment_id: str,
     workspace_id: str,
-    developer_id: str,
+    developer_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Developer starts a training assignment.
@@ -523,7 +524,7 @@ async def start_assignment(
 async def complete_assignment(
     assignment_id: str,
     workspace_id: str,
-    developer_id: str,
+    developer_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Developer completes a training assignment.
@@ -559,7 +560,7 @@ async def waive_assignment(
     assignment_id: str,
     data: TrainingAssignmentWaive,
     workspace_id: str,
-    developer_id: str,
+    developer_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Manager waives a training assignment.
@@ -599,7 +600,7 @@ async def waive_assignment(
 async def create_certification(
     data: CertificationCreate,
     workspace_id: str,
-    developer_id: str,
+    developer_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new certification definition.
@@ -800,7 +801,7 @@ async def update_certification(
 async def add_developer_certification(
     data: DeveloperCertificationCreate,
     workspace_id: str,
-    actor_id: str,
+    actor_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Add a certification to a developer.
@@ -946,7 +947,7 @@ async def update_developer_certification(
     dev_cert_id: str,
     data: DeveloperCertificationUpdate,
     workspace_id: str,
-    actor_id: str,
+    actor_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Update a developer certification.
@@ -983,7 +984,7 @@ async def verify_developer_certification(
     dev_cert_id: str,
     data: DeveloperCertificationVerify | None = None,
     workspace_id: str = "",
-    developer_id: str = "",
+    developer_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Verify a developer certification.
@@ -1023,7 +1024,7 @@ async def renew_developer_certification(
     dev_cert_id: str,
     data: DeveloperCertificationRenew,
     workspace_id: str,
-    actor_id: str,
+    actor_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Renew a developer certification.
@@ -1059,7 +1060,7 @@ async def renew_developer_certification(
 async def revoke_developer_certification(
     dev_cert_id: str,
     workspace_id: str,
-    actor_id: str,
+    actor_id: str = Depends(get_current_developer_id),
     reason: str | None = None,
     db: AsyncSession = Depends(get_db),
 ):
