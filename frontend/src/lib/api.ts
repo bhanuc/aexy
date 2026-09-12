@@ -5574,6 +5574,12 @@ export interface PlatformBillingTotals {
   by_plan_tier: Record<string, number>;
   by_billing_model: Record<string, number>;
   top_workspaces: PlatformBillingSummaryRow[];
+  /** When these were computed, if they came from the daily snapshot rather
+   *  than a live pass. Null means computed now. */
+  computed_at?: string | null;
+  /** True when the snapshot behind them is old enough that the daily job has
+   *  probably stopped — the period still says "this month" either way. */
+  is_stale?: boolean;
 }
 
 // Platform-admin billing API (admin-only)
@@ -18952,6 +18958,177 @@ export interface AdminCheckResponse {
   platform_org_id: string | null;
 }
 
+// ============================================================================
+// Platform statistics (daily snapshots)
+// ============================================================================
+//
+// Every platform figure the admin area showed was computed live, and a live
+// figure cannot be asked about the past. These read the daily snapshot table
+// instead, which is what makes "is MRR growing?" answerable.
+
+export interface PlatformKpi {
+  value: number;
+  /** null when no snapshot exists that far back — show "no comparison yet". */
+  previous: number | null;
+  delta: number | null;
+  delta_pct: number | null;
+}
+
+export interface PlatformOverview {
+  as_of: string | null;
+  computed_at: string | null;
+  /** The daily job has not run recently; every figure is older than it looks. */
+  is_stale: boolean;
+  comparison_days: number;
+  mrr_cents: PlatformKpi;
+  revenue_cents: PlatformKpi;
+  margin_cents: PlatformKpi;
+  base_cost_cents: PlatformKpi;
+  paying_workspaces: PlatformKpi;
+  trialing_workspaces: PlatformKpi;
+  workspaces_total: PlatformKpi;
+  workspaces_active_30d: PlatformKpi;
+  developers_total: PlatformKpi;
+  billable_seats: PlatformKpi;
+  llm_billed_cents: PlatformKpi;
+  subscriptions_by_status: Record<string, number>;
+  revenue_by_plan_tier: Record<string, number>;
+  revenue_by_billing_model: Record<string, number>;
+  workspaces_by_plan_tier: Record<string, number>;
+  invoices_open: number;
+  invoices_open_cents: number;
+  invoices_overdue: number;
+  invoices_overdue_cents: number;
+  notes: string[];
+}
+
+export interface PlatformStatsPoint {
+  day: string;
+  workspaces_total: number;
+  workspaces_created: number;
+  workspaces_active_30d: number;
+  developers_total: number;
+  developers_created: number;
+  paying_workspaces: number;
+  trialing_workspaces: number;
+  subscriptions_canceled: number;
+  billable_seats: number;
+  mrr_cents: number;
+  revenue_cents: number;
+  base_cost_cents: number;
+  margin_cents: number;
+  llm_requests: number;
+  llm_tokens: number;
+  llm_billed_cents: number;
+  llm_base_cost_cents: number;
+  /** Backfilled day: its subscription and revenue figures are not recoverable. */
+  is_partial: boolean;
+}
+
+export interface PlatformStatsSeries {
+  days: number;
+  points: PlatformStatsPoint[];
+}
+
+export interface PlatformSnapshotRefresh {
+  day: string;
+  created: boolean;
+  /** A backfill runs on the queue, not in the request — a year of it is
+   *  thousands of queries that a proxy timeout would roll back in full. */
+  backfill_queued: boolean;
+  backfill_days: number;
+  notes: string[];
+}
+
+export interface ModuleAdoptionPoint {
+  day: string;
+  module: string;
+  workspaces_active: number;
+  events: number;
+  window_days: number;
+}
+
+export interface ModuleAdoption {
+  days: number;
+  window_days: number;
+  /** Workspaces that did *anything* in the same window each point counts
+   *  over — the denominator a module's share has to be against. Dividing by
+   *  "workspaces that exist" understates every module on a platform with
+   *  dormant tenants. */
+  active_workspaces: number;
+  /** Every workspace not switched off, for context beside the share. */
+  total_workspaces: number;
+  points: ModuleAdoptionPoint[];
+  /** Modules with no honest usage signal — named, not reported as zero. */
+  not_measured: string[];
+}
+
+export interface AiSpendDay {
+  day: string;
+  billed_cents: number;
+  base_cost_cents: number;
+  tokens: number;
+  providers: Record<string, number>;
+}
+
+export interface AiSpendWorkspace {
+  workspace_id: string;
+  workspace_name: string;
+  billed_cents: number;
+  base_cost_cents: number;
+  tokens: number;
+}
+
+export interface AiSpendFeature {
+  feature: string;
+  billed_cents: number;
+  requests: number;
+}
+
+export interface AiSpend {
+  days: number;
+  by_day: AiSpendDay[];
+  top_workspaces: AiSpendWorkspace[];
+  by_feature: AiSpendFeature[];
+}
+
+export interface PlatformAlert {
+  kind: string;
+  severity: string;
+  count?: number | null;
+  amount_cents?: number | null;
+  baseline_cents?: number | null;
+  href?: string | null;
+  workspaces: { workspace_id: string; workspace_name: string; used?: number; allowance?: number }[];
+}
+
+export interface AdminWorkspaceDetail {
+  workspace_id: string;
+  name: string;
+  slug: string;
+  is_active: boolean;
+  created_at: string;
+  owner_name: string | null;
+  owner_email: string | null;
+  plan_name: string | null;
+  plan_tier: string | null;
+  has_plan_override: boolean;
+  billing_model: string | null;
+  subscription_status: string | null;
+  current_period_end: string | null;
+  member_count: number;
+  billable_seats: number;
+  llm_requests_this_period: number;
+  llm_tokens_this_period: number;
+  llm_billed_cents_this_period: number;
+  llm_base_cost_cents_this_period: number;
+  module_usage: Record<string, number>;
+  /** Modules whose signal could not be read on this request — named, because
+   *  one simply missing from `module_usage` reads as one they never use. */
+  modules_unavailable: string[];
+  last_activity_at: string | null;
+}
+
 export interface AdminDashboardStats {
   total_workspaces: number;
   total_users: number;
@@ -19124,6 +19301,54 @@ export const platformAdminApi = {
     search?: string;
   }): Promise<PaginatedAdminUsers> => {
     const response = await api.get("/platform-admin/users", { params });
+    return response.data;
+  },
+
+  // Platform statistics
+  getStatsOverview: async (comparisonDays = 30): Promise<PlatformOverview> => {
+    const response = await api.get("/platform-admin/stats/overview", {
+      params: { comparison_days: comparisonDays },
+    });
+    return response.data;
+  },
+
+  getStatsSeries: async (days = 90): Promise<PlatformStatsSeries> => {
+    const response = await api.get("/platform-admin/stats/series", {
+      params: { days },
+    });
+    return response.data;
+  },
+
+  refreshStats: async (backfillDays = 0): Promise<PlatformSnapshotRefresh> => {
+    const response = await api.post("/platform-admin/stats/refresh", null, {
+      params: { backfill_days: backfillDays },
+    });
+    return response.data;
+  },
+
+  getModuleAdoption: async (days = 90): Promise<ModuleAdoption> => {
+    const response = await api.get("/platform-admin/stats/adoption", {
+      params: { days },
+    });
+    return response.data;
+  },
+
+  getAiSpend: async (days = 30): Promise<AiSpend> => {
+    const response = await api.get("/platform-admin/stats/ai-spend", {
+      params: { days },
+    });
+    return response.data;
+  },
+
+  getAlerts: async (): Promise<{ alerts: PlatformAlert[] }> => {
+    const response = await api.get("/platform-admin/stats/alerts");
+    return response.data;
+  },
+
+  getWorkspaceDetail: async (workspaceId: string): Promise<AdminWorkspaceDetail> => {
+    const response = await api.get(
+      `/platform-admin/workspaces/${workspaceId}/detail`,
+    );
     return response.data;
   },
 };

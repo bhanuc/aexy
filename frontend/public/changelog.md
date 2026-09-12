@@ -5,6 +5,147 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.40.0] - 2026-09-12
+
+The platform admin area is reachable, its dashboard answers whether the
+business is growing rather than only what it looks like this instant, and it
+can say what customers actually *do*.
+
+### Added: a way in
+
+The cross-tenant admin area has existed for months with nine pages behind it,
+linked from nowhere. It was reachable only by typing `/admin`, and only by
+someone whose email is in `ADMIN_EMAILS` — which, if unset, is nobody.
+
+Platform admins now get a **Platform admin** entry at the bottom of the
+sidebar. Two staff tools that had been filed under Settings — plan overrides
+and manual invoicing — are listed in the admin sidebar too, so there is one
+place to look instead of two.
+
+If `ADMIN_EMAILS` is empty nothing changes, because nobody is a platform
+admin. That is the safe default, but it does mean the area stays invisible
+until it is set. See `docs/platform-admin.md`.
+
+### Added: the numbers are written down daily
+
+Every platform-level figure was a live query, so each one described this
+instant and nothing else. "What is MRR?" had an answer; "is it growing?" did
+not, and could not be given one afterwards — nothing records that a workspace
+*was* active thirty days ago, and a plan's price today is not the price it was
+billed at.
+
+A Temporal schedule now writes one row a day into `platform_daily_stats`:
+growth, subscriptions and MRR, month-to-date revenue with the provider cost
+and margin behind it, AI spend for that day by provider, and unpaid invoices.
+
+The dashboard reads it. Each headline number sits next to what it was thirty
+days ago, and a new **Growth** page charts signups, workspaces, recurring
+revenue, AI spend, paying customers and cancellations over 30 to 365 days.
+
+Two things it is careful about:
+
+- **A backfilled day says what it could not recover.** Signups, cancellations
+  and AI spend still carry their date, so they can be filled in. Subscription
+  state, seats and the month-to-date bill describe *now*, so a past day is
+  left at zero and marked partial rather than stamped with today's figures.
+  The charts break the line across those days instead of drawing a plunge to
+  zero that never happened.
+- **"No comparison yet" is not "no change".** When no snapshot reaches back
+  far enough the card says so, rather than showing a 0% move that reads as
+  flat. A percentage is omitted when the earlier value was zero. The same
+  holds when the day thirty days back is a backfilled one: its zero means "we
+  could not know", so the card offers no comparison rather than reporting the
+  whole of MRR as growth.
+- **The snapshot runs at the end of the day it describes**, at 23:50 UTC, and
+  revisits yesterday before writing today. A plain daily interval fires at
+  midnight UTC, and a snapshot taken then describes a day zero seconds old —
+  every signup and every penny of that day's AI spend would be recorded as
+  zero and never revisited.
+- **Cancellations are counted on the day they happened**, so they can be
+  filled in for a past day like the other dated figures rather than being a
+  rolling twenty-four hours attributed to whichever day the job ran on.
+
+### Changed: "active workspaces" now means somebody did something
+
+The figure counted `WorkspaceMember.updated_at` — the modification time of a
+membership row, which is not activity. It now counts workspaces where somebody
+created or changed a document, task or project, posted a progress update, or
+spent AI budget in the trailing 30 days.
+
+### Added: which modules are actually being used
+
+The admin area could say how many workspaces exist and what they pay. It could
+not say what any of them do — whether the CRM is carrying real work or Service
+Desk is the only thing anyone opens. That is the question product planning
+needs and nothing answered it.
+
+**Adoption** is a matrix of module against day: how many workspaces created
+something in each module in the trailing 30 days, and how many things they
+created, so a module carrying real volume reads differently from one that saw
+a single row all month. Each module's signal is the table whose rows mean
+somebody did that module's *work* rather than switched it on — creating a chat
+channel is configuration and happens once, so chat counts messages.
+
+Eleven modules have nothing that separates use from configuration. They are
+named on the page as "not measured" rather than reported as zero, because a
+module nobody can measure must not read as a module nobody uses.
+
+One module's signal failing no longer takes the other sixteen with it. Each
+runs in its own savepoint, and whatever could not be read is named — in the
+day's notes and on the customer page — because a module missing from the
+matrix otherwise reads as a module nobody uses, which is the one thing this
+page must never say by accident.
+
+A module's reach is a share of the workspaces that did *anything* in the same
+window — not of every workspace on the platform. The two have to mean the same
+thing, or the percentage misleads: three of forty, when thirty of them have
+been dormant for months, reads as 8% adoption where the honest figure is 30%.
+Both numbers are on the page.
+
+### Added: where the AI money goes
+
+**AI spend** breaks the bill down by day and provider, by workspace, and by
+the feature that spent it. Read live rather than from the nightly snapshot: a
+stale answer to "who is burning the budget right now" would be worse than a
+slightly slower one.
+
+### Added: one customer, in one place
+
+The list said who exists; billing said what they pay; neither said what was
+going on with a particular customer. Clicking a workspace now opens a page
+with the owner, plan and any override, subscription and seats, AI billed this
+period against what it cost to serve, the modules they actually use, and when
+anyone last did anything.
+
+### Added: what to look at today
+
+The dashboard now leads with alerts, and usually has none — a list that always
+has ten entries is a list nobody reads. It raises overdue invoices,
+subscriptions Stripe could not charge (which become cancellations if left),
+workspaces that have used the AI their plan includes, and a day of AI spend
+more than double the trailing week's average. A quiet week does not become a
+spike: nothing divided by nothing is not a hundredfold increase.
+
+### Changed: the platform billing totals are served from the snapshot
+
+`GET /platform-admin/billing/totals` looped every active workspace and ran a
+full billing breakdown per workspace, uncached, on every request — work that
+grows with the tenant count and that the nightly job already does. It now
+reads one row. `?live=true` forces the old path, and so does asking for a
+period the snapshot does not cover.
+
+The totals now carry when they were computed and whether that is stale, and
+the platform billing page says so — its period heading reads "this month"
+whether the numbers are from last night or three weeks ago, so without it
+there was nothing to tell the two apart.
+
+### Fixed: the dashboard said the wrong thing when it had nothing to say
+
+A snapshot older than 36 hours means the daily job is not running, and every
+figure on the page is staler than its label suggests. The page now says so
+instead of presenting last week's numbers as today's, and **Refresh** writes a
+row immediately.
+
 ## [0.39.5] - 2026-09-12
 
 Automations built before the builder was fixed can run again.

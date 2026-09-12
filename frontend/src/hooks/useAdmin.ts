@@ -5,6 +5,13 @@ import { useAuth } from "@/hooks/useAuth";
 import {
   platformAdminApi,
   AdminDashboardStats,
+  AdminWorkspaceDetail,
+  AiSpend,
+  ModuleAdoption,
+  PlatformAlert,
+  PlatformOverview,
+  PlatformSnapshotRefresh,
+  PlatformStatsSeries,
   PaginatedAdminEmailLogs,
   PaginatedAdminNotifications,
   PaginatedAdminWorkspaces,
@@ -153,6 +160,104 @@ export function useAdminUsers(params?: {
     queryKey: ["admin-users", params],
     queryFn: () => platformAdminApi.getUsers(params),
     enabled: isAdmin,
+    staleTime: 60 * 1000,
+  });
+}
+
+
+/**
+ * Headline platform numbers, each against what it was `comparisonDays` ago.
+ *
+ * Served from the daily snapshot, so it is cheap and — unlike everything it
+ * replaces — can say whether a figure is going up.
+ */
+export function usePlatformOverview(comparisonDays = 30) {
+  const { isAdmin } = useAdmin();
+
+  return useQuery<PlatformOverview>({
+    queryKey: ["platform-stats-overview", comparisonDays],
+    queryFn: () => platformAdminApi.getStatsOverview(comparisonDays),
+    enabled: isAdmin,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** The daily series behind the growth and revenue charts. */
+export function usePlatformStatsSeries(days = 90) {
+  const { isAdmin } = useAdmin();
+
+  return useQuery<PlatformStatsSeries>({
+    queryKey: ["platform-stats-series", days],
+    queryFn: () => platformAdminApi.getStatsSeries(days),
+    enabled: isAdmin,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Recompute today's snapshot now. The schedule writes one a day; this is for
+ * the first run, and for an admin who has just changed a plan and wants to
+ * see it without waiting until tomorrow.
+ */
+export function useRefreshPlatformStats() {
+  const queryClient = useQueryClient();
+
+  return useMutation<PlatformSnapshotRefresh, unknown, number | undefined>({
+    mutationFn: (backfillDays) => platformAdminApi.refreshStats(backfillDays ?? 0),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["platform-stats-overview"] });
+      queryClient.invalidateQueries({ queryKey: ["platform-stats-series"] });
+      // The billing totals card reads the same snapshot.
+      queryClient.invalidateQueries({ queryKey: ["platform-billing-totals"] });
+    },
+  });
+}
+
+
+/** Which modules are actually being used, day by day. */
+export function useModuleAdoption(days = 90) {
+  const { isAdmin } = useAdmin();
+
+  return useQuery<ModuleAdoption>({
+    queryKey: ["platform-module-adoption", days],
+    queryFn: () => platformAdminApi.getModuleAdoption(days),
+    enabled: isAdmin,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** Where the AI money went. Read live, so it is current rather than nightly. */
+export function useAiSpend(days = 30) {
+  const { isAdmin } = useAdmin();
+
+  return useQuery<AiSpend>({
+    queryKey: ["platform-ai-spend", days],
+    queryFn: () => platformAdminApi.getAiSpend(days),
+    enabled: isAdmin,
+    staleTime: 60 * 1000,
+  });
+}
+
+/** What to look at today. Usually nothing, which is the point. */
+export function usePlatformAlerts() {
+  const { isAdmin } = useAdmin();
+
+  return useQuery<PlatformAlert[]>({
+    queryKey: ["platform-alerts"],
+    queryFn: async () => (await platformAdminApi.getAlerts()).alerts,
+    enabled: isAdmin,
+    staleTime: 60 * 1000,
+  });
+}
+
+/** One customer, in one place. */
+export function useAdminWorkspaceDetail(workspaceId: string | null) {
+  const { isAdmin } = useAdmin();
+
+  return useQuery<AdminWorkspaceDetail>({
+    queryKey: ["platform-workspace-detail", workspaceId],
+    queryFn: () => platformAdminApi.getWorkspaceDetail(workspaceId!),
+    enabled: isAdmin && !!workspaceId,
     staleTime: 60 * 1000,
   });
 }

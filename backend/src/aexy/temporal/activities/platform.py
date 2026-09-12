@@ -121,3 +121,67 @@ async def send_feedback_digest(input: SendFeedbackDigestInput) -> dict[str, Any]
                 logger.warning("Feedback digest to %s failed: %s", recipient, exc)
 
     return {"sent": sent, "items": len(new_items)}
+
+
+@dataclass
+class SnapshotPlatformStatsInput:
+    #: Which day to describe. Defaults to today, which is the only day whose
+    #: subscription, seat and revenue figures are knowable.
+    day: str | None = None
+    #: Fill in the days before this ran for the first time, as far as the
+    #: source rows allow. Off by default: it is a one-off.
+    backfill_days: int = 0
+
+
+@activity.defn
+async def snapshot_platform_stats(input: SnapshotPlatformStatsInput) -> dict[str, Any]:
+    """Write today's row of `platform_daily_stats`.
+
+    The admin area's platform figures were all live, and so could only ever
+    describe this instant. This is what makes "is MRR growing?" and "how many
+    workspaces cancelled last month?" answerable — the numbers are written
+    down daily because they cannot be recovered afterwards.
+
+    It also takes the cost off the request path: the revenue section is the
+    per-workspace billing-breakdown loop that `/billing/totals` used to run on
+    every page load.
+    """
+    from datetime import date, datetime, timedelta, timezone
+
+    from aexy.services.platform_stats_service import PlatformStatsService
+
+    day = date.fromisoformat(input.day) if input.day else None
+
+    async with async_session_maker() as db:
+        service = PlatformStatsService(db)
+        filled = 0
+        if input.backfill_days:
+            filled = len(await service.backfill(input.backfill_days))
+
+        # Finish yesterday before describing today. The schedule runs at 23:50
+        # so that the day being written is essentially complete, but "23:50" is
+        # not "midnight" and a worker that was down at 23:50 wrote nothing at
+        # all. Coming back to yesterday picks up both: its dated figures —
+        # signups, cancellations, AI spend — are recomputable in full, and a
+        # day already written while it was current keeps the subscription and
+        # revenue figures that cannot be recovered.
+        if day is None:
+            # UTC, like every other day boundary here — `date.today()`
+            # would be the worker's local day.
+            yesterday = datetime.now(timezone.utc).date() - timedelta(days=1)
+            await service.compute_day(yesterday)
+
+        result = await service.compute_day(day)
+        await db.commit()
+        logger.info(
+            "Platform snapshot for %s (%s), %d day(s) backfilled",
+            result.day,
+            "created" if result.created else "updated",
+            filled,
+        )
+        return {
+            "day": result.day.isoformat(),
+            "created": result.created,
+            "backfilled": filled,
+            "notes": result.notes,
+        }

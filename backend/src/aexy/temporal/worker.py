@@ -241,7 +241,11 @@ def get_all_activities() -> list:
         execute_workflow_action,
         mark_crm_automation_run,
     )
-    from aexy.temporal.activities.platform import handle_new_signup, send_feedback_digest
+    from aexy.temporal.activities.platform import (
+        handle_new_signup,
+        send_feedback_digest,
+        snapshot_platform_stats,
+    )
     from aexy.temporal.activities.tracker_enrich import enrich_attribute_tracker_events
     from aexy.temporal.activities.tracker_journal import (
         detect_tracker_insights,
@@ -500,6 +504,7 @@ def get_all_activities() -> list:
         # Platform
         handle_new_signup,
         send_feedback_digest,
+        snapshot_platform_stats,
         # Aexy Tracker
         enrich_attribute_tracker_events,
         generate_tracker_journal,
