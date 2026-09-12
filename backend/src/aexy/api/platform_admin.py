@@ -35,11 +35,15 @@ from aexy.schemas.billing import (
     WorkspacePlanOverrideResponse,
 )
 from aexy.schemas.platform_stats import (
+    AiSpendResponse,
+    ModuleAdoptionResponse,
+    PlatformAlertsResponse,
     PlatformKpi,
     PlatformOverviewResponse,
     PlatformSnapshotRefreshResponse,
     PlatformStatsPoint,
     PlatformStatsSeriesResponse,
+    WorkspaceDetailResponse,
 )
 from aexy.services.developer_service import DeveloperService
 from aexy.services.limits_service import LimitsService
@@ -1792,3 +1796,91 @@ async def admin_stats_refresh(
         backfilled=filled,
         notes=result.notes,
     )
+
+
+@router.get("/stats/adoption", response_model=ModuleAdoptionResponse)
+async def admin_stats_adoption(
+    days: int = Query(90, ge=7, le=365),
+    admin: Developer = Depends(get_platform_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ModuleAdoptionResponse:
+    """Which modules are actually being used, day by day.
+
+    The number that matters is a share: 3 of 40 workspaces touching the CRM
+    means something different from 3 of 4, so the active workspace count comes
+    back with it.
+    """
+    from aexy.services.platform_stats_service import (
+        ACTIVITY_WINDOW_DAYS,
+        MODULES_WITHOUT_SIGNAL,
+        PlatformStatsService,
+    )
+
+    rows = await PlatformStatsService(db).module_adoption(days)
+    active = await db.scalar(
+        select(func.count(Workspace.id)).where(Workspace.is_active.is_(True))
+    )
+    return ModuleAdoptionResponse(
+        days=days,
+        window_days=ACTIVITY_WINDOW_DAYS,
+        active_workspaces=int(active or 0),
+        points=[
+            {
+                "day": row.day,
+                "module": row.module,
+                "workspaces_active": row.workspaces_active,
+                "events": row.events,
+                "window_days": row.window_days,
+            }
+            for row in rows
+        ],
+        not_measured=list(MODULES_WITHOUT_SIGNAL),
+    )
+
+
+@router.get("/stats/ai-spend", response_model=AiSpendResponse)
+async def admin_stats_ai_spend(
+    days: int = Query(30, ge=7, le=365),
+    admin: Developer = Depends(get_platform_admin),
+    db: AsyncSession = Depends(get_db),
+) -> AiSpendResponse:
+    """Where the AI money went: by day and provider, by workspace, by feature.
+
+    Read live rather than from the snapshot — it is one window and three
+    GROUP BYs, and a stale answer to "who is burning the budget right now"
+    would be worse than a slightly slower one.
+    """
+    from aexy.services.platform_stats_service import ai_spend
+
+    return AiSpendResponse.model_validate(await ai_spend(db, days))
+
+
+@router.get("/stats/alerts", response_model=PlatformAlertsResponse)
+async def admin_stats_alerts(
+    admin: Developer = Depends(get_platform_admin),
+    db: AsyncSession = Depends(get_db),
+) -> PlatformAlertsResponse:
+    """What a platform admin should look at today. Usually nothing."""
+    from aexy.services.platform_stats_service import platform_alerts
+
+    return PlatformAlertsResponse(alerts=await platform_alerts(db))
+
+
+@router.get(
+    "/workspaces/{workspace_id}/detail", response_model=WorkspaceDetailResponse
+)
+async def admin_workspace_detail(
+    workspace_id: str,
+    admin: Developer = Depends(get_platform_admin),
+    db: AsyncSession = Depends(get_db),
+) -> WorkspaceDetailResponse:
+    """One customer, in one place: plan, subscription, seats, AI spend and the
+    modules they actually use. Answering that meant three pages and a guess."""
+    from aexy.services.platform_stats_service import workspace_detail
+
+    detail = await workspace_detail(db, workspace_id)
+    if detail is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found"
+        )
+    return WorkspaceDetailResponse.model_validate(detail)

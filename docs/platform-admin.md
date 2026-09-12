@@ -31,6 +31,8 @@ dashboard.
 |---|---|
 | **Dashboard** (`/admin`) | What is the business doing today, and is it moving? |
 | **Growth** (`/admin/growth`) | Signups, active workspaces, MRR, AI spend and cancellations over time |
+| **Adoption** (`/admin/adoption`) | Which modules customers actually use, and how much |
+| **AI spend** (`/admin/ai-spend`) | Where the AI bill went: by day, provider, workspace and feature |
 | **Billing** (`/admin/billing`) | What is each workspace being charged, and what is the margin |
 | **Workspaces** / **Users** | Who exists, on what plan, with how many members |
 | **Plans** / **Plan overrides** | The price list, and per-workspace exceptions to it |
@@ -91,6 +93,40 @@ top. That usually means the Temporal worker is not running the analysis queue.
 **Refresh** on the dashboard writes today's row immediately — useful on first
 setup, or after changing a plan.
 
+## Module adoption
+
+The matrix is module against day: how many workspaces created something in
+each module in the trailing 30 days, and how many things they created. The
+count matters as much as the reach — 1 of 13 workspaces with 600 documents is
+a different story from 1 of 13 with three.
+
+Each module's signal is the table whose rows mean somebody did that module's
+**work**, not the table that means somebody configured it. Creating a chat
+channel is configuration and happens once; sending a message is use, so chat
+counts messages through their channel.
+
+Eleven modules have nothing that separates the two — automations, community,
+dashboard, learning, MCP, on-call, organization, reports, reviews, tables and
+uptime. They are listed on the page as *not measured* rather than shown as
+zero, because a module nobody can measure must not read as a module nobody
+uses. Adding one means adding its signal to `_module_signals()` in
+`platform_stats_service.py`.
+
+## Alerts
+
+The dashboard leads with what needs attention and usually has nothing, which
+is deliberate — a list that always has ten entries is a list nobody reads. It
+raises:
+
+- invoices past their due date, with the amount outstanding;
+- subscriptions Stripe could not charge (`past_due`, `unpaid`), which become
+  cancellations if nobody acts;
+- workspaces that have used all the AI their plan includes, so they are about
+  to be billed for overage or refused;
+- a day of AI spend more than double the trailing week's average, compared
+  against the week rather than yesterday so one quiet Sunday does not make
+  Monday look like a spike.
+
 ## Why the totals endpoint is fast now
 
 `GET /platform-admin/billing/totals` used to loop every active workspace and
@@ -108,6 +144,10 @@ GET  /api/v1/platform-admin/check                    is the caller one
 GET  /api/v1/platform-admin/stats/overview           headline KPIs + deltas
 GET  /api/v1/platform-admin/stats/series?days=90     the daily series
 POST /api/v1/platform-admin/stats/refresh            write today's row now
+GET  /api/v1/platform-admin/stats/adoption           module usage, day by day
+GET  /api/v1/platform-admin/stats/ai-spend           the AI bill, broken down
+GET  /api/v1/platform-admin/stats/alerts             what needs attention
+GET  /api/v1/platform-admin/workspaces/{id}/detail   one customer, in one place
 GET  /api/v1/platform-admin/billing/totals           platform revenue and margin
 GET  /api/v1/platform-admin/billing/summary          one row per workspace
 GET  /api/v1/platform-admin/billing/breakdown        one workspace, line by line

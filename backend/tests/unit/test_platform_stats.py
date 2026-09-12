@@ -7,6 +7,7 @@ each day, and the honesty about the ones a past day cannot recover.
 """
 
 from datetime import date, datetime, timedelta, timezone
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import select
@@ -14,8 +15,9 @@ from sqlalchemy import select
 from aexy.models.billing import CustomerBilling, Invoice, Subscription, UsageRecord
 from aexy.models.developer import Developer
 from aexy.models.entity_activity import EntityActivity
-from aexy.models.platform_stats import PlatformDailyStats
+from aexy.models.platform_stats import PlatformDailyStats, PlatformModuleAdoption
 from aexy.models.workspace import Workspace, WorkspaceMember, WorkspaceSubscription
+from aexy.services import platform_stats_service as stats
 from aexy.services.platform_stats_service import PlatformStatsService
 
 # The revenue section prices every workspace through `BillingBreakdownService`,
@@ -450,3 +452,310 @@ class TestCancellations:
         await db_session.commit()
 
         assert (await service.latest()).subscriptions_canceled == 1
+
+
+@pytest.mark.asyncio
+class TestModuleAdoption:
+    """What workspaces *do*, as opposed to how many of them there are.
+
+    Each signal is the table whose rows mean somebody did that module's work,
+    not the one that means somebody switched it on — creating a chat channel
+    is configuration and happens once; sending a message is use.
+    """
+
+    async def _two_workspaces_with_tasks(self, db_session):
+        owner = await _developer(db_session, "owner@example.com", created=_ago(60))
+        busy = await _workspace(db_session, "busy", created=_ago(60), owner=owner)
+        quiet = await _workspace(db_session, "quiet", created=_ago(60), owner=owner)
+        await db_session.commit()
+        return busy, quiet, owner
+
+    async def _task(self, db_session, workspace, *, created):
+        from aexy.models.sprint import SprintTask
+
+        task = SprintTask(
+            workspace_id=workspace.id,
+            title="work",
+            status="todo",
+            source_type="manual",
+            source_id=str(uuid4()),
+            created_at=created,
+        )
+        db_session.add(task)
+        await db_session.flush()
+        return task
+
+    async def test_a_module_counts_the_workspaces_that_used_it(self, db_session):
+        busy, quiet, _ = await self._two_workspaces_with_tasks(db_session)
+        await self._task(db_session, busy, created=_ago(3))
+        await self._task(db_session, busy, created=_ago(4))
+        await db_session.commit()
+
+        counts = await PlatformStatsService(db_session).compute_module_adoption()
+        await db_session.commit()
+
+        assert counts["sprints"] == 1
+
+        row = (
+            await db_session.execute(
+                select(PlatformModuleAdoption).where(
+                    PlatformModuleAdoption.module == "sprints"
+                )
+            )
+        ).scalar_one()
+        # Reach is workspaces; volume is things made. Two tasks in one
+        # workspace is reach 1, volume 2.
+        assert (row.workspaces_active, row.events) == (1, 2)
+        assert row.window_days == stats.ACTIVITY_WINDOW_DAYS
+
+    async def test_work_older_than_the_window_does_not_count(self, db_session):
+        busy, _, _ = await self._two_workspaces_with_tasks(db_session)
+        await self._task(db_session, busy, created=_ago(60))
+        await db_session.commit()
+
+        counts = await PlatformStatsService(db_session).compute_module_adoption()
+        await db_session.commit()
+        assert counts["sprints"] == 0
+
+    async def test_recomputing_a_day_overwrites_rather_than_duplicating(
+        self, db_session
+    ):
+        busy, _, _ = await self._two_workspaces_with_tasks(db_session)
+        await self._task(db_session, busy, created=_ago(1))
+        await db_session.commit()
+
+        service = PlatformStatsService(db_session)
+        await service.compute_module_adoption()
+        await db_session.commit()
+        await self._task(db_session, busy, created=_ago(1))
+        await db_session.commit()
+        await service.compute_module_adoption()
+        await db_session.commit()
+
+        rows = (
+            (
+                await db_session.execute(
+                    select(PlatformModuleAdoption).where(
+                        PlatformModuleAdoption.module == "sprints"
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(rows) == 1
+        assert rows[0].events == 2
+
+    async def test_modules_without_a_signal_are_named_not_counted(self):
+        """A module nobody can measure must not read as a module nobody uses."""
+        measured = set(stats._module_signals())
+        assert measured.isdisjoint(stats.MODULES_WITHOUT_SIGNAL)
+        assert "chat" in measured
+        assert "uptime" in stats.MODULES_WITHOUT_SIGNAL
+
+
+@pytest.mark.asyncio
+class TestAiSpendDrilldown:
+    async def _usage(self, db_session):
+        owner = await _developer(db_session, "owner@example.com", created=_ago(60))
+        ws = await _workspace(db_session, "ws", created=_ago(60), owner=owner)
+        billing = CustomerBilling(developer_id=owner.id)
+        db_session.add(billing)
+        await db_session.flush()
+        db_session.add_all(
+            [
+                UsageRecord(
+                    customer_id=billing.id, workspace_id=ws.id,
+                    usage_type="llm_input_tokens", provider="claude",
+                    analysis_type="code_review", total_tokens=100,
+                    base_cost_cents=10.0, total_cost_cents=13.0, created_at=_ago(1),
+                ),
+                UsageRecord(
+                    customer_id=billing.id, workspace_id=ws.id,
+                    usage_type="llm_input_tokens", provider="gemini",
+                    analysis_type="summary", total_tokens=50,
+                    base_cost_cents=2.0, total_cost_cents=3.0, created_at=_ago(1),
+                ),
+                # Outside the window.
+                UsageRecord(
+                    customer_id=billing.id, workspace_id=ws.id,
+                    usage_type="llm_input_tokens", provider="claude",
+                    analysis_type="code_review", total_tokens=999,
+                    base_cost_cents=99.0, total_cost_cents=99.0, created_at=_ago(60),
+                ),
+            ]
+        )
+        await db_session.commit()
+        return ws
+
+    async def test_spend_is_grouped_by_day_provider_workspace_and_feature(
+        self, db_session
+    ):
+        ws = await self._usage(db_session)
+        result = await stats.ai_spend(db_session, days=7)
+
+        assert len(result["by_day"]) == 1
+        day = result["by_day"][0]
+        assert day["billed_cents"] == 16.0
+        assert day["base_cost_cents"] == 12.0
+        assert day["tokens"] == 150
+        assert day["providers"] == {"claude": 13.0, "gemini": 3.0}
+
+        assert [w["workspace_id"] for w in result["top_workspaces"]] == [str(ws.id)]
+        assert result["top_workspaces"][0]["billed_cents"] == 16.0
+
+        features = {f["feature"]: f["billed_cents"] for f in result["by_feature"]}
+        assert features == {"code_review": 13.0, "summary": 3.0}
+
+    async def test_spend_from_a_deleted_workspace_still_has_a_label(self, db_session):
+        """The cost outlives the workspace; it should not appear nameless."""
+        owner = await _developer(db_session, "owner@example.com", created=_ago(60))
+        billing = CustomerBilling(developer_id=owner.id)
+        db_session.add(billing)
+        await db_session.flush()
+        db_session.add(
+            UsageRecord(
+                customer_id=billing.id,
+                # Letters on purpose: SQLite gives the column NUMERIC affinity,
+                # so an all-digit uuid comes back as a float.
+                workspace_id="deadbeef-0000-4000-8000-00000000cafe",
+                usage_type="llm_input_tokens", provider="claude",
+                total_tokens=10, total_cost_cents=5.0, created_at=_ago(1),
+            )
+        )
+        await db_session.commit()
+
+        result = await stats.ai_spend(db_session, days=7)
+        assert result["top_workspaces"][0]["workspace_name"] == "(deleted workspace)"
+
+
+@pytest.mark.asyncio
+class TestAlerts:
+    """Deliberately short: a list that always has ten entries is one nobody
+    reads. The plan-allowance alert is not covered here — `Plan` uses a
+    PostgreSQL ARRAY column, so no plan row can exist in the SQLite test
+    database."""
+
+    async def test_no_alerts_when_there_is_nothing_to_chase(self, db_session):
+        assert await stats.platform_alerts(db_session) == []
+
+    async def test_an_overdue_invoice_is_raised(self, db_session):
+        owner = await _developer(db_session, "owner@example.com", created=_ago(60))
+        billing = CustomerBilling(developer_id=owner.id)
+        db_session.add(billing)
+        await db_session.flush()
+        db_session.add_all(
+            [
+                Invoice(
+                    customer_id=billing.id, status="open", currency="usd",
+                    total_cents=2000, amount_due_cents=2000,
+                    due_date=TODAY - timedelta(days=2),
+                ),
+                # Open but not yet due: not a problem.
+                Invoice(
+                    customer_id=billing.id, status="open", currency="usd",
+                    total_cents=1000, amount_due_cents=1000,
+                    due_date=TODAY + timedelta(days=9),
+                ),
+            ]
+        )
+        await db_session.commit()
+
+        alerts = {a["kind"]: a for a in await stats.platform_alerts(db_session)}
+        assert alerts["invoices_overdue"]["count"] == 1
+        assert alerts["invoices_overdue"]["amount_cents"] == 2000
+        assert alerts["invoices_overdue"]["severity"] == "high"
+
+    async def test_a_subscription_stripe_could_not_charge_is_raised(self, db_session):
+        owner = await _developer(db_session, "owner@example.com", created=_ago(60))
+        billing = CustomerBilling(developer_id=owner.id)
+        db_session.add(billing)
+        await db_session.flush()
+        db_session.add(
+            Subscription(
+                customer_id=billing.id, status="past_due",
+                stripe_subscription_id="sub_x", stripe_price_id="price_x",
+            )
+        )
+        await db_session.commit()
+
+        alerts = {a["kind"]: a for a in await stats.platform_alerts(db_session)}
+        assert alerts["subscriptions_unpaid"]["count"] == 1
+
+    async def test_a_spend_spike_is_measured_against_the_trailing_week(
+        self, db_session
+    ):
+        today = TODAY.date()
+        db_session.add_all(
+            [
+                PlatformDailyStats(day=today - timedelta(days=n), llm_billed_cents=100.0)
+                for n in range(1, 6)
+            ]
+        )
+        db_session.add(PlatformDailyStats(day=today, llm_billed_cents=500.0))
+        await db_session.commit()
+
+        alerts = {a["kind"]: a for a in await stats.platform_alerts(db_session)}
+        assert alerts["llm_spend_spike"]["amount_cents"] == 500.0
+        assert alerts["llm_spend_spike"]["baseline_cents"] == 100.0
+
+    async def test_a_quiet_run_of_days_is_not_a_spike(self, db_session):
+        """Nothing divided by nothing is not a hundredfold increase."""
+        today = TODAY.date()
+        db_session.add_all(
+            [
+                PlatformDailyStats(day=today - timedelta(days=n), llm_billed_cents=0.0)
+                for n in range(1, 6)
+            ]
+        )
+        db_session.add(PlatformDailyStats(day=today, llm_billed_cents=5.0))
+        await db_session.commit()
+
+        kinds = {a["kind"] for a in await stats.platform_alerts(db_session)}
+        assert "llm_spend_spike" not in kinds
+
+
+@pytest.mark.asyncio
+class TestWorkspaceDetail:
+    async def test_an_unknown_workspace_is_none_rather_than_an_error(self, db_session):
+        assert (
+            await stats.workspace_detail(
+                db_session, "00000000-0000-4000-8000-000000000000"
+            )
+            is None
+        )
+
+    async def test_one_customer_in_one_place(self, db_session):
+        from aexy.models.sprint import SprintTask
+
+        owner = await _developer(db_session, "owner@example.com", created=_ago(60))
+        ws = await _workspace(db_session, "ws", created=_ago(60), owner=owner)
+        member = await _developer(db_session, "m@example.com", created=_ago(60))
+        db_session.add_all(
+            [
+                WorkspaceMember(
+                    workspace_id=ws.id, developer_id=owner.id,
+                    role="owner", status="active", is_billable=True,
+                ),
+                WorkspaceMember(
+                    workspace_id=ws.id, developer_id=member.id,
+                    role="member", status="active", is_billable=False,
+                ),
+                SprintTask(
+                    workspace_id=ws.id, title="work", status="todo",
+                    source_type="manual", source_id=str(uuid4()),
+                    created_at=_ago(2),
+                ),
+            ]
+        )
+        await db_session.commit()
+
+        detail = await stats.workspace_detail(db_session, str(ws.id))
+
+        assert detail["name"] == "ws"
+        assert detail["owner_email"] == "owner@example.com"
+        assert detail["member_count"] == 2
+        assert detail["billable_seats"] == 1
+        # Only modules with something in them, so the page shows use rather
+        # than a wall of zeros.
+        assert detail["module_usage"] == {"sprints": 1}

@@ -19031,6 +19031,87 @@ export interface PlatformSnapshotRefresh {
   notes: string[];
 }
 
+export interface ModuleAdoptionPoint {
+  day: string;
+  module: string;
+  workspaces_active: number;
+  events: number;
+  window_days: number;
+}
+
+export interface ModuleAdoption {
+  days: number;
+  window_days: number;
+  /** So a module count reads as a share, not just a number. */
+  active_workspaces: number;
+  points: ModuleAdoptionPoint[];
+  /** Modules with no honest usage signal — named, not reported as zero. */
+  not_measured: string[];
+}
+
+export interface AiSpendDay {
+  day: string;
+  billed_cents: number;
+  base_cost_cents: number;
+  tokens: number;
+  providers: Record<string, number>;
+}
+
+export interface AiSpendWorkspace {
+  workspace_id: string;
+  workspace_name: string;
+  billed_cents: number;
+  base_cost_cents: number;
+  tokens: number;
+}
+
+export interface AiSpendFeature {
+  feature: string;
+  billed_cents: number;
+  requests: number;
+}
+
+export interface AiSpend {
+  days: number;
+  by_day: AiSpendDay[];
+  top_workspaces: AiSpendWorkspace[];
+  by_feature: AiSpendFeature[];
+}
+
+export interface PlatformAlert {
+  kind: string;
+  severity: string;
+  count?: number | null;
+  amount_cents?: number | null;
+  baseline_cents?: number | null;
+  href?: string | null;
+  workspaces: { workspace_id: string; workspace_name: string; used?: number; allowance?: number }[];
+}
+
+export interface AdminWorkspaceDetail {
+  workspace_id: string;
+  name: string;
+  slug: string;
+  is_active: boolean;
+  created_at: string;
+  owner_name: string | null;
+  owner_email: string | null;
+  plan_name: string | null;
+  plan_tier: string | null;
+  has_plan_override: boolean;
+  billing_model: string | null;
+  subscription_status: string | null;
+  current_period_end: string | null;
+  member_count: number;
+  billable_seats: number;
+  llm_requests_this_period: number;
+  llm_tokens_this_period: number;
+  llm_billed_cents_this_period: number;
+  llm_base_cost_cents_this_period: number;
+  module_usage: Record<string, number>;
+  last_activity_at: string | null;
+}
+
 export interface AdminDashboardStats {
   total_workspaces: number;
   total_users: number;
@@ -19225,6 +19306,32 @@ export const platformAdminApi = {
     const response = await api.post("/platform-admin/stats/refresh", null, {
       params: { backfill_days: backfillDays },
     });
+    return response.data;
+  },
+
+  getModuleAdoption: async (days = 90): Promise<ModuleAdoption> => {
+    const response = await api.get("/platform-admin/stats/adoption", {
+      params: { days },
+    });
+    return response.data;
+  },
+
+  getAiSpend: async (days = 30): Promise<AiSpend> => {
+    const response = await api.get("/platform-admin/stats/ai-spend", {
+      params: { days },
+    });
+    return response.data;
+  },
+
+  getAlerts: async (): Promise<{ alerts: PlatformAlert[] }> => {
+    const response = await api.get("/platform-admin/stats/alerts");
+    return response.data;
+  },
+
+  getWorkspaceDetail: async (workspaceId: string): Promise<AdminWorkspaceDetail> => {
+    const response = await api.get(
+      `/platform-admin/workspaces/${workspaceId}/detail`,
+    );
     return response.data;
   },
 };

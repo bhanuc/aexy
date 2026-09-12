@@ -30,12 +30,13 @@ from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from aexy.models.billing import Invoice, Subscription, UsageRecord
 from aexy.models.developer import Developer
 from aexy.models.entity_activity import EntityActivity
 from aexy.models.plan import Plan
-from aexy.models.platform_stats import PlatformDailyStats
+from aexy.models.platform_stats import PlatformDailyStats, PlatformModuleAdoption
 from aexy.models.work_update import WorkUpdate
 from aexy.models.workspace import Workspace, WorkspaceMember, WorkspaceSubscription
 
@@ -128,6 +129,17 @@ class PlatformStatsService:
                 "figures are not recoverable after the fact and are left at zero"
             )
 
+        if is_today:
+            # Adoption is a trailing-window count over tables that still carry
+            # their dates, so a past day could be recomputed — but it is a
+            # scan per module, and the backfill loop would run it once a day
+            # for every day filled in. The daily job is where it belongs.
+            try:
+                await self.compute_module_adoption(day)
+            except Exception:
+                logger.exception("Module adoption failed for %s", day)
+                notes.append("module adoption could not be computed")
+
         values["notes"] = notes
         values["computed_at"] = datetime.now(timezone.utc)
 
@@ -141,6 +153,64 @@ class PlatformStatsService:
             created = False
         await self.db.flush()
         return SnapshotResult(day=day, created=created, notes=notes)
+
+    async def compute_module_adoption(self, day: date | None = None) -> dict[str, int]:
+        """Count, per module, the workspaces that did that module's work.
+
+        Runs over the same trailing window as `workspaces_active_30d`, so the
+        matrix and the headline agree about what "active" means.
+        """
+        day = day or datetime.now(timezone.utc).date()
+        _, end = _day_bounds(day)
+        window = end - timedelta(days=ACTIVITY_WINDOW_DAYS)
+
+        counts: dict[str, int] = {}
+        for module, stmt in _module_signals().items():
+            sub = stmt.subquery()
+            row = (
+                await self.db.execute(
+                    select(
+                        func.count(func.distinct(sub.c.ws)),
+                        func.count(),
+                    ).where(sub.c.ts >= window, sub.c.ts < end, sub.c.ws.isnot(None))
+                )
+            ).one()
+            workspaces_active, events = int(row[0] or 0), int(row[1] or 0)
+            counts[module] = workspaces_active
+
+            existing = (
+                await self.db.execute(
+                    select(PlatformModuleAdoption).where(
+                        PlatformModuleAdoption.day == day,
+                        PlatformModuleAdoption.module == module,
+                    )
+                )
+            ).scalar_one_or_none()
+            if existing is None:
+                self.db.add(
+                    PlatformModuleAdoption(
+                        day=day,
+                        module=module,
+                        workspaces_active=workspaces_active,
+                        events=events,
+                        window_days=ACTIVITY_WINDOW_DAYS,
+                    )
+                )
+            else:
+                existing.workspaces_active = workspaces_active
+                existing.events = events
+                existing.window_days = ACTIVITY_WINDOW_DAYS
+        await self.db.flush()
+        return counts
+
+    async def module_adoption(self, days: int = 90) -> list[PlatformModuleAdoption]:
+        cutoff = datetime.now(timezone.utc).date() - timedelta(days=days)
+        rows = await self.db.execute(
+            select(PlatformModuleAdoption)
+            .where(PlatformModuleAdoption.day >= cutoff)
+            .order_by(PlatformModuleAdoption.day.asc())
+        )
+        return list(rows.scalars().all())
 
     async def backfill(self, days: int = 90) -> list[SnapshotResult]:
         """Fill in the days before this table existed, as far as the source
@@ -403,6 +473,411 @@ class PlatformStatsService:
             },
             notes,
         )
+
+
+# =============================================================================
+# Drilldowns computed on demand
+# =============================================================================
+#
+# These read the live tables rather than the snapshot. They are bounded — one
+# window, one GROUP BY, or one workspace — so there is nothing to gain by
+# storing them, and a stale answer would be worse than a slightly slower one.
+
+
+async def ai_spend(db: AsyncSession, days: int = 30) -> dict[str, Any]:
+    """Where the AI money went: by day, by provider, by workspace, by feature."""
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(days=days)
+
+    by_day_rows = await db.execute(
+        select(
+            func.date(UsageRecord.created_at).label("day"),
+            UsageRecord.provider,
+            func.coalesce(func.sum(UsageRecord.total_cost_cents), 0.0),
+            func.coalesce(func.sum(UsageRecord.base_cost_cents), 0.0),
+            func.coalesce(func.sum(UsageRecord.total_tokens), 0),
+        )
+        .where(UsageRecord.created_at >= start, UsageRecord.created_at < end)
+        .group_by("day", UsageRecord.provider)
+        .order_by("day")
+    )
+    by_day: dict[str, dict[str, Any]] = {}
+    for day, provider, billed, cost, tokens in by_day_rows:
+        key = str(day)
+        entry = by_day.setdefault(
+            key, {"day": key, "billed_cents": 0.0, "base_cost_cents": 0.0, "tokens": 0, "providers": {}}
+        )
+        entry["billed_cents"] += float(billed or 0)
+        entry["base_cost_cents"] += float(cost or 0)
+        entry["tokens"] += int(tokens or 0)
+        entry["providers"][provider or "unknown"] = float(billed or 0)
+
+    # Aggregate first, then look the names up. Spend outlives the workspace
+    # that made it, so an outer join here would be carrying a mostly-null
+    # table through a GROUP BY for one string; two small queries say the same
+    # thing more plainly.
+    billed_sum = func.coalesce(func.sum(UsageRecord.total_cost_cents), 0.0)
+    top_rows = list(
+        await db.execute(
+            select(
+                UsageRecord.workspace_id,
+                billed_sum,
+                func.coalesce(func.sum(UsageRecord.base_cost_cents), 0.0),
+                func.coalesce(func.sum(UsageRecord.total_tokens), 0),
+            )
+            .where(
+                UsageRecord.created_at >= start,
+                UsageRecord.created_at < end,
+                UsageRecord.workspace_id.isnot(None),
+            )
+            .group_by(UsageRecord.workspace_id)
+            .order_by(billed_sum.desc())
+            .limit(10)
+        )
+    )
+    spender_ids = [row[0] for row in top_rows]
+    names: dict[str, str] = {}
+    if spender_ids:
+        # Guarded rather than relying on an empty IN: a placeholder id would
+        # be handed to a uuid column, and Postgres rejects `''` outright.
+        names = dict(
+            (
+                await db.execute(
+                    select(Workspace.id, Workspace.name).where(
+                        Workspace.id.in_(spender_ids)
+                    )
+                )
+            ).all()
+        )
+
+    feature_rows = await db.execute(
+        select(
+            UsageRecord.analysis_type,
+            func.coalesce(func.sum(UsageRecord.total_cost_cents), 0.0).label("billed"),
+            func.count(UsageRecord.id),
+        )
+        .where(UsageRecord.created_at >= start, UsageRecord.created_at < end)
+        .group_by(UsageRecord.analysis_type)
+        .order_by(func.coalesce(func.sum(UsageRecord.total_cost_cents), 0.0).desc())
+        .limit(20)
+    )
+
+    return {
+        "days": days,
+        "by_day": sorted(by_day.values(), key=lambda d: d["day"]),
+        "top_workspaces": [
+            {
+                "workspace_id": str(ws_id),
+                # A workspace deleted since the spend was recorded leaves the
+                # cost behind with no name to hang it on.
+                "workspace_name": names.get(ws_id) or "(deleted workspace)",
+                "billed_cents": float(billed or 0),
+                "base_cost_cents": float(cost or 0),
+                "tokens": int(tokens or 0),
+            }
+            for ws_id, billed, cost, tokens in top_rows
+        ],
+        "by_feature": [
+            {
+                "feature": feature or "unattributed",
+                "billed_cents": float(billed or 0),
+                "requests": int(requests or 0),
+            }
+            for feature, billed, requests in feature_rows
+        ],
+    }
+
+
+async def platform_alerts(db: AsyncSession) -> list[dict[str, Any]]:
+    """What a platform admin should look at today.
+
+    Deliberately short. A list that always has ten things on it is a list
+    nobody reads, so each entry here is either money at risk or a workspace
+    that has hit a wall.
+    """
+    alerts: list[dict[str, Any]] = []
+    now = datetime.now(timezone.utc)
+
+    # Money somebody owes and has not paid.
+    overdue = (
+        await db.execute(
+            select(
+                func.count(Invoice.id),
+                func.coalesce(func.sum(Invoice.amount_due_cents), 0),
+            ).where(Invoice.status == "open", Invoice.due_date < now)
+        )
+    ).one()
+    if (overdue[0] or 0) > 0:
+        alerts.append(
+            {
+                "kind": "invoices_overdue",
+                "severity": "high",
+                "count": int(overdue[0]),
+                "amount_cents": float(overdue[1] or 0),
+                "href": "/settings/admin-invoices",
+            }
+        )
+
+    # A subscription Stripe could not charge. Left alone it silently becomes
+    # a cancellation.
+    unpaid = await db.scalar(
+        select(func.count(Subscription.id)).where(
+            Subscription.status.in_(("past_due", "unpaid"))
+        )
+    )
+    if (unpaid or 0) > 0:
+        alerts.append(
+            {"kind": "subscriptions_unpaid", "severity": "high", "count": int(unpaid)}
+        )
+
+    # Workspaces that have burned through the AI their plan includes. They are
+    # either about to be billed for overage or about to be refused.
+    over_allowance = await db.execute(
+        select(Workspace.id, Workspace.name, Workspace.llm_tokens_used_this_month, Plan.free_llm_tokens_per_month)
+        .join(Plan, Plan.id == Workspace.plan_id)
+        .where(
+            Workspace.is_active.is_(True),
+            Plan.free_llm_tokens_per_month > 0,
+            Workspace.llm_tokens_used_this_month >= Plan.free_llm_tokens_per_month,
+        )
+        .limit(25)
+    )
+    over = [
+        {"workspace_id": str(ws_id), "workspace_name": name, "used": int(used or 0), "allowance": int(allowance or 0)}
+        for ws_id, name, used, allowance in over_allowance
+    ]
+    if over:
+        alerts.append(
+            {
+                "kind": "llm_allowance_exhausted",
+                "severity": "medium",
+                "count": len(over),
+                "workspaces": over[:10],
+            }
+        )
+
+    # A day of AI spend well above the recent norm. Compared against the
+    # trailing week rather than yesterday, so one quiet Sunday does not make
+    # Monday look like a spike.
+    recent = (
+        (
+            await db.execute(
+                select(PlatformDailyStats)
+                .order_by(PlatformDailyStats.day.desc())
+                .limit(8)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if len(recent) >= 4:
+        today, *history = recent
+        baseline = sum(r.llm_billed_cents for r in history) / len(history)
+        if baseline > 0 and today.llm_billed_cents > baseline * 2:
+            alerts.append(
+                {
+                    "kind": "llm_spend_spike",
+                    "severity": "medium",
+                    "amount_cents": today.llm_billed_cents,
+                    "baseline_cents": baseline,
+                    "href": "/admin/ai-spend",
+                }
+            )
+
+    return alerts
+
+
+async def workspace_detail(db: AsyncSession, workspace_id: str) -> dict[str, Any] | None:
+    """Everything about one workspace, in one place.
+
+    The admin area could list workspaces and, separately, bill them. Answering
+    "what is going on with this customer" meant three pages and a guess.
+    """
+    from aexy.models.workspace import WorkspacePlanOverride
+
+    workspace = (
+        await db.execute(
+            select(Workspace)
+            .where(Workspace.id == workspace_id)
+            .options(selectinload(Workspace.owner), selectinload(Workspace.plan))
+        )
+    ).scalar_one_or_none()
+    if workspace is None:
+        return None
+
+    subscription = (
+        await db.execute(
+            select(WorkspaceSubscription).where(
+                WorkspaceSubscription.workspace_id == workspace_id
+            )
+        )
+    ).scalar_one_or_none()
+
+    override = (
+        await db.execute(
+            select(WorkspacePlanOverride).where(
+                WorkspacePlanOverride.workspace_id == workspace_id
+            )
+        )
+    ).scalar_one_or_none()
+
+    seats = await db.scalar(
+        select(func.count(WorkspaceMember.id)).where(
+            WorkspaceMember.workspace_id == workspace_id,
+            WorkspaceMember.status == "active",
+            WorkspaceMember.is_billable.is_(True),
+        )
+    )
+    members = await db.scalar(
+        select(func.count(WorkspaceMember.id)).where(
+            WorkspaceMember.workspace_id == workspace_id,
+            WorkspaceMember.status == "active",
+        )
+    )
+
+    period_start, _ = _month_bounds(datetime.now(timezone.utc))
+    usage = (
+        await db.execute(
+            select(
+                func.count(UsageRecord.id),
+                func.coalesce(func.sum(UsageRecord.total_tokens), 0),
+                func.coalesce(func.sum(UsageRecord.total_cost_cents), 0.0),
+                func.coalesce(func.sum(UsageRecord.base_cost_cents), 0.0),
+            ).where(
+                UsageRecord.workspace_id == workspace_id,
+                UsageRecord.created_at >= period_start,
+            )
+        )
+    ).one()
+
+    # Which modules this workspace actually uses, over the same window the
+    # platform matrix uses.
+    end = datetime.now(timezone.utc)
+    window = end - timedelta(days=ACTIVITY_WINDOW_DAYS)
+    module_usage: dict[str, int] = {}
+    for module, stmt in _module_signals().items():
+        sub = stmt.subquery()
+        count = await db.scalar(
+            select(func.count()).where(
+                sub.c.ws == workspace_id, sub.c.ts >= window, sub.c.ts < end
+            )
+        )
+        if count:
+            module_usage[module] = int(count)
+
+    last_activity = await db.scalar(
+        select(func.max(EntityActivity.created_at)).where(
+            EntityActivity.workspace_id == workspace_id
+        )
+    )
+
+    plan = workspace.plan
+    return {
+        "workspace_id": str(workspace.id),
+        "name": workspace.name,
+        "slug": workspace.slug,
+        "is_active": workspace.is_active,
+        "created_at": workspace.created_at,
+        "owner_name": workspace.owner.name if workspace.owner else None,
+        "owner_email": workspace.owner.email if workspace.owner else None,
+        "plan_name": plan.name if plan else None,
+        "plan_tier": plan.tier if plan else None,
+        "has_plan_override": override is not None,
+        "billing_model": subscription.billing_model if subscription else None,
+        "subscription_status": subscription.status if subscription else None,
+        "current_period_end": subscription.current_period_end if subscription else None,
+        "member_count": int(members or 0),
+        "billable_seats": int(seats or 0),
+        "llm_requests_this_period": int(usage[0] or 0),
+        "llm_tokens_this_period": int(usage[1] or 0),
+        "llm_billed_cents_this_period": float(usage[2] or 0.0),
+        "llm_base_cost_cents_this_period": float(usage[3] or 0.0),
+        "module_usage": module_usage,
+        "last_activity_at": last_activity,
+    }
+
+
+# =============================================================================
+# Module adoption
+# =============================================================================
+#
+# The platform figures say how many workspaces exist and what they pay; this
+# says what they *do*. Each entry names the table whose rows mean somebody did
+# that module's work — a task written, a ticket raised, a file uploaded — not
+# the table that means somebody configured it. Creating a chat channel is
+# configuration and happens once; sending a message is use, so chat counts
+# messages through their channel.
+#
+# A module with no honest signal is left out rather than reported as zero:
+# `MODULES_WITHOUT_SIGNAL` names them so the page can say "not measured"
+# instead of "nobody uses this".
+
+
+def _module_signals() -> dict[str, Any]:
+    """module id -> a select of (workspace id, timestamp) meaning "work happened"."""
+    from aexy.models.agent_action_log import AgentActionLog
+    from aexy.models.booking.booking import Booking
+    from aexy.models.career import HiringCandidate
+    from aexy.models.chat import ChatChannel, ChatMessage
+    from aexy.models.compliance import TrainingAssignment
+    from aexy.models.crm import CRMRecord
+    from aexy.models.documentation import Document
+    from aexy.models.drive import DriveFile
+    from aexy.models.email_marketing import EmailCampaign
+    from aexy.models.forms import FormSubmission
+    from aexy.models.gtm import VisitorSession
+    from aexy.models.insights_snapshot import InsightsSnapshot
+    from aexy.models.leave import LeaveRequest
+    from aexy.models.service_desk import ServiceDeskTicket
+    from aexy.models.sprint import SprintTask
+    from aexy.models.ticketing import Ticket
+    from aexy.models.tracking import TimeEntry
+
+    def simple(model: Any, workspace_col: str, ts_col: str):
+        return select(
+            getattr(model, workspace_col).label("ws"),
+            getattr(model, ts_col).label("ts"),
+        )
+
+    return {
+        "sprints": simple(SprintTask, "workspace_id", "created_at"),
+        "docs": simple(Document, "workspace_id", "created_at"),
+        "drive": simple(DriveFile, "workspace_id", "uploaded_at"),
+        "crm": simple(CRMRecord, "workspace_id", "created_at"),
+        "service_desk": simple(ServiceDeskTicket, "workspace_id", "created_at"),
+        "tickets": simple(Ticket, "workspace_id", "created_at"),
+        "hiring": simple(HiringCandidate, "workspace_id", "created_at"),
+        "booking": simple(Booking, "workspace_id", "created_at"),
+        "email_marketing": simple(EmailCampaign, "workspace_id", "created_at"),
+        "leave": simple(LeaveRequest, "workspace_id", "created_at"),
+        "compliance": simple(TrainingAssignment, "workspace_id", "created_at"),
+        "agents": simple(AgentActionLog, "workspace_id", "created_at"),
+        "insights": simple(InsightsSnapshot, "workspace_id", "created_at"),
+        "gtm": simple(VisitorSession, "workspace_id", "created_at"),
+        "tracking": simple(TimeEntry, "workspace_id", "created_at"),
+        "forms": simple(FormSubmission, "workspace_id", "submitted_at"),
+        # A channel is configuration; a message is use.
+        "chat": select(
+            ChatChannel.workspace_id.label("ws"), ChatMessage.created_at.label("ts")
+        ).join(ChatChannel, ChatChannel.id == ChatMessage.channel_id),
+    }
+
+
+#: Modules with nothing that separates "somebody used this" from "somebody
+#: switched it on". Named so the page says "not measured" rather than "0".
+MODULES_WITHOUT_SIGNAL: tuple[str, ...] = (
+    "automations",
+    "community",
+    "dashboard",
+    "learning",
+    "mcp",
+    "oncall",
+    "organization",
+    "reports",
+    "reviews",
+    "tables",
+    "uptime",
+)
 
 
 async def plan_tier_counts(db: AsyncSession) -> dict[str, int]:

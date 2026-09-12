@@ -5,6 +5,10 @@ import { useAuth } from "@/hooks/useAuth";
 import {
   platformAdminApi,
   AdminDashboardStats,
+  AdminWorkspaceDetail,
+  AiSpend,
+  ModuleAdoption,
+  PlatformAlert,
   PlatformOverview,
   PlatformSnapshotRefresh,
   PlatformStatsSeries,
@@ -206,5 +210,54 @@ export function useRefreshPlatformStats() {
       // The billing totals card reads the same snapshot.
       queryClient.invalidateQueries({ queryKey: ["platform-billing-totals"] });
     },
+  });
+}
+
+
+/** Which modules are actually being used, day by day. */
+export function useModuleAdoption(days = 90) {
+  const { isAdmin } = useAdmin();
+
+  return useQuery<ModuleAdoption>({
+    queryKey: ["platform-module-adoption", days],
+    queryFn: () => platformAdminApi.getModuleAdoption(days),
+    enabled: isAdmin,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** Where the AI money went. Read live, so it is current rather than nightly. */
+export function useAiSpend(days = 30) {
+  const { isAdmin } = useAdmin();
+
+  return useQuery<AiSpend>({
+    queryKey: ["platform-ai-spend", days],
+    queryFn: () => platformAdminApi.getAiSpend(days),
+    enabled: isAdmin,
+    staleTime: 60 * 1000,
+  });
+}
+
+/** What to look at today. Usually nothing, which is the point. */
+export function usePlatformAlerts() {
+  const { isAdmin } = useAdmin();
+
+  return useQuery<PlatformAlert[]>({
+    queryKey: ["platform-alerts"],
+    queryFn: async () => (await platformAdminApi.getAlerts()).alerts,
+    enabled: isAdmin,
+    staleTime: 60 * 1000,
+  });
+}
+
+/** One customer, in one place. */
+export function useAdminWorkspaceDetail(workspaceId: string | null) {
+  const { isAdmin } = useAdmin();
+
+  return useQuery<AdminWorkspaceDetail>({
+    queryKey: ["platform-workspace-detail", workspaceId],
+    queryFn: () => platformAdminApi.getWorkspaceDetail(workspaceId!),
+    enabled: isAdmin && !!workspaceId,
+    staleTime: 60 * 1000,
   });
 }

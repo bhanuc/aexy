@@ -20,15 +20,45 @@ import { formatDistanceToNow } from "date-fns";
 
 import {
   useAdminEmailLogs,
+  usePlatformAlerts,
   usePlatformOverview,
   useRefreshPlatformStats,
 } from "@/hooks/useAdmin";
+import type { PlatformAlert } from "@/lib/api";
 import {
   BreakdownList,
   KpiCard,
   formatCents,
   formatCount,
 } from "@/components/admin/platformStats";
+
+/**
+ * Each alert kind names its own message key. A computed key would be shorter
+ * and would type-check as `never`, which is how a missing translation becomes
+ * a blank line in production instead of a build error.
+ */
+function alertMessage(
+  t: ReturnType<typeof useTranslations<"admin">>,
+  alert: PlatformAlert,
+): string {
+  const count = alert.count ?? 0;
+  const amount = formatCents(alert.amount_cents ?? 0);
+  switch (alert.kind) {
+    case "invoices_overdue":
+      return t("alerts.invoices_overdue", { count, amount });
+    case "subscriptions_unpaid":
+      return t("alerts.subscriptions_unpaid", { count });
+    case "llm_allowance_exhausted":
+      return t("alerts.llm_allowance_exhausted", { count });
+    case "llm_spend_spike":
+      return t("alerts.llm_spend_spike", {
+        amount,
+        baseline: formatCents(alert.baseline_cents ?? 0),
+      });
+    default:
+      return alert.kind;
+  }
+}
 
 function StatusBadge({ status }: { status: string }) {
   const config: Record<string, { color: string; icon: React.ElementType }> = {
@@ -51,6 +81,7 @@ export default function AdminDashboardPage() {
   const t = useTranslations("admin");
   const { data: overview, isLoading, error } = usePlatformOverview(30);
   const refresh = useRefreshPlatformStats();
+  const { data: alerts } = usePlatformAlerts();
   const { data: recentEmails, isLoading: emailsLoading } = useAdminEmailLogs({
     page: 1,
     per_page: 5,
@@ -118,6 +149,48 @@ export default function AdminDashboardPage() {
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
           <p className="text-foreground">{t("platform.stale")}</p>
         </div>
+      )}
+
+      {/* What to look at today. Usually nothing, which is the point — a list
+          that always has ten entries is a list nobody reads. */}
+      {(alerts?.length ?? 0) > 0 && (
+        <section data-testid="platform-alerts" className="space-y-2">
+          {alerts?.map((alert) => (
+            <div
+              key={alert.kind}
+              className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4 text-sm ${
+                alert.severity === "high"
+                  ? "border-red-500/40 bg-red-500/5"
+                  : "border-amber-500/40 bg-amber-500/5"
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <AlertTriangle
+                  className={`mt-0.5 h-4 w-4 shrink-0 ${
+                    alert.severity === "high" ? "text-red-400" : "text-amber-500"
+                  }`}
+                />
+                <div>
+                  <p className="text-foreground">{alertMessage(t, alert)}</p>
+                  {alert.workspaces.length > 0 && (
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {alert.workspaces
+                        .slice(0, 4)
+                        .map((w) => w.workspace_name)
+                        .join(", ")}
+                      {alert.workspaces.length > 4 && " …"}
+                    </p>
+                  )}
+                </div>
+              </div>
+              {alert.href && (
+                <Link href={alert.href} className="shrink-0 text-blue-400 hover:underline">
+                  {t("alerts.open")}
+                </Link>
+              )}
+            </div>
+          ))}
+        </section>
       )}
 
       {overview?.notes?.map((note) => (

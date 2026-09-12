@@ -1,6 +1,7 @@
 """Shapes for the platform overview and its daily series."""
 
 from datetime import date, datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -93,3 +94,111 @@ class PlatformSnapshotRefreshResponse(BaseModel):
     created: bool
     backfilled: int = 0
     notes: list[str] = Field(default_factory=list)
+
+
+# =============================================================================
+# Module adoption
+# =============================================================================
+
+
+class ModuleAdoptionPoint(BaseModel):
+    day: date
+    module: str
+    workspaces_active: int
+    #: How many things were created, so a module carrying real volume reads
+    #: differently from one that saw a single row all month.
+    events: int
+    window_days: int
+
+
+class ModuleAdoptionResponse(BaseModel):
+    days: int
+    window_days: int
+    #: Active workspaces right now, so a module count means something as a
+    #: share rather than only as a number.
+    active_workspaces: int
+    points: list[ModuleAdoptionPoint] = Field(default_factory=list)
+    #: Modules with nothing that separates "somebody used this" from "somebody
+    #: switched it on". Named rather than reported as zero.
+    not_measured: list[str] = Field(default_factory=list)
+
+
+# =============================================================================
+# AI spend
+# =============================================================================
+
+
+class AiSpendDay(BaseModel):
+    day: str
+    billed_cents: float
+    base_cost_cents: float
+    tokens: int
+    providers: dict[str, float] = Field(default_factory=dict)
+
+
+class AiSpendWorkspace(BaseModel):
+    workspace_id: str
+    workspace_name: str
+    billed_cents: float
+    base_cost_cents: float
+    tokens: int
+
+
+class AiSpendFeature(BaseModel):
+    feature: str
+    billed_cents: float
+    requests: int
+
+
+class AiSpendResponse(BaseModel):
+    days: int
+    by_day: list[AiSpendDay] = Field(default_factory=list)
+    top_workspaces: list[AiSpendWorkspace] = Field(default_factory=list)
+    by_feature: list[AiSpendFeature] = Field(default_factory=list)
+
+
+# =============================================================================
+# Alerts and the per-workspace view
+# =============================================================================
+
+
+class PlatformAlert(BaseModel):
+    """One thing worth looking at. Kept deliberately short — a list that
+    always has ten entries is a list nobody reads."""
+
+    kind: str
+    severity: str
+    count: int | None = None
+    amount_cents: float | None = None
+    baseline_cents: float | None = None
+    href: str | None = None
+    workspaces: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class PlatformAlertsResponse(BaseModel):
+    alerts: list[PlatformAlert] = Field(default_factory=list)
+
+
+class WorkspaceDetailResponse(BaseModel):
+    workspace_id: str
+    name: str
+    slug: str
+    is_active: bool
+    created_at: datetime
+    owner_name: str | None = None
+    owner_email: str | None = None
+    plan_name: str | None = None
+    plan_tier: str | None = None
+    has_plan_override: bool = False
+    billing_model: str | None = None
+    subscription_status: str | None = None
+    current_period_end: datetime | None = None
+    member_count: int = 0
+    billable_seats: int = 0
+    llm_requests_this_period: int = 0
+    llm_tokens_this_period: int = 0
+    llm_billed_cents_this_period: float = 0.0
+    llm_base_cost_cents_this_period: float = 0.0
+    #: module id -> things created in the trailing window. Absent means none.
+    module_usage: dict[str, int] = Field(default_factory=dict)
+    last_activity_at: datetime | None = None

@@ -7,8 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.40.0] - 2026-09-12
 
-The platform admin area is reachable, and its dashboard answers whether the
-business is growing rather than only what it looks like this instant.
+The platform admin area is reachable, its dashboard answers whether the
+business is growing rather than only what it looks like this instant, and it
+can say what customers actually *do*.
 
 ### Added: a way in
 
@@ -59,6 +60,48 @@ The figure counted `WorkspaceMember.updated_at` — the modification time of a
 membership row, which is not activity. It now counts workspaces where somebody
 created or changed a document, task or project, posted a progress update, or
 spent AI budget in the trailing 30 days.
+
+### Added: which modules are actually being used
+
+The admin area could say how many workspaces exist and what they pay. It could
+not say what any of them do — whether the CRM is carrying real work or Service
+Desk is the only thing anyone opens. That is the question product planning
+needs and nothing answered it.
+
+**Adoption** is a matrix of module against day: how many workspaces created
+something in each module in the trailing 30 days, and how many things they
+created, so a module carrying real volume reads differently from one that saw
+a single row all month. Each module's signal is the table whose rows mean
+somebody did that module's *work* rather than switched it on — creating a chat
+channel is configuration and happens once, so chat counts messages.
+
+Eleven modules have nothing that separates use from configuration. They are
+named on the page as "not measured" rather than reported as zero, because a
+module nobody can measure must not read as a module nobody uses.
+
+### Added: where the AI money goes
+
+**AI spend** breaks the bill down by day and provider, by workspace, and by
+the feature that spent it. Read live rather than from the nightly snapshot: a
+stale answer to "who is burning the budget right now" would be worse than a
+slightly slower one.
+
+### Added: one customer, in one place
+
+The list said who exists; billing said what they pay; neither said what was
+going on with a particular customer. Clicking a workspace now opens a page
+with the owner, plan and any override, subscription and seats, AI billed this
+period against what it cost to serve, the modules they actually use, and when
+anyone last did anything.
+
+### Added: what to look at today
+
+The dashboard now leads with alerts, and usually has none — a list that always
+has ten entries is a list nobody reads. It raises overdue invoices,
+subscriptions Stripe could not charge (which become cancellations if left),
+workspaces that have used the AI their plan includes, and a day of AI spend
+more than double the trailing week's average. A quiet week does not become a
+spike: nothing divided by nothing is not a hundredfold increase.
 
 ### Changed: the platform billing totals are served from the snapshot
 
@@ -141,6 +184,14 @@ the secret alongside them, requires workspace membership.
 predefined rows into shared tables. One carried the comment "admin only in
 production". Both now require a platform admin. The rest of `/gamification`
 requires a token.
+
+### Fixed: a meeting webhook crashed on a body it should accept
+
+`POST /workflow-events/webhooks/meeting` read nested objects out of the body
+without checking they were objects. Senders disagree: Calendly puts an object
+under `event`, others put the event *name* there, and `"booked".get("uuid")`
+is an `AttributeError` — a 500 on a webhook, which the sender then retries
+forever. Every nested lookup now reads as empty rather than raising.
 
 ### Fixed: the webhook URL list always failed
 

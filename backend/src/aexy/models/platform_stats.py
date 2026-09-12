@@ -16,7 +16,16 @@ from datetime import date, datetime
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import BigInteger, Date, DateTime, Float, Integer, func
+from sqlalchemy import (
+    BigInteger,
+    Date,
+    DateTime,
+    Float,
+    Integer,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -111,4 +120,42 @@ class PlatformDailyStats(Base):
         return f"<PlatformDailyStats {self.day} mrr={self.mrr_cents}>"
 
 
-__all__ = ["PlatformDailyStats"]
+class PlatformModuleAdoption(Base):
+    """How many workspaces used one module, on one day.
+
+    The platform figures say how many workspaces exist and what they pay. This
+    says what they *do* — whether the CRM is carrying real work or Service Desk
+    is the only thing anyone opens. Written daily for the same reason as the
+    rest: "how many workspaces used Hiring in June" cannot be recovered once
+    the window has passed.
+    """
+
+    __tablename__ = "platform_module_adoption"
+    __table_args__ = (
+        UniqueConstraint("day", "module", name="uq_platform_module_adoption_day_module"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+    day: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    #: An id from the app catalog: sprints, crm, service_desk, …
+    module: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    workspaces_active: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    #: How many things were created, so the page can tell a module carrying
+    #: real volume from one that saw a single row all month.
+    events: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    #: How far back `workspaces_active` looked, so changing the window later
+    #: does not silently reinterpret old rows.
+    window_days: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"<PlatformModuleAdoption {self.day} {self.module}={self.workspaces_active}>"
+
+
+__all__ = ["PlatformDailyStats", "PlatformModuleAdoption"]

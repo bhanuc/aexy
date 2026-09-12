@@ -18,6 +18,8 @@ import {
   TrendingUp,
   SlidersHorizontal,
   FileText,
+  Grid3x3,
+  Sparkles,
 } from "lucide-react";
 
 import { useAuth } from "@/hooks/useAuth";
@@ -34,6 +36,16 @@ const adminNavItems = [
     title: "Growth",
     href: "/admin/growth",
     icon: TrendingUp,
+  },
+  {
+    title: "Adoption",
+    href: "/admin/adoption",
+    icon: Grid3x3,
+  },
+  {
+    title: "AI spend",
+    href: "/admin/ai-spend",
+    icon: Sparkles,
   },
   {
     title: "Email Logs",
