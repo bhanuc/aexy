@@ -26,6 +26,7 @@ import {
     Clock,
     Send,
     ExternalLink,
+    Shield,
 } from "lucide-react";
 import React, { useState, useMemo, useCallback } from "react";
 import { Button } from "../ui/button";
@@ -33,6 +34,8 @@ import { useNotionDocs } from "@/hooks/useNotionDocs";
 import { useDocumentSpaces } from "@/hooks/useDocumentSpaces";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useSidebarBadges } from "@/hooks/useSidebarBadges";
+import { useAdmin } from "@/hooks/useAdmin";
+import { useTranslations } from "next-intl";
 import { useSidebarLayout } from "@/hooks/useSidebarLayout";
 import { useSidebarStore } from "@/stores/sidebarStore";
 import { useAppAccess } from "@/hooks/useAppAccess";
@@ -106,6 +109,11 @@ interface DiscoverItem {
 const SKELETON_ROWS = ["60%", "45%", "70%", "40%", "55%", "65%", "38%", "50%"];
 
 export function Sidebar({ className, user, logout }: SidebarProps) {
+    // The platform admin area has never been linked from anywhere — it was
+    // reachable only by typing /admin. Shown to the people ADMIN_EMAILS names
+    // and to nobody else.
+    const { isAdmin: isPlatformAdmin } = useAdmin();
+    const tAdmin = useTranslations("admin");
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const params = useParams();
@@ -1079,6 +1087,20 @@ export function Sidebar({ className, user, logout }: SidebarProps) {
                         </div>
 
                         <nav className="grid gap-1">
+                            {isPlatformAdmin && (
+                                <Link
+                                    href="/admin"
+                                    data-testid="sidebar-platform-admin"
+                                    className={cn(
+                                        "group flex items-center gap-x-3 rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground text-amber-500 transition-all",
+                                        isCollapsed && "justify-center px-2"
+                                    )}
+                                    title={tAdmin("platformAdmin")}
+                                >
+                                    <Shield className="h-4 w-4 shrink-0" />
+                                    {!isCollapsed && <span>{tAdmin("platformAdmin")}</span>}
+                                </Link>
+                            )}
                             <Link
                                 href="/settings"
                                 className={cn(

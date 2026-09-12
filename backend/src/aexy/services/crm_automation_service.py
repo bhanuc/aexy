@@ -976,6 +976,37 @@ class CRMAutomationService:
         action_index: int | None = None,
     ) -> dict:
         """Execute a single automation action."""
+        # Legacy shape: automations saved before the builder wrote node config
+        # flat carry a doubly-wrapped `{"config": {...actual...}}`. The action
+        # handlers read the real keys off the top level, so without unwrapping
+        # them here every such step ran against an empty config — create_task
+        # ignored its title, send_email lost its body. No real action uses a
+        # lone "config" key, so a single-key {"config": dict} is unambiguous.
+        if (
+            isinstance(config, dict)
+            and set(config) == {"config"}
+            and isinstance(config["config"], dict)
+        ):
+            config = config["config"]
+
+        # `send_notification` was an action id in templates shipped before
+        # 9502f717; the builder now emits `notify_user`, but automations created
+        # from the old templates still carry it and failed every run as
+        # "unsupported". Route it to notify_user, defaulting the recipient to
+        # the developer the trigger names when the stored config named none
+        # (the old standup template configured only a channel).
+        if action_type == "send_notification":
+            if not config.get("user_id") and not config.get("user_email"):
+                td = trigger_data or {}
+                fallback = (
+                    td.get("developer_id")
+                    or td.get("user_id")
+                    or td.get("entity_id")
+                )
+                if fallback:
+                    config = {**config, "user_id": fallback}
+            action_type = "notify_user"
+
         if action_type == "update_record":
             return await self._action_update_record(config, record, trigger_data)
         elif action_type == "create_record":

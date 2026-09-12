@@ -55,6 +55,19 @@ export default function PlatformBillingPage() {
       <div>
         <h1 className="text-2xl font-bold text-foreground">{t("title")}</h1>
         <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
+        {/* These totals come from last night's snapshot — pricing every
+            workspace live on each page load is the work the snapshot exists to
+            avoid. The period below says "this month" either way, so if the
+            daily job has stopped there is nothing else to tell the reader the
+            numbers are weeks old. */}
+        {totals.data?.is_stale && (
+          <p
+            data-testid="billing-totals-stale"
+            className="mt-2 text-sm text-amber-500"
+          >
+            {t("staleTotals")}
+          </p>
+        )}
       </div>
 
       <div className="flex items-center gap-2">
