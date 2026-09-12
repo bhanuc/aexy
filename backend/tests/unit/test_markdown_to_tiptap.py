@@ -9,7 +9,11 @@ document rather than an error.
 import pytest
 
 from aexy.services.document_generation_service import DocumentGenerationService
-from aexy.services.markdown_to_tiptap import MarkdownError, markdown_to_tiptap
+from aexy.services.markdown_to_tiptap import (
+    MarkdownError,
+    markdown_to_tiptap,
+    text_to_tiptap,
+)
 
 
 def convert(markdown: str) -> dict:
@@ -236,3 +240,31 @@ class TestProseThatLooksLikeMarkup:
         doc = convert("1. first\n2. second")
 
         assert doc["content"][0]["type"] == "orderedList"
+
+
+class TestTextFromOutsideTheEditor:
+    """`text_to_tiptap` is what a writer that holds a possibly-empty field
+    calls. A task's description lives in two columns — the plain text and the
+    document the editor renders — and a writer that sets one without the other
+    leaves the task showing the older of the two."""
+
+    @pytest.mark.parametrize("empty", [None, "", "   ", "\n\n"])
+    def test_nothing_becomes_nothing(self, empty):
+        """`None`, not an empty document: "no description" and "a description
+        that is blank" have to stay the same thing."""
+        assert text_to_tiptap(empty) is None
+
+    def test_text_becomes_a_renderable_document(self):
+        doc = text_to_tiptap("Fix login on Safari")
+
+        assert doc is not None
+        assert DocumentGenerationService.is_renderable_document(doc)
+        assert doc["content"][0]["content"][0]["text"] == "Fix login on Safari"
+
+    def test_markdown_is_honoured(self):
+        """Linear sends Markdown, so a synced description arrives with its
+        structure intact rather than as one flat paragraph."""
+        doc = text_to_tiptap("## Steps\n\n- one\n- two")
+
+        assert doc is not None
+        assert [n["type"] for n in doc["content"]] == ["heading", "bulletList"]

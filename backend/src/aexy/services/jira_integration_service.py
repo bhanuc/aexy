@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from aexy.models.integrations import JiraIntegration
 from aexy.models.sprint import Sprint, SprintTask
+from aexy.services.markdown_to_tiptap import text_to_tiptap
 from aexy.services.remote_team_matching import (
     match_remote_items_to_teams,
     normalize_remote_pairs,
@@ -568,6 +569,12 @@ class JiraIntegrationService:
             description_changed = existing_task.description != description
             existing_task.title = title
             existing_task.description = description
+            # The editor renders `description_json`, not this plain text, so
+            # writing one without the other left the task showing its *old*
+            # description while the row held the new one. Rebuilt from the
+            # incoming text through the same converter every non-editor writer
+            # uses.
+            existing_task.description_json = text_to_tiptap(description)
             existing_task.status = mapped_status
             existing_task.priority = priority
             existing_task.labels = labels
@@ -596,6 +603,7 @@ class JiraIntegrationService:
                 source_url=source_url,
                 title=title,
                 description=description,
+                description_json=text_to_tiptap(description),
                 priority=priority,
                 labels=labels,
                 status=mapped_status,

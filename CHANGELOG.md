@@ -24,6 +24,14 @@ with that explanation rather than silently ignored. "Mark done" keeps the
 choice: a done task is still on the board, and a team that closes its copy may
 well want to keep seeing the other side's comments.
 
+The rule also holds when the archiving happens *later*. A task can be archived
+from the board, the API or a bulk action long after the move, so an archived
+task is simply never a sync peer — the group is worked out in one place and
+that is where the rule lives, rather than at whichever door was noticed.
+Unarchiving puts it back: the link is untouched, so the pair resumes instead
+of having to be relinked by hand. A task moved twice and then archived in the
+middle leaves the two live tasks still in step with each other.
+
 ### Fixed: a Jira or Linear edit reached only one side of a synced pair
 
 Copying a description onto synced peers happens in `update_task`. The Jira and
@@ -31,6 +39,14 @@ Linear importers assign `task.description` straight onto the row, so an edit
 made in either tool landed on one task and not its twin, and the two drifted
 with nothing in the history to say why. Both now propagate, with a history row
 on the receiving task that names no actor — because nobody pressed save.
+
+A description lives in two columns: the plain text, and the rich document the
+editor actually renders. The importers wrote only the first, so an edit made
+in Jira or Linear was stored but never shown — the task went on displaying its
+previous description on both sides of the pair. Both columns are now written
+together, through the same converter every other non-editor writer uses, which
+also means a task created from a Linear issue keeps its Markdown structure
+instead of opening an empty editor.
 
 ## [0.39.0] - 2026-09-11
 

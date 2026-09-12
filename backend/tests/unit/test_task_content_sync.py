@@ -222,6 +222,66 @@ async def test_peers_are_transitive_and_bounded(db_session: AsyncSession) -> Non
     assert set(await sync.synced_task_peers(db_session, third.id)) == {task.id, second.id}
 
 
+@pytest.mark.asyncio
+async def test_an_archived_task_is_not_a_peer(db_session: AsyncSession) -> None:
+    """Archiving is the other half of the rule the move dialog states.
+
+    The dialog refuses "archive the original" together with "keep in sync",
+    but a task can be archived at any time afterwards. Left in the group it
+    would collect mirrored comments and files where nobody can read them, and
+    deleting an attachment on the live side would reach into the archive.
+    """
+    ws, dev = await _workspace(db_session)
+    a = await _project(db_session, ws, "A")
+    b = await _project(db_session, ws, "B")
+    task = await _task(db_session, ws, a)
+    second = await _move(db_session, task, b, dev)
+    await db_session.commit()
+    assert await sync.synced_task_peers(db_session, task.id) == [second.id]
+
+    await SprintTaskService(db_session).archive_task(second.id, actor_id=dev.id)
+    await db_session.commit()
+    assert await sync.synced_task_peers(db_session, task.id) == []
+
+
+@pytest.mark.asyncio
+async def test_unarchiving_puts_the_task_back_in_the_group(db_session: AsyncSession) -> None:
+    """The link row is untouched by archiving, so the pair resumes rather than
+    needing to be relinked by hand."""
+    ws, dev = await _workspace(db_session)
+    a = await _project(db_session, ws, "A")
+    b = await _project(db_session, ws, "B")
+    task = await _task(db_session, ws, a)
+    second = await _move(db_session, task, b, dev)
+    service = SprintTaskService(db_session)
+    await service.archive_task(second.id, actor_id=dev.id)
+    await db_session.commit()
+    assert await sync.synced_task_peers(db_session, task.id) == []
+
+    await service.unarchive_task(second.id, actor_id=dev.id)
+    await db_session.commit()
+    assert await sync.synced_task_peers(db_session, task.id) == [second.id]
+
+
+@pytest.mark.asyncio
+async def test_the_walk_passes_through_an_archived_middle(db_session: AsyncSession) -> None:
+    """A moved twice with sync on is a group of three. Archiving the middle
+    one leaves two live tasks that were deliberately linked, so they stay in
+    sync with each other — only the archived member drops out."""
+    ws, dev = await _workspace(db_session)
+    a = await _project(db_session, ws, "A")
+    b = await _project(db_session, ws, "B")
+    c = await _project(db_session, ws, "C")
+    task = await _task(db_session, ws, a)
+    second = await _move(db_session, task, b, dev)
+    third = await _move(db_session, second, c, dev)
+    await SprintTaskService(db_session).archive_task(second.id, actor_id=dev.id)
+    await db_session.commit()
+
+    assert await sync.synced_task_peers(db_session, task.id) == [third.id]
+    assert await sync.synced_task_peers(db_session, third.id) == [task.id]
+
+
 # ── description ──────────────────────────────────────────────────────────────
 
 
