@@ -203,6 +203,15 @@ def test_the_unguarded_surface_is_declared_rather_than_discovered():
         for route in mounted_routes(app)
         if "{workspace_id}/" in route.path
         and "_guard" not in route.dependency_names
+        # `/platform-admin` is staff tooling, not workspace app surface. It
+        # takes a workspace id because it acts *on* a tenant — read this
+        # customer's plan, price their month — and it answers only to the
+        # people named in `ADMIN_EMAILS`, which is a stricter test than any
+        # app guard, not a looser one. Counting those routes here would mean
+        # every new admin screen reads as a widening of what a workspace
+        # member can reach without the module switched on, which is the one
+        # thing this number is for.
+        and not route.path.startswith("/api/v1/platform-admin/")
     )
 
     # This count went to zero and stayed there for a while without anyone
@@ -211,8 +220,12 @@ def test_the_unguarded_surface_is_declared_rather_than_discovered():
     # with no `.path`; the `getattr(route, "path", "")` here matched nothing,
     # counted nothing, and passed. A ledger that cannot fail is not a ledger.
     # The walk now lives in `tests/support/routes.py` and refuses to return an
-    # empty list. Re-measured against the real tree it is 290 — the number
-    # below was right all along, it had just gone blind.
+    # empty list.
+    #
+    # Re-measured against the real tree it is 280: 290 workspace-scoped routes
+    # with no app guard, less the 10 platform-admin ones excluded above. The
+    # declared number had been 290 and was right about the whole set; 280 is
+    # the part of it this test is actually about.
     #
     # Raise this only with a reason, and lower it whenever a router moves
     # behind its module.
@@ -233,8 +246,8 @@ def test_the_unguarded_surface_is_declared_rather_than_discovered():
     #
     # The same change added nine routes that ARE gated: agent schedules behind
     # `agents`, and `crm/outreach/*` behind `crm`.
-    assert unguarded <= 290, (
-        f"{unguarded} workspace-scoped routes carry no app guard, up from 290. "
+    assert unguarded <= 280, (
+        f"{unguarded} workspace-scoped routes carry no app guard, up from 280. "
         "A new router needs either `require_app_access(<app>)` or a note here "
         "saying why it must answer for a workspace that switched the module off."
     )
