@@ -11,6 +11,9 @@ authentication fails it, and adding a line to `PUBLIC_BY_DESIGN` is a
 deliberate act with a reason attached rather than an oversight.
 """
 
+import hashlib
+import hmac
+
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -19,6 +22,19 @@ from aexy.api import access_guard, workflow_events
 from aexy.main import app
 from aexy.models.developer import Developer
 from aexy.models.workspace import Workspace, WorkspaceMember
+
+
+class _StubRequest:
+    """Just enough Request for the guard: it reads the raw body to check a
+    signature, and Starlette caches that read so the endpoint can still parse
+    it afterwards."""
+
+    def __init__(self, body: bytes = b"{}") -> None:
+        self._body = body
+
+    async def body(self) -> bytes:
+        return self._body
+
 
 
 PUBLIC_BY_DESIGN: frozenset[str] = frozenset({
@@ -314,7 +330,8 @@ class TestSharedWorkspaceIsTheRule:
 @pytest.mark.asyncio
 class TestWorkflowWebhookSecret:
     """The receivers are called by form tools and calendars, which cannot hold
-    a bearer token — so they present the workspace's derived secret instead."""
+    a bearer token — so they prove they know the workspace's derived secret,
+    either by signing the body or by presenting the secret in a header."""
 
     WS = "11111111-1111-4111-8111-111111111111"
     OTHER = "22222222-2222-4222-8222-222222222222"
@@ -322,40 +339,89 @@ class TestWorkflowWebhookSecret:
     def _secret(self, workspace_id=None):
         return workflow_events.derive_workflow_webhook_secret(workspace_id or self.WS)
 
-    async def test_the_header_is_accepted(self):
+    def _signature(self, body: bytes, workspace_id=None) -> str:
+        return "sha256=" + hmac.new(
+            self._secret(workspace_id).encode("utf-8"), body, hashlib.sha256
+        ).hexdigest()
+
+    async def _verify(self, *, workspace_id=None, secret=None, signature=None, body=b"{}"):
         await workflow_events.verify_webhook_secret(
-            workspace_id=self.WS, presented_header=self._secret(), secret=None
+            workspace_id=workspace_id or self.WS,
+            request=_StubRequest(body),
+            presented_header=secret,
+            signature_header=signature,
         )
 
-    async def test_a_query_parameter_works_for_senders_that_cannot_set_headers(self):
-        await workflow_events.verify_webhook_secret(
-            workspace_id=self.WS, presented_header=None, secret=self._secret()
-        )
+    async def test_a_signed_body_is_accepted(self):
+        body = b'{"event": "booked"}'
+        await self._verify(signature=self._signature(body), body=body)
+
+    async def test_a_bare_hex_signature_is_accepted(self):
+        """The CRM trigger accepts `<hex>` as well as `sha256=<hex>`."""
+        body = b'{"event": "booked"}'
+        await self._verify(signature=self._signature(body).split("=", 1)[1], body=body)
+
+    async def test_a_signature_for_a_different_body_is_refused(self):
+        """The point of signing: a captured request cannot be replayed with a
+        payload of the attacker's choosing."""
+        signature = self._signature(b'{"event": "booked"}')
+        with pytest.raises(HTTPException) as exc:
+            await self._verify(signature=signature, body=b'{"event": "cancelled"}')
+        assert exc.value.status_code == 401
+
+    async def test_the_header_is_accepted(self):
+        await self._verify(secret=self._secret())
 
     async def test_nothing_presented_is_refused(self):
         with pytest.raises(HTTPException) as exc:
-            await workflow_events.verify_webhook_secret(
-                workspace_id=self.WS, presented_header=None, secret=None
-            )
+            await self._verify()
         assert exc.value.status_code == 401
 
     async def test_a_wrong_secret_is_refused(self):
         with pytest.raises(HTTPException) as exc:
-            await workflow_events.verify_webhook_secret(
-                workspace_id=self.WS, presented_header="not-the-secret", secret=None
-            )
+            await self._verify(secret="not-the-secret")
         assert exc.value.status_code == 401
 
     async def test_one_workspaces_secret_does_not_open_another(self):
         with pytest.raises(HTTPException) as exc:
-            await workflow_events.verify_webhook_secret(
-                workspace_id=self.OTHER, presented_header=self._secret(), secret=None
-            )
+            await self._verify(workspace_id=self.OTHER, secret=self._secret())
+        assert exc.value.status_code == 401
+
+    async def test_a_non_ascii_header_is_refused_rather_than_crashing(self):
+        """`hmac.compare_digest` raises TypeError on two `str`s when either
+        holds a non-ASCII character — a 500 and a stack trace on every probe,
+        where the answer is 401."""
+        with pytest.raises(HTTPException) as exc:
+            await self._verify(secret="sécret")
         assert exc.value.status_code == 401
 
     async def test_the_secret_is_stable_and_distinct_per_workspace(self):
         assert self._secret() == self._secret()
         assert self._secret() != self._secret(self.OTHER)
+
+
+class TestTheSecretIsNeverTakenFromTheQueryString:
+    """A secret in the URL is written to every proxy and CDN access log on the
+    way, and this one cannot be rotated without invalidating every session."""
+
+    def test_no_query_parameter_opens_the_receivers(self):
+        import inspect
+
+        params = inspect.signature(workflow_events.verify_webhook_secret).parameters
+        # Everything the guard reads is the path parameter, the request
+        # itself, or a Header(...). Anything else with a plain default would
+        # be a query parameter to FastAPI — which is how the secret used to
+        # be accepted.
+        assert set(params) == {
+            "workspace_id",
+            "request",
+            "presented_header",
+            "signature_header",
+        }
+        assert all(
+            type(params[name].default).__name__ == "Header"
+            for name in ("presented_header", "signature_header")
+        )
 
 
 class TestWebhookBodiesOfAnyShape:
@@ -381,3 +447,28 @@ class TestWebhookBodiesOfAnyShape:
     )
     def test_anything_else_reads_as_empty_rather_than_raising(self, body):
         assert workflow_events._nested(body, "event") == {}
+
+    @pytest.mark.parametrize("body", [[], "text", 3, None, ["a"]])
+    def test_a_non_object_body_reads_as_empty(self, body):
+        assert workflow_events._payload(body) == {}
+
+    def test_an_object_body_is_itself(self):
+        assert workflow_events._payload({"a": 1}) == {"a": 1}
+
+    def test_a_sendgrid_batch_is_read_as_many_events(self):
+        """SendGrid's event webhook posts a JSON array. Read as a dict it
+        raised AttributeError on every delivery."""
+        batch = [{"event": "open"}, {"event": "click"}]
+        assert workflow_events._events(batch) == batch
+
+    def test_a_single_object_is_the_one_element_case(self):
+        assert workflow_events._events({"event": "open"}) == [{"event": "open"}]
+
+    def test_non_objects_inside_a_batch_are_dropped(self):
+        assert workflow_events._events([{"event": "open"}, "junk", None]) == [
+            {"event": "open"}
+        ]
+
+    @pytest.mark.parametrize("body", ["text", 3, None])
+    def test_a_body_of_the_wrong_shape_yields_one_empty_event(self, body):
+        assert workflow_events._events(body) == [{}]

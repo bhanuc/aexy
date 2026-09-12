@@ -196,6 +196,7 @@ async def suggest_next_roles(
     developer_id: str,
     organization_id: str | None = None,
     _: str = Depends(require_developer_access),
+    current_developer_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Suggest next career steps for a developer.
@@ -208,6 +209,12 @@ async def suggest_next_roles(
     Returns:
         List of role suggestions.
     """
+    # Same parameter, same rule as `list_roles`: it reaches
+    # `get_all_roles(organization_id)`, so naming a workspace you are not in
+    # would list that company's custom ladder by name and level.
+    if organization_id:
+        await ensure_active_member(db, organization_id, current_developer_id)
+
     dev_service = DeveloperService(db)
     developer = await dev_service.get_by_id(developer_id)
 
