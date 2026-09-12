@@ -36,11 +36,19 @@ from sqlalchemy import select
 
 from aexy.models.ask import AskMessage
 from aexy.services.ask_service import AskService
+from aexy.core.config import get_settings
 
 from tests.ai.fixtures.ask_eval_seed import ask_eval_seed  # noqa: F401
 from tests.ai.utils.eval_metrics import evaluate_tool_calls
 from tests.ai.utils.eval_result import EvalResult
 
+pytestmark = pytest.mark.local_llm
+
+@pytest.fixture(autouse=True)
+def _reset_settings_cache():
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 # ============================================================================
 # PATHS
@@ -56,12 +64,12 @@ CASES_FILE = (
 
 RESULTS_DIR = (
     CURRENT_DIR
-    / "results"
+    / ".logs"
 )
 
 RESULTS_FILE = (
     RESULTS_DIR
-    / "ask_eval_results.jsonl"
+    / f"ask_eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
 )
 
 
@@ -80,7 +88,7 @@ RESULTS_FILE = (
 
 EVAL_PROVIDER = os.getenv(
     "AEXY_EVAL_PROVIDER",
-    "lmstudio",
+    "ollama",
 )
 
 EVAL_MODEL = os.getenv(
@@ -138,8 +146,14 @@ def load_eval_cases() -> list[dict]:
     return cases
 
 
-EVAL_CASES = load_eval_cases()
-
+def pytest_generate_tests(metafunc):
+    if "case" in metafunc.fixturenames:
+        cases = load_eval_cases()
+        metafunc.parametrize(
+            "case",
+            cases,
+            ids=[case["task_id"] for case in cases],
+        )
 
 # ============================================================================
 # SSE PARSER
@@ -232,7 +246,7 @@ def save_eval_result(
     )
 
     with RESULTS_FILE.open(
-        "a",
+        "w",
         encoding="utf-8",
     ) as file:
 
@@ -268,6 +282,22 @@ async def run_ask_case(
 
     provider_name = EVAL_PROVIDER
 
+    base_result = {
+            "run_id": run_id,
+            "task_id": task_id,
+            "run_index": run_index,
+            "provider": provider_name,
+            "model_version": EVAL_MODEL or "unknown",
+            "git_sha": get_git_sha(),
+            "prompt_version": "ask_system_prompt_v1",
+            "judge_version": None,
+            "pricing_version": None,
+            "temperature": 0.7,
+            "top_p": None,
+            "timestamp": datetime.now(
+                timezone.utc
+            ).isoformat(),
+        }
     try:
 
         # --------------------------------------------------------------------
@@ -276,10 +306,28 @@ async def run_ask_case(
 
         service = AskService(
             db=ai_db_session,
-            provider_override=provider_name,
-            model_override=EVAL_MODEL,
         )
 
+        expected_family = {
+            "claude": "anthropic",
+            "anthropic": "anthropic",
+            "openai": "openai",
+            "gemini": "gemini",
+            "deepseek": "openai",
+            "openrouter": "openai",
+            "lmstudio": "openai",
+            "ollama": "ollama",
+
+        }[provider_name]
+
+        if service._provider != expected_family:
+            raise RuntimeError(
+                f"Requested provider {provider_name!r}, "
+                f"but AskService resolved to {service._provider!r}."
+            )
+
+        
+    
         # --------------------------------------------------------------------
         # 2. CREATE A NEW CONVERSATION
         # --------------------------------------------------------------------
@@ -424,9 +472,8 @@ async def run_ask_case(
             actual_tool_calls=actual_tool_calls,
         )
 
-        path_ok = metrics[
-            "path_success"
-        ]
+        if metrics["iterations_exceeded"]:
+            path_ok = False
 
         # --------------------------------------------------------------------
         # 8. DETERMINE CURRENT TASK SUCCESS
@@ -469,47 +516,7 @@ async def run_ask_case(
             # ---------------------------------------------------------------
             # Identity
             # ---------------------------------------------------------------
-
-            run_id=run_id,
-
-            task_id=task_id,
-
-            run_index=run_index,
-
-            # ---------------------------------------------------------------
-            # Model
-            # ---------------------------------------------------------------
-
-            provider=provider_name,
-
-            model_version=(
-                service._model
-                or "unknown"
-            ),
-
-            # ---------------------------------------------------------------
-            # Reproducibility
-            # ---------------------------------------------------------------
-
-            git_sha=get_git_sha(),
-
-            prompt_version=(
-                "ask_system_prompt_v1"
-            ),
-
-            judge_version=None,
-
-            pricing_version=None,
-
-            # AskService currently uses temperature=0.7.
-            temperature=0.7,
-
-            top_p=None,
-
-            timestamp=datetime.now(
-                timezone.utc
-            ).isoformat(),
-
+            **base_result,
             # ---------------------------------------------------------------
             # Response
             # ---------------------------------------------------------------
@@ -616,36 +623,7 @@ async def run_ask_case(
         # --------------------------------------------------------------------
 
         return EvalResult(
-            run_id=run_id,
-
-            task_id=task_id,
-
-            run_index=run_index,
-
-            provider=provider_name,
-
-            model_version=(
-                EVAL_MODEL
-                or "unknown"
-            ),
-
-            git_sha=get_git_sha(),
-
-            prompt_version=(
-                "ask_system_prompt_v1"
-            ),
-
-            judge_version=None,
-
-            pricing_version=None,
-
-            temperature=0.7,
-
-            top_p=None,
-
-            timestamp=datetime.now(
-                timezone.utc
-            ).isoformat(),
+            **base_result,
 
             response="",
 
@@ -687,19 +665,11 @@ async def run_ask_case(
 # PYTEST TEST
 # ============================================================================
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "case",
-    EVAL_CASES,
-    ids=[
-        case["task_id"]
-        for case in EVAL_CASES
-    ],
-)
 async def test_ask_eval_case(
     case,
     ai_db_session,
     ask_eval_seed,
+    monkeypatch,
 ):
     """
     Execute one AexyEval benchmark case.
@@ -708,6 +678,76 @@ async def test_ask_eval_case(
 
     Pytest fails only when there is a harness/runtime error.
     """
+
+    provider_name = EVAL_PROVIDER.lower().strip()
+
+    supported_providers = {
+        "claude",
+        "anthropic",
+        "openai",
+        "gemini",
+        "deepseek",
+        "openrouter",
+        "lmstudio",
+        "ollama",
+    }
+
+    if provider_name not in supported_providers:
+        pytest.fail(
+            f"Unsupported evaluation provider: {provider_name}"
+        )
+
+    monkeypatch.setenv(
+        "LLM_PROVIDER",
+        provider_name,
+    )
+
+    if EVAL_MODEL:
+        model_env = {
+            "claude": "LLM_MODEL",
+            "anthropic": "LLM_MODEL",
+            "gemini": "GEMINI_MODEL",
+            "openai": "OPENAI_MODEL",
+            "deepseek": "LLM_MODEL",
+            "openrouter": "OPENROUTER_MODEL",
+            "lmstudio": "LMSTUDIO_MODEL",
+            "ollama": "OLLAMA_MODEL",
+        }[provider_name]
+
+        monkeypatch.setenv(
+            model_env,
+            EVAL_MODEL,
+        )
+
+    # get_settings() is cached, so force it to read
+    # the temporary environment values above.
+    get_settings.cache_clear()
+
+    settings = get_settings()
+    llm = settings.llm
+
+    anthropic_key = (
+        settings.anthropic_api_key
+        or llm.anthropic_api_key
+    )
+
+    provider_keys = {
+        "claude": anthropic_key,
+        "anthropic": anthropic_key,
+        "openai": llm.openai_api_key,
+        "gemini": llm.gemini_api_key,
+        "deepseek": llm.deepseek_api_key,
+        "openrouter": llm.openrouter_api_key,
+    }
+
+    if (
+        provider_name in provider_keys
+        and not provider_keys[provider_name]
+    ):
+        pytest.skip(
+            f"{provider_name} requested for evaluation, "
+            "but its API key is not configured."
+        )
 
     result = await run_ask_case(
         case=case,

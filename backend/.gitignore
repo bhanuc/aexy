@@ -1,0 +1,6 @@
+# AI evaluation outputs
+tests/ai/results/
+*_output.txt
+
+# local environments
+venv/

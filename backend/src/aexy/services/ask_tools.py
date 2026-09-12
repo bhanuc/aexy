@@ -76,7 +76,7 @@ TOOL_DEFINITIONS = [
             "properties": {
                 "status": {
                     "type": "string",
-                    "description": "Filter by ticket status (open, in_progress, resolved, closed)",
+                    "description": "Filter by ticket status (new, acknowledged, in_progress, waiting_on_submitter, resolved, closed)",
                 },
                 "priority": {
                     "type": "string",

@@ -21,16 +21,13 @@ Key fixtures:
     lmstudio_native       — `LMStudioNativeClient` for tests that want
                             the native `/api/v1/chat` endpoint
     recorder              — per-test prompt/completion JSONL recorder
-    ai_db_session         — in-memory SQLite session (separate from the
-                            top-level `db_session` so we don't fight the
-                            session-scoped event loop)
+    ai_db_session         — in-memory SQLite session for isolated AI tests
 """
 
 from __future__ import annotations
 
-import asyncio
 import os
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator
 
 import httpx
 import pytest
@@ -52,6 +49,21 @@ LMSTUDIO_NATIVE_BASE = LMSTUDIO_BASE.rsplit("/v1", 1)[0]
 LMSTUDIO_MODEL = os.environ.get("LMSTUDIO_MODEL", "qwen/qwen3.5-9b")
 LMSTUDIO_PROBE_TIMEOUT = float(os.environ.get("LMSTUDIO_PROBE_TIMEOUT", "3.0"))
 
+
+LLM_PROVIDER = os.environ.get(
+    "LLM_PROVIDER",
+    "lmstudio"
+)
+
+OLLAMA_BASE = os.environ.get(
+    "OLLAMA_BASE_URL",
+    "http://localhost:11434"
+)
+
+OLLAMA_MODEL = os.environ.get(
+    "OLLAMA_MODEL",
+    "qwen2.5:7b"
+)
 
 # ─── Marker registration & skip logic ──────────────────────────────────
 
@@ -80,28 +92,85 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 def _lmstudio_alive() -> tuple[bool, str]:
-    """Cheap probe: GET /v1/models (OpenAI-compat). Returns (ok, message).
-
-    We probe the same surface the provider uses (`/v1`), not the native
-    `/api/v1`, so a probe-pass really means provider calls will pass.
     """
+    Probe configured local LLM provider.
+    Supports LM Studio and Ollama.
+    """
+
+    if LLM_PROVIDER.lower() == "ollama":
+
+        url = f"{OLLAMA_BASE.rstrip('/')}/api/tags"
+
+        try:
+            with httpx.Client(
+                timeout=LMSTUDIO_PROBE_TIMEOUT
+            ) as c:
+
+                r = c.get(url)
+
+                if r.status_code != 200:
+                    return False, (
+                        f"Ollama returned HTTP {r.status_code} "
+                        f"from {url}"
+                    )
+
+                models = r.json().get("models", [])
+
+                ids = {
+                    m.get("name")
+                    for m in models
+                }
+
+                if OLLAMA_MODEL not in ids:
+                    return False, (
+                        f"Model {OLLAMA_MODEL!r} "
+                        f"not present in Ollama models {sorted(ids)}"
+                    )
+
+                return True, ""
+
+        except Exception as e:
+            return False, (
+                f"Ollama probe failed at {url}: {e}"
+            )
+
+
+    # Existing LM Studio behaviour
+
     url = f"{LMSTUDIO_BASE.rstrip('/')}/models"
+
     try:
-        with httpx.Client(timeout=LMSTUDIO_PROBE_TIMEOUT) as c:
+        with httpx.Client(
+            timeout=LMSTUDIO_PROBE_TIMEOUT
+        ) as c:
+
             r = c.get(url)
+
             if r.status_code != 200:
-                return False, f"LM Studio returned HTTP {r.status_code} from {url}"
+                return False, (
+                    f"LM Studio returned HTTP {r.status_code} "
+                    f"from {url}"
+                )
+
             data = r.json().get("data", [])
-            ids = {m.get("id") for m in data}
+
+            ids = {
+                m.get("id")
+                for m in data
+            }
+
             if LMSTUDIO_MODEL not in ids:
                 return False, (
-                    f"Model {LMSTUDIO_MODEL!r} not present in {sorted(ids)!r}. "
-                    f"Load it in LM Studio or set LMSTUDIO_MODEL."
+                    f"Model {LMSTUDIO_MODEL!r} "
+                    f"not present in LM Studio models {sorted(ids)}"
                 )
-            return True, ""
-    except Exception as e:
-        return False, f"LM Studio probe failed at {url}: {e}"
 
+            return True, ""
+
+    except Exception as e:
+        return False, (
+            f"LM Studio probe failed at {url}: {e}"
+        )
 
 _PROBE_RESULT: tuple[bool, str] | None = None
 
@@ -129,14 +198,6 @@ def pytest_collection_modifyitems(
 
 
 # ─── Event loop & DB ───────────────────────────────────────────────────
-
-
-# @pytest.fixture(scope="session")
-# def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
-#     loop = asyncio.new_event_loop()
-#     yield loop
-#     loop.close()
-
 
 @pytest_asyncio.fixture(scope="function")
 async def ai_db_session() -> AsyncGenerator[AsyncSession, None]:
