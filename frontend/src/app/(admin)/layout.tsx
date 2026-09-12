@@ -15,61 +15,98 @@ import {
   Loader2,
   BarChart2,
   Receipt,
+  TrendingUp,
+  SlidersHorizontal,
+  FileText,
+  Grid3x3,
+  Sparkles,
 } from "lucide-react";
 
 import { useAuth } from "@/hooks/useAuth";
 import { useAdmin } from "@/hooks/useAdmin";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 
+// Titles are keys, not text: this is navigation a Hindi-locale admin sees
+// beside pages whose every heading is translated.
 const adminNavItems = [
   {
-    title: "Dashboard",
+    titleKey: "dashboard",
     href: "/admin",
     icon: LayoutDashboard,
   },
   {
-    title: "Email Logs",
+    titleKey: "growth",
+    href: "/admin/growth",
+    icon: TrendingUp,
+  },
+  {
+    titleKey: "adoption",
+    href: "/admin/adoption",
+    icon: Grid3x3,
+  },
+  {
+    titleKey: "aiSpend",
+    href: "/admin/ai-spend",
+    icon: Sparkles,
+  },
+  {
+    titleKey: "emails",
     href: "/admin/emails",
     icon: Mail,
   },
   {
-    title: "Notifications",
+    titleKey: "notifications",
     href: "/admin/notifications",
     icon: Bell,
   },
   {
-    title: "Feedback",
+    titleKey: "feedback",
     href: "/admin/feedback",
     icon: MessageSquare,
   },
   {
-    title: "Workspaces",
+    titleKey: "workspaces",
     href: "/admin/workspaces",
     icon: Building2,
   },
   {
-    title: "Users",
+    titleKey: "users",
     href: "/admin/users",
     icon: Users,
   },
   {
-    title: "AI Benchmarking",
+    titleKey: "aiBenchmarking",
     href: "/admin/ai-benchmarking",
     icon: BarChart2,
   },
   {
-    title: "Plans",
+    titleKey: "plans",
     href: "/admin/plans",
     icon: Shield,
   },
   {
-    title: "Billing",
+    titleKey: "billing",
     href: "/admin/billing",
     icon: Receipt,
+  },
+  // These two are platform-admin tools that happen to live under /settings.
+  // Listing them here means there is one place to look for staff tooling
+  // rather than two.
+  {
+    titleKey: "planOverrides",
+    href: "/settings/plan-overrides",
+    icon: SlidersHorizontal,
+  },
+  {
+    titleKey: "invoices",
+    href: "/settings/admin-invoices",
+    icon: FileText,
   },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  const t = useTranslations("admin");
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const { user, isLoading: isAuthLoading, isAuthenticated } = useAuth();
@@ -151,7 +188,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   )}
                 >
                   <Icon className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition" />
-                  {item.title}
+                  {t(`nav.${item.titleKey}`)}
                 </Link>
               );
             })}

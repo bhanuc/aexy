@@ -220,6 +220,9 @@ ACTIVITY_CONFIG: dict[str, dict[str, Any]] = {
     # Platform signup
     "handle_new_signup": {"retry": STANDARD_RETRY, "timeout": timedelta(minutes=5)},
     "send_feedback_digest": {"retry": STANDARD_RETRY, "timeout": timedelta(minutes=5)},
+    # One billing-breakdown pass per active workspace, so the budget scales
+    # with the tenant count rather than being a fixed few seconds.
+    "snapshot_platform_stats": {"retry": STANDARD_RETRY, "timeout": timedelta(minutes=30)},
 
     # Tracking automation (scheduled detection activities that loop over workspaces)
     "check_missed_standups": {"retry": STANDARD_RETRY, "timeout": timedelta(minutes=10)},

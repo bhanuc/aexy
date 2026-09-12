@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   Building2,
@@ -86,7 +87,14 @@ export default function AdminWorkspacesPage() {
         sortValue: (row) => row.name.toLowerCase(),
         cell: (row) => (
           <div>
-            <p className="text-foreground font-medium">{row.name}</p>
+            {/* The list said who exists; the detail says what is going on with
+                them — plan, seats, AI spend and the modules they use. */}
+            <Link
+              href={`/admin/workspaces/${row.id}`}
+              className="font-medium text-foreground hover:text-blue-400 hover:underline"
+            >
+              {row.name}
+            </Link>
             <p className="text-muted-foreground text-xs">/{row.slug}</p>
           </div>
         ),
