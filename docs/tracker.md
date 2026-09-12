@@ -104,9 +104,9 @@ This document tracks the implementation progress of Aexy across all four phases.
 | Developer insights endpoint | [x] | `GET /analysis/developers/{id}/insights` |
 | Task matching endpoint | [x] | `POST /analysis/match/task` |
 | Soft skills endpoint | [x] | `GET /analysis/developers/{id}/soft-skills` |
-| Admin processing status | [x] | `GET /admin/processing/status` |
-| Admin LLM usage stats | [x] | `GET /admin/llm/usage` |
-| Cache management | [x] | `POST /admin/cache/clear` |
+| Admin processing status | [x] | `GET /admin/processing/status` — platform admin |
+| Admin LLM usage stats | [x] | `GET /admin/llm/usage` — platform admin |
+| Cache management | [x] | `POST /admin/cache/clear` — platform admin |
 
 ### Phase 2 Success Criteria
 

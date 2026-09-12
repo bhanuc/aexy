@@ -8,6 +8,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from aexy.api.access_guard import (
+    accessible_developers_stmt,
+    ensure_active_member,
+    require_developer_access,
+)
+from aexy.api.developers import get_current_developer_id
 from aexy.core.database import get_db
 from aexy.llm.base import AnalysisResult, MatchScore, TaskSignals
 from aexy.llm.gateway import get_llm_gateway
@@ -20,7 +26,14 @@ from aexy.services.whatif_analyzer import WhatIfAnalyzer, WhatIfScenario
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/analysis", tags=["analysis"])
+# Signed in, at minimum: every endpoint here spends LLM budget or reads a
+# skill profile. The per-endpoint guards below decide *whose* profile — until
+# they existed, any developer id in the URL was answered for anyone.
+router = APIRouter(
+    prefix="/analysis",
+    tags=["analysis"],
+    dependencies=[Depends(get_current_developer_id)],
+)
 
 
 # Request/Response models
@@ -169,6 +182,7 @@ async def analyze_code(
 async def refresh_developer_analysis(
     developer_id: str,
     request: RefreshAnalysisRequest | None = None,
+    _: str = Depends(require_developer_access),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Trigger on-demand analysis refresh for a developer.
@@ -208,6 +222,7 @@ async def refresh_developer_analysis(
 @router.get("/developers/{developer_id}/insights", response_model=DeveloperInsights | None)
 async def get_developer_insights(
     developer_id: str,
+    _: str = Depends(require_developer_access),
     db: AsyncSession = Depends(get_db),
 ) -> DeveloperInsights | None:
     """Get LLM-generated insights for a developer.
@@ -296,6 +311,7 @@ async def match_task_to_developers(
     task: TaskMatchRequest,
     workspace_id: str | None = None,
     team_id: str | None = None,
+    current_developer_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
     matcher: TaskMatcher = Depends(get_task_matcher),
 ) -> TaskMatchResult:
@@ -311,6 +327,12 @@ async def match_task_to_developers(
     """
     from aexy.models.workspace import WorkspaceMember
 
+    # A named workspace has to be one the caller is actually in. Checked
+    # before the try below, whose `except Exception` would turn the 403 into
+    # an unhelpful 500.
+    if workspace_id:
+        await ensure_active_member(db, workspace_id, current_developer_id)
+
     try:
         # Fetch developers based on filters
         if workspace_id:
@@ -323,7 +345,9 @@ async def match_task_to_developers(
             )
         else:
             # Get all developers with skill fingerprints
-            stmt = select(Developer).where(Developer.skill_fingerprint.isnot(None))
+            stmt = accessible_developers_stmt(current_developer_id).where(
+                Developer.skill_fingerprint.isnot(None)
+            )
 
         result = await db.execute(stmt)
         developers = result.scalars().all()
@@ -364,6 +388,7 @@ async def match_task_to_developers(
 async def bulk_match_tasks(
     tasks: list[TaskMatchRequest],
     workspace_id: str | None = None,
+    current_developer_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
     matcher: TaskMatcher = Depends(get_task_matcher),
 ) -> dict[str, TaskMatchResult]:
@@ -378,6 +403,12 @@ async def bulk_match_tasks(
     """
     from aexy.models.workspace import WorkspaceMember
 
+    # A named workspace has to be one the caller is actually in. Checked
+    # before the try below, whose `except Exception` would turn the 403 into
+    # an unhelpful 500.
+    if workspace_id:
+        await ensure_active_member(db, workspace_id, current_developer_id)
+
     try:
         # Fetch developers based on filters
         if workspace_id:
@@ -388,7 +419,9 @@ async def bulk_match_tasks(
                 .where(Developer.skill_fingerprint.isnot(None))
             )
         else:
-            stmt = select(Developer).where(Developer.skill_fingerprint.isnot(None))
+            stmt = accessible_developers_stmt(current_developer_id).where(
+                Developer.skill_fingerprint.isnot(None)
+            )
 
         result = await db.execute(stmt)
         developers = result.scalars().all()
@@ -435,6 +468,8 @@ async def get_peer_benchmark(
     developer_id: str,
     team_id: str | None = None,
     domain: str | None = None,
+    _: str = Depends(require_developer_access),
+    current_developer_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
 ) -> BenchmarkResult:
     """Get peer benchmarking for a developer.
@@ -465,9 +500,13 @@ async def get_peer_benchmark(
     # Fetch peers (all developers or team members)
     if team_id:
         # TODO: Filter by team when team membership is implemented
-        peer_result = await db.execute(select(Developer))
+        peer_result = await db.execute(
+            accessible_developers_stmt(current_developer_id)
+        )
     else:
-        peer_result = await db.execute(select(Developer))
+        peer_result = await db.execute(
+            accessible_developers_stmt(current_developer_id)
+        )
 
     peers = list(peer_result.scalars().all())
 
@@ -523,6 +562,7 @@ async def get_peer_benchmark(
 @router.get("/developers/{developer_id}/soft-skills", response_model=SoftSkillsProfile | None)
 async def get_soft_skills_profile(
     developer_id: str,
+    _: str = Depends(require_developer_access),
     db: AsyncSession = Depends(get_db),
 ) -> SoftSkillsProfile | None:
     """Get soft skills profile for a developer.
@@ -581,6 +621,7 @@ async def get_task_signals(
 @router.post("/whatif/scenario", response_model=WhatIfResponse)
 async def create_whatif_scenario(
     request: WhatIfRequest,
+    current_developer_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
 ) -> WhatIfResponse:
     """Create a what-if scenario to simulate task assignments.
@@ -592,7 +633,7 @@ async def create_whatif_scenario(
     - Growth opportunities
     """
     # Fetch all developers
-    result = await db.execute(select(Developer))
+    result = await db.execute(accessible_developers_stmt(current_developer_id))
     developers = list(result.scalars().all())
 
     if not developers:
@@ -653,6 +694,7 @@ async def create_whatif_scenario(
 @router.post("/whatif/optimize", response_model=WhatIfResponse)
 async def optimize_assignments(
     request: OptimizeAssignmentsRequest,
+    current_developer_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
 ) -> WhatIfResponse:
     """Generate an optimized assignment scenario.
@@ -660,7 +702,7 @@ async def optimize_assignments(
     Uses a greedy algorithm to assign tasks to developers
     based on skill match, experience, and workload balance.
     """
-    result = await db.execute(select(Developer))
+    result = await db.execute(accessible_developers_stmt(current_developer_id))
     developers = list(result.scalars().all())
 
     if not developers:
@@ -725,6 +767,7 @@ async def optimize_assignments(
 @router.post("/whatif/compare")
 async def compare_scenarios(
     request: ScenarioComparisonRequest,
+    current_developer_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Compare two assignment scenarios.
@@ -734,7 +777,7 @@ async def compare_scenarios(
     - Workload balance
     - Growth opportunities
     """
-    result = await db.execute(select(Developer))
+    result = await db.execute(accessible_developers_stmt(current_developer_id))
     developers = list(result.scalars().all())
 
     if not developers:
@@ -790,6 +833,7 @@ async def compare_scenarios(
 async def get_team_skill_gaps(
     target_skills: str,  # Comma-separated list
     team_id: str | None = None,
+    current_developer_id: str = Depends(get_current_developer_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Analyze team skill gaps for target skills.
@@ -807,7 +851,7 @@ async def get_team_skill_gaps(
             detail="No target skills provided",
         )
 
-    result = await db.execute(select(Developer))
+    result = await db.execute(accessible_developers_stmt(current_developer_id))
     developers = list(result.scalars().all())
 
     service = PeerBenchmarkingService()
