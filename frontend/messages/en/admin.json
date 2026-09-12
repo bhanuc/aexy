@@ -205,7 +205,8 @@
       "noActivity": "None recorded",
       "modules": "Modules in use",
       "modulesHint": "Things created in each module in the last 30 days.",
-      "noModules": "Nothing created in any measured module in the last 30 days."
+      "noModules": "Nothing created in any measured module in the last 30 days.",
+      "modulesUnavailable": "Could not read: {modules}. Not the same as unused — the signal failed on this request."
     },
     "nav": {
       "dashboard": "Dashboard",

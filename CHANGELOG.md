@@ -90,6 +90,12 @@ Eleven modules have nothing that separates use from configuration. They are
 named on the page as "not measured" rather than reported as zero, because a
 module nobody can measure must not read as a module nobody uses.
 
+One module's signal failing no longer takes the other sixteen with it. Each
+runs in its own savepoint, and whatever could not be read is named — in the
+day's notes and on the customer page — because a module missing from the
+matrix otherwise reads as a module nobody uses, which is the one thing this
+page must never say by accident.
+
 A module's reach is a share of the workspaces that did *anything* in the same
 window — not of every workspace on the platform. The two have to mean the same
 thing, or the percentage misleads: three of forty, when thirty of them have

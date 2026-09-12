@@ -181,6 +181,19 @@ export default function AdminWorkspaceDetailPage({
             ))}
           </div>
         )}
+        {/* A module whose signal could not be read is not a module they never
+            touch. Naming it is the same rule the adoption page follows for
+            modules with no signal at all. */}
+        {(data.modules_unavailable?.length ?? 0) > 0 && (
+          <p
+            data-testid="workspace-modules-unavailable"
+            className="mt-3 text-xs text-amber-500"
+          >
+            {t("workspaceDetail.modulesUnavailable", {
+              modules: data.modules_unavailable.join(", "),
+            })}
+          </p>
+        )}
       </div>
     </div>
   );

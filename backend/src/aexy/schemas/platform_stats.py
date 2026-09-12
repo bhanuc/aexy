@@ -210,6 +210,10 @@ class WorkspaceDetailResponse(BaseModel):
     llm_tokens_this_period: int = 0
     llm_billed_cents_this_period: float = 0.0
     llm_base_cost_cents_this_period: float = 0.0
-    #: module id -> things created in the trailing window. Absent means none.
+    #: module id -> things created in the trailing window. Absent means none —
+    #: which is only true for the modules not named in `modules_unavailable`.
     module_usage: dict[str, int] = Field(default_factory=dict)
+    #: Modules whose signal could not be read on this request. Named so an
+    #: unreadable table is not mistaken for a module the customer ignores.
+    modules_unavailable: list[str] = Field(default_factory=list)
     last_activity_at: datetime | None = None

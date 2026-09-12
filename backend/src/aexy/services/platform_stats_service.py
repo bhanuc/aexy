@@ -62,6 +62,20 @@ def _month_bounds(moment: datetime) -> tuple[datetime, datetime]:
 
 
 @dataclass
+class AdoptionRun:
+    """What one pass over the module signals managed to count.
+
+    `failed` is named rather than folded into a bare count because a module
+    missing from `counts` and a module that genuinely saw no activity are
+    different facts, and the whole design of this page rests on not confusing
+    the two.
+    """
+
+    counts: dict[str, int]
+    failed: list[str]
+
+
+@dataclass
 class SnapshotResult:
     day: date
     created: bool
@@ -150,10 +164,19 @@ class PlatformStatsService:
             # scan per module, and the backfill loop would run it once a day
             # for every day filled in. The daily job is where it belongs.
             try:
-                await self.compute_module_adoption(day)
+                adoption = await self.compute_module_adoption(day)
             except Exception:
                 logger.exception("Module adoption failed for %s", day)
                 notes.append("module adoption could not be computed")
+            else:
+                if adoption.failed:
+                    # Named, not counted: "adoption unavailable" for a module
+                    # has to be distinguishable from "nobody used it", which
+                    # is the same rule `MODULES_WITHOUT_SIGNAL` exists for.
+                    notes.append(
+                        "module adoption unavailable for: "
+                        + ", ".join(sorted(adoption.failed))
+                    )
 
         values["notes"] = notes
         values["computed_at"] = datetime.now(timezone.utc)
@@ -168,54 +191,78 @@ class PlatformStatsService:
         await self.db.flush()
         return SnapshotResult(day=day, created=created, notes=notes)
 
-    async def compute_module_adoption(self, day: date | None = None) -> dict[str, int]:
+    async def compute_module_adoption(self, day: date | None = None) -> AdoptionRun:
         """Count, per module, the workspaces that did that module's work.
 
         Runs over the same trailing window as `workspaces_active_30d`, so the
         matrix and the headline agree about what "active" means.
+
+        Seventeen independent queries over seventeen unrelated tables. One of
+        them failing — a column renamed, a table not yet created on a node
+        mid-migration — used to take the whole matrix down with it and leave a
+        note saying adoption "could not be computed", when sixteen modules
+        had been perfectly countable. Each one is now its own savepoint, so a
+        failure rolls back that module's work and the rest of the run
+        continues. The savepoint is the point: a failed statement leaves a
+        Postgres transaction aborted, so catching the error without one would
+        turn a single broken signal into sixteen more.
         """
         day = day or datetime.now(timezone.utc).date()
         _, end = _day_bounds(day)
         window = end - timedelta(days=ACTIVITY_WINDOW_DAYS)
 
         counts: dict[str, int] = {}
+        failed: list[str] = []
         for module, stmt in _module_signals().items():
-            sub = stmt.subquery()
-            row = (
-                await self.db.execute(
-                    select(
-                        func.count(func.distinct(sub.c.ws)),
-                        func.count(),
-                    ).where(sub.c.ts >= window, sub.c.ts < end, sub.c.ws.isnot(None))
-                )
-            ).one()
-            workspaces_active, events = int(row[0] or 0), int(row[1] or 0)
-            counts[module] = workspaces_active
-
-            existing = (
-                await self.db.execute(
-                    select(PlatformModuleAdoption).where(
-                        PlatformModuleAdoption.day == day,
-                        PlatformModuleAdoption.module == module,
+            try:
+                async with self.db.begin_nested():
+                    counts[module] = await self._record_module_adoption(
+                        module, stmt, day=day, window=window, end=end
                     )
-                )
-            ).scalar_one_or_none()
-            if existing is None:
-                self.db.add(
-                    PlatformModuleAdoption(
-                        day=day,
-                        module=module,
-                        workspaces_active=workspaces_active,
-                        events=events,
-                        window_days=ACTIVITY_WINDOW_DAYS,
-                    )
-                )
-            else:
-                existing.workspaces_active = workspaces_active
-                existing.events = events
-                existing.window_days = ACTIVITY_WINDOW_DAYS
+            except Exception:
+                logger.exception("Module adoption failed for %s on %s", module, day)
+                failed.append(module)
         await self.db.flush()
-        return counts
+        return AdoptionRun(counts=counts, failed=failed)
+
+    async def _record_module_adoption(
+        self, module: str, stmt: Any, *, day: date, window: datetime, end: datetime
+    ) -> int:
+        """One module's row for one day. Returns the workspaces counted."""
+        sub = stmt.subquery()
+        row = (
+            await self.db.execute(
+                select(
+                    func.count(func.distinct(sub.c.ws)),
+                    func.count(),
+                ).where(sub.c.ts >= window, sub.c.ts < end, sub.c.ws.isnot(None))
+            )
+        ).one()
+        workspaces_active, events = int(row[0] or 0), int(row[1] or 0)
+
+        existing = (
+            await self.db.execute(
+                select(PlatformModuleAdoption).where(
+                    PlatformModuleAdoption.day == day,
+                    PlatformModuleAdoption.module == module,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is None:
+            self.db.add(
+                PlatformModuleAdoption(
+                    day=day,
+                    module=module,
+                    workspaces_active=workspaces_active,
+                    events=events,
+                    window_days=ACTIVITY_WINDOW_DAYS,
+                )
+            )
+        else:
+            existing.workspaces_active = workspaces_active
+            existing.events = events
+            existing.window_days = ACTIVITY_WINDOW_DAYS
+        return workspaces_active
 
     async def module_adoption(self, days: int = 90) -> list[PlatformModuleAdoption]:
         cutoff = datetime.now(timezone.utc).date() - timedelta(days=days)
@@ -773,17 +820,31 @@ async def workspace_detail(db: AsyncSession, workspace_id: str) -> dict[str, Any
     ).one()
 
     # Which modules this workspace actually uses, over the same window the
-    # platform matrix uses.
+    # platform matrix uses. Each signal is its own savepoint for the same
+    # reason as in `compute_module_adoption`: one unreadable table should cost
+    # that one module, not the whole customer page — and without the savepoint
+    # a failed statement leaves the transaction aborted, so everything after
+    # it fails too. What could not be read is named, because a module missing
+    # from this dict otherwise reads as one the customer does not use.
     end = datetime.now(timezone.utc)
     window = end - timedelta(days=ACTIVITY_WINDOW_DAYS)
     module_usage: dict[str, int] = {}
+    modules_unavailable: list[str] = []
     for module, stmt in _module_signals().items():
-        sub = stmt.subquery()
-        count = await db.scalar(
-            select(func.count()).where(
-                sub.c.ws == workspace_id, sub.c.ts >= window, sub.c.ts < end
+        try:
+            async with db.begin_nested():
+                sub = stmt.subquery()
+                count = await db.scalar(
+                    select(func.count()).where(
+                        sub.c.ws == workspace_id, sub.c.ts >= window, sub.c.ts < end
+                    )
+                )
+        except Exception:
+            logger.exception(
+                "Module usage failed for %s on workspace %s", module, workspace_id
             )
-        )
+            modules_unavailable.append(module)
+            continue
         if count:
             module_usage[module] = int(count)
 
@@ -815,6 +876,7 @@ async def workspace_detail(db: AsyncSession, workspace_id: str) -> dict[str, Any
         "llm_billed_cents_this_period": float(usage[2] or 0.0),
         "llm_base_cost_cents_this_period": float(usage[3] or 0.0),
         "module_usage": module_usage,
+        "modules_unavailable": sorted(modules_unavailable),
         "last_activity_at": last_activity,
     }
 

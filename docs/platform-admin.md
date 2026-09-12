@@ -141,6 +141,16 @@ zero, because a module nobody can measure must not read as a module nobody
 uses. Adding one means adding its signal to `_module_signals()` in
 `platform_stats_service.py`.
 
+The same distinction holds when a signal *breaks*. Seventeen queries over
+seventeen unrelated tables means one of them can fail on its own — a column
+renamed, a table not yet created on a node partway through a migration. Each
+signal runs inside its own savepoint, so a failure costs that module and no
+other; the savepoint is what makes this work at all, because a failed
+statement leaves a Postgres transaction aborted and everything after it would
+fail too. What could not be read is named — in the snapshot's `notes`, and on
+the customer page — rather than left absent, which would read as a module
+nobody uses.
+
 ## Alerts
 
 The dashboard leads with what needs attention and usually has nothing, which

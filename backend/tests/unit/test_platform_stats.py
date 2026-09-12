@@ -40,6 +40,25 @@ async def _workspace(db, slug: str, *, created: datetime, owner: Developer) -> W
     return ws
 
 
+#: Bound before any test patches the name, so the replacement below can still
+#: reach the real signals instead of calling itself.
+_REAL_MODULE_SIGNALS = stats._module_signals
+
+
+def _signals_with_a_broken_one():
+    """The real `sprints` signal plus one that cannot be executed.
+
+    Stands in for the realistic failure: a column renamed, or a table that does
+    not exist yet on a node partway through a migration.
+    """
+    from sqlalchemy import column, table
+
+    broken = select(
+        column("workspace_id").label("ws"), column("created_at").label("ts")
+    ).select_from(table("a_table_that_does_not_exist"))
+    return {"sprints": _REAL_MODULE_SIGNALS()["sprints"], "broken": broken}
+
+
 async def _developer(db, email: str, *, created: datetime) -> Developer:
     dev = Developer(email=email, name=email.split("@")[0], created_at=created)
     db.add(dev)
@@ -591,10 +610,11 @@ class TestModuleAdoption:
         await self._task(db_session, busy, created=_ago(4))
         await db_session.commit()
 
-        counts = await PlatformStatsService(db_session).compute_module_adoption()
+        run = await PlatformStatsService(db_session).compute_module_adoption()
         await db_session.commit()
 
-        assert counts["sprints"] == 1
+        assert run.counts["sprints"] == 1
+        assert run.failed == []
 
         row = (
             await db_session.execute(
@@ -608,14 +628,63 @@ class TestModuleAdoption:
         assert (row.workspaces_active, row.events) == (1, 2)
         assert row.window_days == stats.ACTIVITY_WINDOW_DAYS
 
+    async def test_one_broken_signal_does_not_erase_the_whole_matrix(
+        self, db_session, monkeypatch
+    ):
+        """A single failing query used to abort the loop, and the caller wrote
+        "module adoption could not be computed" over a day where sixteen of the
+        seventeen were perfectly countable. Each signal is its own savepoint
+        now — which is the part that matters, because a failed statement leaves
+        the transaction aborted and everything after it would fail too."""
+        busy, _, _ = await self._two_workspaces_with_tasks(db_session)
+        await self._task(db_session, busy, created=_ago(3))
+        await db_session.commit()
+
+        monkeypatch.setattr(stats, "_module_signals", _signals_with_a_broken_one)
+
+        service = PlatformStatsService(db_session)
+        run = await service.compute_module_adoption()
+        await db_session.commit()
+
+        assert run.failed == ["broken"]
+        assert run.counts["sprints"] == 1
+        # …and the working module's row was actually written, not rolled back
+        # alongside the broken one.
+        row = (
+            await db_session.execute(
+                select(PlatformModuleAdoption).where(
+                    PlatformModuleAdoption.module == "sprints"
+                )
+            )
+        ).scalar_one()
+        assert row.workspaces_active == 1
+
+    async def test_the_snapshot_names_the_module_it_could_not_read(
+        self, db_session, monkeypatch
+    ):
+        """"Unavailable" and "nobody used it" are different facts, and this
+        page is built on not confusing the two."""
+        owner = await _developer(db_session, "owner@example.com", created=_ago(60))
+        await _workspace(db_session, "one", created=_ago(60), owner=owner)
+        await db_session.commit()
+
+        monkeypatch.setattr(stats, "_module_signals", _signals_with_a_broken_one)
+
+        result = await PlatformStatsService(db_session).compute_day(
+            include_revenue=False
+        )
+        await db_session.commit()
+
+        assert any("unavailable for: broken" in note for note in result.notes)
+
     async def test_work_older_than_the_window_does_not_count(self, db_session):
         busy, _, _ = await self._two_workspaces_with_tasks(db_session)
         await self._task(db_session, busy, created=_ago(60))
         await db_session.commit()
 
-        counts = await PlatformStatsService(db_session).compute_module_adoption()
+        run = await PlatformStatsService(db_session).compute_module_adoption()
         await db_session.commit()
-        assert counts["sprints"] == 0
+        assert run.counts["sprints"] == 0
 
     async def test_recomputing_a_day_overwrites_rather_than_duplicating(
         self, db_session
@@ -859,6 +928,34 @@ class TestWorkspaceDetail:
         # Only modules with something in them, so the page shows use rather
         # than a wall of zeros.
         assert detail["module_usage"] == {"sprints": 1}
+        assert detail["modules_unavailable"] == []
+
+    async def test_one_unreadable_signal_does_not_take_the_page_down(
+        self, db_session, monkeypatch
+    ):
+        """Seventeen unrelated tables, one page. A column renamed or a table
+        not yet created on a node mid-migration should cost that one module,
+        not the customer's whole record — and it has to be *named*, because a
+        module simply missing from `module_usage` reads as one they never
+        touch."""
+        from aexy.models.sprint import SprintTask
+
+        owner = await _developer(db_session, "owner@example.com", created=_ago(60))
+        ws = await _workspace(db_session, "ws", created=_ago(60), owner=owner)
+        db_session.add(
+            SprintTask(
+                workspace_id=ws.id, title="work", status="todo",
+                source_type="manual", source_id=str(uuid4()), created_at=_ago(2),
+            )
+        )
+        await db_session.commit()
+
+        monkeypatch.setattr(stats, "_module_signals", _signals_with_a_broken_one)
+
+        detail = await stats.workspace_detail(db_session, str(ws.id))
+
+        assert detail["module_usage"] == {"sprints": 1}
+        assert detail["modules_unavailable"] == ["broken"]
 
 
 class TestKpiComparison:

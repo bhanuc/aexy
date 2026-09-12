@@ -19123,6 +19123,9 @@ export interface AdminWorkspaceDetail {
   llm_billed_cents_this_period: number;
   llm_base_cost_cents_this_period: number;
   module_usage: Record<string, number>;
+  /** Modules whose signal could not be read on this request — named, because
+   *  one simply missing from `module_usage` reads as one they never use. */
+  modules_unavailable: string[];
   last_activity_at: string | null;
 }
 
