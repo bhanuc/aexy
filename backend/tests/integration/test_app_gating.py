@@ -170,15 +170,15 @@ def test_the_chat_socket_is_not_behind_an_http_dependency():
     """
     from aexy.main import app
 
-    sockets = [
-        r for r in app.routes if r.path.endswith("/chat/ws")
-    ]
+    from tests.support.routes import mounted_routes
+
+    sockets = [r for r in mounted_routes(app) if r.path.endswith("/chat/ws")]
     assert sockets, "the chat websocket route is missing"
     for route in sockets:
-        names = [d.dependency.__name__ for d in getattr(route, "dependencies", [])]
-        assert not any("guard" in n or "app_access" in n for n in names), (
-            f"{route.path} carries an HTTP auth dependency: {names}"
-        )
+        assert not any(
+            "guard" in name or "app_access" in name
+            for name in route.dependency_names
+        ), f"{route.path} carries an HTTP auth dependency: {route.dependency_names}"
 
 
 def test_the_unguarded_surface_is_declared_rather_than_discovered():
@@ -196,18 +196,37 @@ def test_the_unguarded_surface_is_declared_rather_than_discovered():
     """
     from aexy.main import app
 
-    unguarded = 0
-    for route in app.routes:
-        path = getattr(route, "path", "")
-        if "{workspace_id}/" not in path:
-            continue
-        names = [
-            getattr(d.dependency, "__name__", "")
-            for d in getattr(route, "dependencies", [])
-        ]
-        if not any(n == "_guard" for n in names):
-            unguarded += 1
+    from tests.support.routes import mounted_routes
 
+    unguarded = sum(
+        1
+        for route in mounted_routes(app)
+        if "{workspace_id}/" in route.path
+        and "_guard" not in route.dependency_names
+        # `/platform-admin` is staff tooling, not workspace app surface. It
+        # takes a workspace id because it acts *on* a tenant — read this
+        # customer's plan, price their month — and it answers only to the
+        # people named in `ADMIN_EMAILS`, which is a stricter test than any
+        # app guard, not a looser one. Counting those routes here would mean
+        # every new admin screen reads as a widening of what a workspace
+        # member can reach without the module switched on, which is the one
+        # thing this number is for.
+        and not route.path.startswith("/api/v1/platform-admin/")
+    )
+
+    # This count went to zero and stayed there for a while without anyone
+    # noticing. FastAPI 0.141 made `include_router` lazy, so `app.routes`
+    # stopped holding routes and started holding `_IncludedRouter` objects
+    # with no `.path`; the `getattr(route, "path", "")` here matched nothing,
+    # counted nothing, and passed. A ledger that cannot fail is not a ledger.
+    # The walk now lives in `tests/support/routes.py` and refuses to return an
+    # empty list.
+    #
+    # Re-measured against the real tree it is 280: 290 workspace-scoped routes
+    # with no app guard, less the 10 platform-admin ones excluded above. The
+    # declared number had been 290 and was right about the whole set; 280 is
+    # the part of it this test is actually about.
+    #
     # Raise this only with a reason, and lower it whenever a router moves
     # behind its module.
     #
@@ -227,8 +246,8 @@ def test_the_unguarded_surface_is_declared_rather_than_discovered():
     #
     # The same change added nine routes that ARE gated: agent schedules behind
     # `agents`, and `crm/outreach/*` behind `crm`.
-    assert unguarded <= 290, (
-        f"{unguarded} workspace-scoped routes carry no app guard, up from 290. "
+    assert unguarded <= 280, (
+        f"{unguarded} workspace-scoped routes carry no app guard, up from 280. "
         "A new router needs either `require_app_access(<app>)` or a note here "
         "saying why it must answer for a workspace that switched the module off."
     )

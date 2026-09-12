@@ -42,20 +42,29 @@ def _document_routes() -> list[tuple[str, str, str]]:
 
     Read off the live app rather than a hand-kept list, so a router mounted
     later is covered without anyone remembering to add it here.
+
+    Walked through `mounted_routes`, not `app.routes`. FastAPI 0.141 made
+    `include_router` lazy: the top-level list holds `_IncludedRouter`
+    placeholders with no `.path`, so reading one straight off it found
+    nothing. The guard below caught that and failed loudly, which is more than
+    the sibling check in `test_app_gating.py` managed — but the damage was
+    quieter than the one red test suggests. `_document_routes()` feeds
+    `@pytest.mark.parametrize`, and an empty list generates *no cases*: every
+    per-route assertion in this file, the one keeping a write endpoint from
+    sitting at read level, silently had nothing to assert.
     """
+    from tests.support.routes import mounted_routes
+
     found: list[tuple[str, str, str]] = []
-    for route in app.routes:
-        path = getattr(route, "path", "")
-        methods = getattr(route, "methods", None)
-        if not methods or "{document_id}" not in path:
+    for route in mounted_routes(app):
+        if "{document_id}" not in route.path or DOCUMENT_PREFIX not in route.path:
             continue
-        if DOCUMENT_PREFIX not in path:
+        if route.is_websocket:
             continue
-        name = getattr(route, "name", "?")
-        for method in methods:
+        for method in route.methods:
             if method in ("HEAD", "OPTIONS"):
                 continue
-            found.append((method, path, name))
+            found.append((method, route.path, getattr(route.route, "name", "?")))
     return sorted(found)
 
 

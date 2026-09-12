@@ -83,6 +83,9 @@ test.describe("forms screenshots", () => {
   }) => {
     const target = forms.find((f) => f.is_active);
     test.skip(!target, "no active form");
+    // `test.skip` ends the run here, but it does so at runtime and the
+    // compiler cannot see that, so `target` stays possibly-undefined below.
+    if (!target) return;
 
     // No auth: a public form is the one page in this product that a stranger
     // is meant to reach, so photographing it signed in would be photographing

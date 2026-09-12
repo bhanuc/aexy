@@ -5,6 +5,59 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.3] - 2026-09-12
+
+Five checks that had stopped doing their job.
+
+### Fixed: a ledger of ungated routes had quietly stopped counting
+
+Three tests read `route.path` and `route.dependencies` straight off `app.routes`.
+FastAPI 0.141 made `include_router` lazy: `app.routes` now holds router
+placeholders with no path of their own, which broke both — but differently.
+One raised an `AttributeError` and failed loudly. The other used
+`getattr(route, "path", "")`, matched nothing, counted zero ungated routes and
+**passed**. A ledger that cannot fail is not a ledger.
+
+The walk now lives in one place, accumulates the dependencies added at each
+mount (which is where the mistake it looks for is made), covers websocket
+routes as well as HTTP ones, and refuses to return an empty list. Re-measured
+against the real tree the count is 280 — the declared ceiling was right about
+the whole set; this is the part of it the test is actually for, with the
+`/platform-admin` routes excluded. They take a workspace id because they act
+*on* a tenant, and they answer only to `ADMIN_EMAILS`, which is a stricter
+test than any app guard rather than a looser one.
+
+### Fixed: the document access floors were checking nothing at all
+
+The third reader of `app.routes` enumerates every `{document_id}` route so
+that each one's minimum access level is a decision rather than a default. It
+has a guard against finding nothing, and that guard did fail — but the damage
+was quieter than one red test suggests. The list feeds
+`@pytest.mark.parametrize`, and an empty list generates *no cases*: ninety-two
+per-route assertions, the ones keeping a write endpoint from sitting at read
+level, had silently had nothing to assert. They run again, and all of them
+pass — the floors had not drifted, the check had just stopped looking.
+
+### Fixed: two tests still asserted a behaviour that was deliberately removed
+
+Service Desk used to report a scope of `"none"` for somebody in no desk
+department, alongside a message saying no ticket could ever be routed to them.
+That stopped being true when assignment began granting visibility on its own —
+the message was being read by engineers holding a ticket somebody had just
+handed them — and the floor became `"assigned"`.
+
+The API test and the browser test were never updated, so one failed on every
+run and the other checked for a message the product no longer shows. Both now
+assert what the product does: an assigned-only caller is told the other
+tickets have their own owners, and a stale `"none"` from an older server falls
+back to neutral wording rather than to the removed claim.
+
+### Fixed: the documentation screenshot suite did not type-check
+
+`test.skip()` ends a run at runtime, which the compiler cannot see, so the
+value guarded by one was still possibly-undefined on the next line. It was the
+only type error in the project; `tsc` is now clean.
+
 ## [0.39.2] - 2026-09-12
 
 Two gaps in the content sync added in 0.39.0.
