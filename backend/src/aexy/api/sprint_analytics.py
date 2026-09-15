@@ -1,4 +1,10 @@
-"""Sprint Analytics API endpoints."""
+"""Sprint analytics endpoints.
+
+Each route calls `assert_project_visible` after its permission check: these are
+keyed by a board (or by a sprint, which names one), and a board shares its id
+with the project it belongs to, so without it they answer for a project the
+caller may not be allowed to see. See `api/sprints.py` for the full note.
+"""
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +18,7 @@ from aexy.schemas.sprint import (
     VelocityDataPoint,
     SprintMetricsResponse,
 )
+from aexy.services.project_service import assert_project_visible
 from aexy.services.sprint_service import SprintService
 from aexy.services.sprint_analytics_service import SprintAnalyticsService
 from aexy.services.workspace_service import WorkspaceService
@@ -46,6 +53,10 @@ async def get_burndown_data(
             detail="Not a member of this workspace",
         )
 
+    await assert_project_visible(
+        db, str(sprint.workspace_id), str(sprint.team_id), str(current_user.id)
+    )
+
     data = await analytics_service.get_burndown_data(sprint_id)
     return BurndownDataResponse(**data)
 
@@ -76,6 +87,10 @@ async def get_cycle_time_analytics(
             detail="Not a member of this workspace",
         )
 
+    await assert_project_visible(
+        db, str(sprint.workspace_id), str(sprint.team_id), str(current_user.id)
+    )
+
     return await analytics_service.get_cycle_time_analytics(sprint_id)
 
 
@@ -103,6 +118,10 @@ async def get_sprint_metrics(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not a member of this workspace",
         )
+
+    await assert_project_visible(
+        db, str(sprint.workspace_id), str(sprint.team_id), str(current_user.id)
+    )
 
     return [
         SprintMetricsResponse(
@@ -155,6 +174,10 @@ async def get_team_velocity(
             detail="Not a member of this workspace",
         )
 
+    await assert_project_visible(
+        db, str(team.workspace_id), team_id, str(current_user.id)
+    )
+
     analytics_service = SprintAnalyticsService(db)
     data = await analytics_service.get_team_velocity(team_id, num_sprints)
 
@@ -204,6 +227,10 @@ async def predict_team_velocity(
             detail="Not a member of this workspace",
         )
 
+    await assert_project_visible(
+        db, str(team.workspace_id), team_id, str(current_user.id)
+    )
+
     analytics_service = SprintAnalyticsService(db)
     return await analytics_service.predict_velocity(team_id)
 
@@ -236,6 +263,10 @@ async def get_carry_over_analysis(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not a member of this workspace",
         )
+
+    await assert_project_visible(
+        db, str(team.workspace_id), team_id, str(current_user.id)
+    )
 
     analytics_service = SprintAnalyticsService(db)
     return await analytics_service.get_carry_over_analysis(team_id)
@@ -270,6 +301,10 @@ async def get_chronic_carry_over(
             detail="Not a member of this workspace",
         )
 
+    await assert_project_visible(
+        db, str(team.workspace_id), team_id, str(current_user.id)
+    )
+
     analytics_service = SprintAnalyticsService(db)
     return await analytics_service.identify_chronic_carry_over(team_id)
 
@@ -302,6 +337,10 @@ async def get_team_health(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not a member of this workspace",
         )
+
+    await assert_project_visible(
+        db, str(team.workspace_id), team_id, str(current_user.id)
+    )
 
     analytics_service = SprintAnalyticsService(db)
     return await analytics_service.get_team_health_metrics(team_id)

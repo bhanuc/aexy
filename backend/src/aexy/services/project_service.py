@@ -90,6 +90,56 @@ async def assert_project_visible(
         raise HTTPException(status_code=404, detail="Project not found")
 
 
+async def hidden_project_ids(
+    db: AsyncSession, workspace_id: str, developer_id: str
+) -> set[str]:
+    """Project ids in this workspace that this developer may not see.
+
+    For filtering a list that is keyed by something other than a project —
+    sprints are keyed by the board's id, which is the project's id — where
+    asking `can_see_project` per row would be a query per row.
+
+    Empty for a workspace that has not scoped its projects, and for anyone who
+    may see all of them, so the common case costs one query and no filtering.
+    Ids that are not projects at all are never in here: a plain team's sprints
+    are not a project's to hide.
+    """
+    from aexy.services.permission_service import PermissionService
+
+    service = ProjectService(db)
+    if await service.get_visibility_mode(workspace_id) == PROJECT_VISIBILITY_WORKSPACE:
+        return set()
+    if await PermissionService(db).check_permission(
+        workspace_id, developer_id, "can_view_all_projects"
+    ):
+        return set()
+
+    everything = {
+        str(row)
+        for row in (
+            await db.execute(
+                select(Project.id).where(
+                    Project.workspace_id == workspace_id,
+                    Project.is_active == True,  # noqa: E712
+                )
+            )
+        ).scalars()
+    }
+    visible = {
+        str(row)
+        for row in (
+            await db.execute(
+                select(Project.id).where(
+                    Project.workspace_id == workspace_id,
+                    Project.is_active == True,  # noqa: E712
+                    ProjectService._membership_clause(developer_id),
+                )
+            )
+        ).scalars()
+    }
+    return everything - visible
+
+
 class ProjectService:
     """Service for managing projects."""
 

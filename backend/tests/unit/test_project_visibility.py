@@ -21,19 +21,25 @@ is here.
 from __future__ import annotations
 
 import uuid
+from datetime import date
 
 import pytest
+from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aexy.models.developer import Developer
 from aexy.models.role import CustomRole
 from aexy.models.team import TeamMember, TeamMemberRole
 from aexy.models.workspace import Workspace, WorkspaceMember
+from aexy.models.sprint import Sprint
 from aexy.services.project_service import (
     PROJECT_VISIBILITY_MEMBERS,
     PROJECT_VISIBILITY_WORKSPACE,
     ProjectService,
+    assert_project_visible,
     can_see_project,
+    hidden_project_ids,
 )
 
 
@@ -226,3 +232,118 @@ async def test_visibility_mode_defaults_to_members_when_unset(
     assert await ProjectService(db_session).get_visibility_mode(ws.id) == (
         PROJECT_VISIBILITY_MEMBERS
     )
+
+
+# --------------------------------------------------------------------------
+# Sprints are keyed by the board, and a board shares its id with its project.
+# Scoping the project list alone would have been a filter on a menu: the board
+# behind it stayed readable to anyone who knew the id.
+# --------------------------------------------------------------------------
+
+
+async def _sprint(db: AsyncSession, ws: Workspace, project, name: str) -> Sprint:
+    sprint = Sprint(
+        id=str(uuid.uuid4()),
+        workspace_id=ws.id,
+        team_id=project.id,  # the board shares the project's id
+        name=name,
+        status="active",
+        start_date=date(2026, 9, 1),
+        end_date=date(2026, 9, 14),
+    )
+    db.add(sprint)
+    await db.commit()
+    return sprint
+
+
+@pytest.mark.asyncio
+async def test_board_guard_hides_a_project_the_caller_is_not_on(
+    db_session: AsyncSession,
+) -> None:
+    ws, _ = await _workspace(db_session, "ws-guard", PROJECT_VISIBILITY_MEMBERS)
+    dev = await _developer(db_session, "dev-guard")
+    await _join(db_session, ws, dev)
+    project = await _project(db_session, ws, "guarded")
+
+    with pytest.raises(HTTPException) as raised:
+        await assert_project_visible(db_session, ws.id, project.id, str(dev.id))
+    # 404, not 403: a 403 would confirm the project is there.
+    assert raised.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_board_guard_passes_for_someone_on_the_board(
+    db_session: AsyncSession,
+) -> None:
+    ws, _ = await _workspace(db_session, "ws-guard-ok", PROJECT_VISIBILITY_MEMBERS)
+    dev = await _developer(db_session, "dev-guard-ok")
+    await _join(db_session, ws, dev)
+    project = await _project(db_session, ws, "theirs", creator=dev)
+
+    await assert_project_visible(db_session, ws.id, project.id, str(dev.id))
+
+
+@pytest.mark.asyncio
+async def test_board_guard_ignores_ids_that_are_not_projects(
+    db_session: AsyncSession,
+) -> None:
+    """Every team-keyed route calls this, and most teams are not boards."""
+    ws, _ = await _workspace(db_session, "ws-plain-team", PROJECT_VISIBILITY_MEMBERS)
+    dev = await _developer(db_session, "dev-plain-team")
+    await _join(db_session, ws, dev)
+
+    await assert_project_visible(db_session, ws.id, str(uuid.uuid4()), str(dev.id))
+
+
+@pytest.mark.asyncio
+async def test_hidden_ids_cover_the_projects_a_member_is_not_on(
+    db_session: AsyncSession,
+) -> None:
+    ws, _ = await _workspace(db_session, "ws-hidden", PROJECT_VISIBILITY_MEMBERS)
+    dev = await _developer(db_session, "dev-hidden")
+    await _join(db_session, ws, dev)
+    mine = await _project(db_session, ws, "mine-h", creator=dev)
+    theirs = await _project(db_session, ws, "theirs-h")
+
+    hidden = await hidden_project_ids(db_session, ws.id, str(dev.id))
+
+    assert hidden == {theirs.id}
+    assert mine.id not in hidden
+
+
+@pytest.mark.asyncio
+async def test_hidden_ids_are_empty_when_the_workspace_has_not_scoped(
+    db_session: AsyncSession,
+) -> None:
+    """The cross-team sprint picker filters on this, so it has to cost nothing
+    in a workspace that never switched over."""
+    ws, _ = await _workspace(db_session, "ws-hidden-open", PROJECT_VISIBILITY_WORKSPACE)
+    dev = await _developer(db_session, "dev-hidden-open")
+    await _join(db_session, ws, dev)
+    await _project(db_session, ws, "not-theirs-h")
+
+    assert await hidden_project_ids(db_session, ws.id, str(dev.id)) == set()
+
+
+@pytest.mark.asyncio
+async def test_sprints_on_a_hidden_board_are_filtered_from_the_workspace_list(
+    db_session: AsyncSession,
+) -> None:
+    """What `GET /workspaces/{id}/sprints` does with the hidden set: a picker
+    naming a sprint is a picker naming the project it belongs to."""
+    ws, _ = await _workspace(db_session, "ws-sprint-list", PROJECT_VISIBILITY_MEMBERS)
+    dev = await _developer(db_session, "dev-sprint-list")
+    await _join(db_session, ws, dev)
+    mine = await _project(db_session, ws, "mine-s", creator=dev)
+    theirs = await _project(db_session, ws, "theirs-s")
+
+    ours = await _sprint(db_session, ws, mine, "Sprint ours")
+    await _sprint(db_session, ws, theirs, "Sprint theirs")
+
+    all_sprints = (
+        await db_session.execute(select(Sprint).where(Sprint.workspace_id == ws.id))
+    ).scalars().all()
+    hidden = await hidden_project_ids(db_session, ws.id, str(dev.id))
+    visible = [s for s in all_sprints if str(s.team_id) not in hidden]
+
+    assert [s.id for s in visible] == [ours.id]
