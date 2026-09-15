@@ -4,6 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
+  Archive,
+  ArchiveRestore,
   ChevronDown,
   ChevronRight,
   Crown,
@@ -25,10 +27,18 @@ import { CreateProjectModal } from "@/components/projects/CreateProjectModal";
 import { useRoles } from "@/hooks/useRoles";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
-import { Project, CustomRole } from "@/lib/api";
+import {
+  Project,
+  CustomRole,
+  ProjectVisibilityMode,
+  projectApi,
+} from "@/lib/api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { getApiErrorMessage } from "@/lib/utils";
 import { UpgradeModal } from "@/components/PremiumGate";
 import { useTranslations } from "next-intl";
-import { SettingsPage } from "@/components/settings/SettingsPrimitives";
+import { SettingsPage, SettingsSection } from "@/components/settings/SettingsPrimitives";
 import {
   PROJECT_SETTINGS_TABS,
   projectSettingsHref,
@@ -74,6 +84,7 @@ interface ProjectCardProps {
   isAdmin: boolean;
   roles: CustomRole[];
   onDelete: (projectId: string) => void;
+  onArchive: (project: Project) => void;
   canUseProjectFeatures: boolean;
 }
 
@@ -205,6 +216,7 @@ function ProjectCard({
   isAdmin,
   roles,
   onDelete,
+  onArchive,
   canUseProjectFeatures,
 }: ProjectCardProps) {
   // The row menu's destinations are the project settings tabs, so their labels
@@ -366,6 +378,26 @@ function ProjectCard({
                       </Link>
                     ))}
                     <div className="my-1 border-t border-border" />
+                    {/* Above the delete, and separated from it: archiving is
+                        the reversible one, and it is what most people reaching
+                        for "delete" on a finished project actually want. */}
+                    <button
+                      role="menuitem"
+                      onClick={() => {
+                        onArchive(project);
+                        setShowMenu(false);
+                      }}
+                      className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-accent flex items-center gap-2"
+                    >
+                      {project.status === "archived" ? (
+                        <ArchiveRestore className="h-4 w-4" />
+                      ) : (
+                        <Archive className="h-4 w-4" />
+                      )}
+                      {project.status === "archived"
+                        ? tList("unarchiveProject")
+                        : tList("archiveProject")}
+                    </button>
                     <button
                       role="menuitem"
                       onClick={() => {
@@ -609,6 +641,66 @@ function ProjectCard({
   );
 }
 
+/**
+ * Who sees which projects.
+ *
+ * Before this existed, everyone who could view projects saw all of them, so
+ * the switch defaults to that for every workspace that already existed —
+ * flipping it is a decision an admin makes once project membership is right.
+ * `scripts/report_project_visibility.py` prints who would lose access first.
+ */
+function ProjectVisibilitySection({ workspaceId }: { workspaceId: string }) {
+  const t = useTranslations("settingsProjectsList");
+  const queryClient = useQueryClient();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["projectVisibility", workspaceId],
+    queryFn: () => projectApi.getVisibility(workspaceId),
+  });
+
+  const mutation = useMutation({
+    mutationFn: (mode: ProjectVisibilityMode) =>
+      projectApi.setVisibility(workspaceId, mode),
+    onSuccess: (config) => {
+      queryClient.setQueryData(["projectVisibility", workspaceId], config);
+      queryClient.invalidateQueries({ queryKey: ["projects", workspaceId] });
+      toast.success(t("visibilitySaved"));
+    },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error, t("visibilitySaveFailed")));
+    },
+  });
+
+  const mode = data?.mode ?? "workspace";
+
+  return (
+    <SettingsSection title={t("visibilityTitle")} description={t("visibilityDescription")}>
+      <fieldset disabled={isLoading || mutation.isPending} className="space-y-3">
+        {(["workspace", "members"] as const).map((option) => (
+          <label key={option} className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="radio"
+              name="project-visibility"
+              value={option}
+              checked={mode === option}
+              onChange={() => mutation.mutate(option)}
+              className="mt-1 h-4 w-4"
+            />
+            <span>
+              <span className="block text-sm text-foreground">
+                {t(option === "workspace" ? "visibilityAllLabel" : "visibilityMembersLabel")}
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                {t(option === "workspace" ? "visibilityAllHint" : "visibilityMembersHint")}
+              </span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+    </SettingsSection>
+  );
+}
+
 export default function ProjectsSettingsPage() {
   const t = useTranslations("settingsProjectsList");
   const { user } = useAuth();
@@ -623,18 +715,34 @@ export default function ProjectsSettingsPage() {
   const { members: workspaceMembers } = useWorkspaceMembers(currentWorkspaceId);
   const { roles } = useRoles(currentWorkspaceId);
 
+  const [showArchived, setShowArchived] = useState(false);
   const {
     projects,
     isLoading: projectsLoading,
     createProject,
     deleteProject,
+    archiveProject,
+    unarchiveProject,
     isCreating,
-  } = useProjects(currentWorkspaceId);
+  } = useProjects(currentWorkspaceId, { includeArchived: showArchived });
 
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   const currentMember = workspaceMembers.find((m) => m.developer_id === user?.id);
   const isAdmin = currentMember?.role === "owner" || currentMember?.role === "admin";
+
+  const handleArchive = async (project: Project) => {
+    if (project.status === "archived") {
+      await unarchiveProject(project.id);
+      return;
+    }
+    if (confirm(t("confirmArchiveProject", { name: project.name }))) {
+      await archiveProject(project.id);
+      // Otherwise it vanishes from the list the moment it is archived, which
+      // reads like a delete — the one thing archiving is not.
+      setShowArchived(true);
+    }
+  };
 
   const handleDelete = async (projectId: string) => {
     if (confirm(t("confirmDeleteProject"))) {
@@ -683,6 +791,12 @@ export default function ProjectsSettingsPage() {
           </div>
         ) : (
           <>
+            {isAdmin && currentWorkspaceId && (
+              <div className="mb-6">
+                <ProjectVisibilitySection workspaceId={currentWorkspaceId} />
+              </div>
+            )}
+
             {/* Header with Actions */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
               <div>
@@ -690,23 +804,51 @@ export default function ProjectsSettingsPage() {
                   <FolderKanban className="h-5 w-5 text-muted-foreground" />
                   Projects in {currentWorkspace?.name}
                 </h2>
-                <p className="text-muted-foreground text-sm">{projects.length} projects</p>
+                <p className="text-muted-foreground text-sm">
+                  {t("projectCount", {
+                    count: projects.filter((p) => p.status !== "archived").length,
+                  })}
+                  {showArchived &&
+                    (() => {
+                      const archived = projects.filter(
+                        (p) => p.status === "archived",
+                      ).length;
+                      return archived > 0 ? ` · ${t("archivedCount", { count: archived })}` : "";
+                    })()}
+                </p>
               </div>
-              {isAdmin && (
-                <button
-                  onClick={() => setShowCreateModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition text-sm"
-                >
-                  <Plus className="h-4 w-4" />
-                  {t("create")}
-                </button>
-              )}
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showArchived}
+                    onChange={(e) => setShowArchived(e.target.checked)}
+                    className="h-3.5 w-3.5"
+                  />
+                  {t("showArchived")}
+                </label>
+                {isAdmin && (
+                  <button
+                    onClick={() => setShowCreateModal(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition text-sm"
+                  >
+                    <Plus className="h-4 w-4" />
+                    {t("create")}
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Projects List */}
             {projects.length > 0 ? (
               <div className="space-y-4">
-                {projects.map((project) => (
+                {[...projects]
+                  .sort(
+                    (a, b) =>
+                      Number(a.status === "archived") -
+                      Number(b.status === "archived"),
+                  )
+                  .map((project) => (
                   <ProjectCard
                     key={project.id}
                     project={project}
@@ -714,6 +856,7 @@ export default function ProjectsSettingsPage() {
                     isAdmin={isAdmin}
                     roles={roles}
                     onDelete={handleDelete}
+                    onArchive={handleArchive}
                     canUseProjectFeatures={canUseTeamFeatures}
                   />
                 ))}

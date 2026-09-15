@@ -34,6 +34,7 @@ from aexy.schemas.project import (
     ProjectInviteResult,
     MyProjectPermissionsResponse,
     AccessibleWidgetsResponse,
+    ProjectVisibilityConfig,
     PublicTabsConfig,
     PublicTabsUpdate,
     RoadmapRequestResponse,
@@ -41,7 +42,11 @@ from aexy.schemas.project import (
     RoadmapRequestAuthor,
 )
 from aexy.schemas.role import RoleSummary
-from aexy.services.project_service import ProjectService
+from aexy.services.project_service import (
+    PROJECT_VISIBILITY_WORKSPACE,
+    ProjectService,
+    can_see_project,
+)
 from aexy.services.permission_service import PermissionService
 from aexy.services.role_service import RoleService
 from aexy.services.activity_logger import log_activity
@@ -63,6 +68,27 @@ async def _with_routing(
     return ProjectResponse.model_validate(project).model_copy(
         update=routing.as_response_fields()
     )
+
+
+async def _assert_visible(
+    db: AsyncSession, workspace_id: str, project_id: str, developer_id: str
+) -> Project:
+    """The project, if this developer is allowed to know it exists.
+
+    404 rather than 403 on purpose: a 403 tells the caller that a project with
+    that id is there, which is the thing scoped visibility is meant to withhold.
+    Callers who may see everything — the workspace owner, anyone holding
+    `can_view_all_projects`, and everyone in a workspace still set to
+    `project_visibility="workspace"` — pass the membership check trivially.
+    """
+    project = await ProjectService(db).get_project(project_id)
+    if not project or project.workspace_id != workspace_id or not project.is_active:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if not await can_see_project(db, workspace_id, project_id, developer_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    return project
 
 
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
@@ -119,8 +145,17 @@ async def list_projects(
         raise HTTPException(status_code=403, detail="Permission denied")
 
     project_service = ProjectService(db)
+    # Who sees everything: a workspace still on the pre-scoping setting, and
+    # anyone holding `can_view_all_projects` (owners, admins and managers by
+    # default). Everyone else sees the projects they are attached to.
+    mode = await project_service.get_visibility_mode(workspace_id)
+    sees_all = mode == PROJECT_VISIBILITY_WORKSPACE or await permission_service.check_permission(
+        workspace_id, str(current_user.id), "can_view_all_projects"
+    )
     projects = await project_service.list_projects(
-        workspace_id, include_archived=include_archived
+        workspace_id,
+        include_archived=include_archived,
+        visible_to_developer_id=None if sees_all else str(current_user.id),
     )
 
     # One batched resolution for the whole page rather than per row: the settings
@@ -153,6 +188,57 @@ async def list_projects(
     )
 
 
+# Declared before the `/{project_id}` routes below: a path parameter would
+# otherwise swallow "visibility" and try to load a project by that id.
+@router.get("/visibility", response_model=ProjectVisibilityConfig)
+async def get_project_visibility(
+    workspace_id: str,
+    current_user: Developer = Depends(get_current_developer),
+    db: AsyncSession = Depends(get_db),
+):
+    """Whether this workspace scopes its project list to membership."""
+    permission_service = PermissionService(db)
+    if not await permission_service.check_permission(
+        workspace_id, str(current_user.id), "can_view_projects"
+    ):
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    mode = await ProjectService(db).get_visibility_mode(workspace_id)
+    return ProjectVisibilityConfig(mode=mode)
+
+
+@router.put("/visibility", response_model=ProjectVisibilityConfig)
+async def set_project_visibility(
+    workspace_id: str,
+    data: ProjectVisibilityConfig,
+    current_user: Developer = Depends(get_current_developer),
+    db: AsyncSession = Depends(get_db),
+):
+    """Switch the workspace between workspace-wide and member-scoped projects.
+
+    This decides what everybody else can see, so it sits behind
+    `can_manage_workspace_settings` rather than the project permissions.
+    """
+    permission_service = PermissionService(db)
+    if not await permission_service.check_permission(
+        workspace_id, str(current_user.id), "can_manage_workspace_settings"
+    ):
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    mode = await ProjectService(db).set_visibility_mode(workspace_id, data.mode)
+    await log_activity(
+        db,
+        workspace_id=workspace_id,
+        entity_type="workspace",
+        entity_id=workspace_id,
+        activity_type="updated",
+        actor_id=str(current_user.id),
+        title=f"Set project visibility to '{mode}'",
+    )
+    await db.commit()
+    return ProjectVisibilityConfig(mode=mode)
+
+
 @router.get("/{project_id}", response_model=ProjectResponse)
 async def get_project(
     workspace_id: str,
@@ -167,10 +253,7 @@ async def get_project(
     ):
         raise HTTPException(status_code=403, detail="Permission denied")
 
-    project_service = ProjectService(db)
-    project = await project_service.get_project(project_id)
-    if not project or project.workspace_id != workspace_id:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = await _assert_visible(db, workspace_id, project_id, str(current_user.id))
     return await _with_routing(db, workspace_id, project)
 
 
@@ -190,10 +273,7 @@ async def update_project(
         raise HTTPException(status_code=403, detail="Permission denied")
 
     project_service = ProjectService(db)
-    project = await project_service.get_project(project_id)
-
-    if not project or project.workspace_id != workspace_id:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = await _assert_visible(db, workspace_id, project_id, str(current_user.id))
 
     project = await project_service.update_project(
         project_id, **data.model_dump(exclude_unset=True)
@@ -219,7 +299,12 @@ async def delete_project(
     current_user: Developer = Depends(get_current_developer),
     db: AsyncSession = Depends(get_db),
 ):
-    """Delete a project (archive)."""
+    """Soft delete a project.
+
+    Distinct from archiving: this one is not offered back in any listing. Use
+    ``POST /{project_id}/archive`` to merely hide a project that is finished or
+    dormant.
+    """
     permission_service = PermissionService(db)
     if not await permission_service.check_permission(
         workspace_id, str(current_user.id), "can_delete_projects", project_id
@@ -227,10 +312,7 @@ async def delete_project(
         raise HTTPException(status_code=403, detail="Permission denied")
 
     project_service = ProjectService(db)
-    project = await project_service.get_project(project_id)
-
-    if not project or project.workspace_id != workspace_id:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = await _assert_visible(db, workspace_id, project_id, str(current_user.id))
 
     project_name = project.name
     await project_service.delete_project(project_id)
@@ -244,6 +326,75 @@ async def delete_project(
         title=f"Deleted project '{project_name}'",
     )
     await db.commit()
+
+
+@router.post("/{project_id}/archive", response_model=ProjectResponse)
+async def archive_project(
+    workspace_id: str,
+    project_id: str,
+    current_user: Developer = Depends(get_current_developer),
+    db: AsyncSession = Depends(get_db),
+):
+    """Archive a project so it stops appearing in project lists and pickers.
+
+    Gated on ``can_edit_projects`` rather than ``can_delete_projects``: this is
+    reversible and loses nothing, so it should not need the owner-only
+    permission that deleting does.
+    """
+    permission_service = PermissionService(db)
+    if not await permission_service.check_permission(
+        workspace_id, str(current_user.id), "can_edit_projects", project_id
+    ):
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    project_service = ProjectService(db)
+    await _assert_visible(db, workspace_id, project_id, str(current_user.id))
+
+    project = await project_service.archive_project(project_id)
+    await log_activity(
+        db,
+        workspace_id=workspace_id,
+        entity_type="project",
+        entity_id=project_id,
+        activity_type="archived",
+        actor_id=str(current_user.id),
+        title=f"Archived project '{project.name}'",
+    )
+    await db.commit()
+    await db.refresh(project)
+    return await _with_routing(db, workspace_id, project)
+
+
+@router.post("/{project_id}/unarchive", response_model=ProjectResponse)
+async def unarchive_project(
+    workspace_id: str,
+    project_id: str,
+    current_user: Developer = Depends(get_current_developer),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bring an archived project back."""
+    permission_service = PermissionService(db)
+    if not await permission_service.check_permission(
+        workspace_id, str(current_user.id), "can_edit_projects", project_id
+    ):
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    project_service = ProjectService(db)
+    await _assert_visible(db, workspace_id, project_id, str(current_user.id))
+
+    project = await project_service.unarchive_project(project_id)
+    await log_activity(
+        db,
+        workspace_id=workspace_id,
+        entity_type="project",
+        entity_id=project_id,
+        activity_type="unarchived",
+        actor_id=str(current_user.id),
+        title=f"Unarchived project '{project.name}'",
+    )
+    await db.commit()
+    await db.refresh(project)
+    return await _with_routing(db, workspace_id, project)
 
 
 @router.post("/{project_id}/toggle-visibility", response_model=ProjectResponse)
@@ -260,11 +411,7 @@ async def toggle_project_visibility(
     ):
         raise HTTPException(status_code=403, detail="Permission denied")
 
-    project_service = ProjectService(db)
-    project = await project_service.get_project(project_id)
-
-    if not project or project.workspace_id != workspace_id:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = await _assert_visible(db, workspace_id, project_id, str(current_user.id))
 
     # Toggle visibility using model methods
     if project.is_public:
@@ -295,11 +442,7 @@ async def get_public_tabs_config(
     ):
         raise HTTPException(status_code=403, detail="Permission denied")
 
-    project_service = ProjectService(db)
-    project = await project_service.get_project(project_id)
-
-    if not project or project.workspace_id != workspace_id:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = await _assert_visible(db, workspace_id, project_id, str(current_user.id))
 
     settings = project.settings or {}
     public_tabs = settings.get("public_tabs", {})
@@ -323,11 +466,7 @@ async def update_public_tabs_config(
     ):
         raise HTTPException(status_code=403, detail="Permission denied")
 
-    project_service = ProjectService(db)
-    project = await project_service.get_project(project_id)
-
-    if not project or project.workspace_id != workspace_id:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = await _assert_visible(db, workspace_id, project_id, str(current_user.id))
 
     # Validate tabs - filter out invalid ones
     enabled_tabs = [tab for tab in data.enabled_tabs if tab in VALID_PUBLIC_TABS]
@@ -366,10 +505,7 @@ async def list_project_members(
         raise HTTPException(status_code=403, detail="Permission denied")
 
     project_service = ProjectService(db)
-    project = await project_service.get_project(project_id)
-
-    if not project or project.workspace_id != workspace_id:
-        raise HTTPException(status_code=404, detail="Project not found")
+    await _assert_visible(db, workspace_id, project_id, str(current_user.id))
 
     members = await project_service.list_members(project_id)
 
@@ -408,10 +544,7 @@ async def add_project_member(
         raise HTTPException(status_code=403, detail="Permission denied")
 
     project_service = ProjectService(db)
-    project = await project_service.get_project(project_id)
-
-    if not project or project.workspace_id != workspace_id:
-        raise HTTPException(status_code=404, detail="Project not found")
+    await _assert_visible(db, workspace_id, project_id, str(current_user.id))
 
     # Validate role if provided
     if data.role_id:
@@ -482,10 +615,7 @@ async def invite_to_project(
         raise HTTPException(status_code=403, detail="Permission denied")
 
     project_service = ProjectService(db)
-    project = await project_service.get_project(project_id)
-
-    if not project or project.workspace_id != workspace_id:
-        raise HTTPException(status_code=404, detail="Project not found")
+    await _assert_visible(db, workspace_id, project_id, str(current_user.id))
 
     # Validate role if provided
     if data.role_id:
@@ -554,10 +684,7 @@ async def update_project_member(
         raise HTTPException(status_code=403, detail="Permission denied")
 
     project_service = ProjectService(db)
-    project = await project_service.get_project(project_id)
-
-    if not project or project.workspace_id != workspace_id:
-        raise HTTPException(status_code=404, detail="Project not found")
+    await _assert_visible(db, workspace_id, project_id, str(current_user.id))
 
     # Validate role if provided
     if data.role_id:
@@ -626,10 +753,7 @@ async def remove_project_member(
         raise HTTPException(status_code=403, detail="Permission denied")
 
     project_service = ProjectService(db)
-    project = await project_service.get_project(project_id)
-
-    if not project or project.workspace_id != workspace_id:
-        raise HTTPException(status_code=404, detail="Project not found")
+    await _assert_visible(db, workspace_id, project_id, str(current_user.id))
 
     success = await project_service.remove_member(project_id, developer_id)
     if not success:
@@ -663,10 +787,7 @@ async def list_project_teams(
         raise HTTPException(status_code=403, detail="Permission denied")
 
     project_service = ProjectService(db)
-    project = await project_service.get_project(project_id)
-
-    if not project or project.workspace_id != workspace_id:
-        raise HTTPException(status_code=404, detail="Project not found")
+    await _assert_visible(db, workspace_id, project_id, str(current_user.id))
 
     project_teams = await project_service.list_project_teams(project_id)
 
@@ -701,10 +822,7 @@ async def add_team_to_project(
         raise HTTPException(status_code=403, detail="Permission denied")
 
     project_service = ProjectService(db)
-    project = await project_service.get_project(project_id)
-
-    if not project or project.workspace_id != workspace_id:
-        raise HTTPException(status_code=404, detail="Project not found")
+    await _assert_visible(db, workspace_id, project_id, str(current_user.id))
 
     project_team = await project_service.add_team(project_id, data.team_id)
     await log_activity(
@@ -745,10 +863,7 @@ async def remove_team_from_project(
         raise HTTPException(status_code=403, detail="Permission denied")
 
     project_service = ProjectService(db)
-    project = await project_service.get_project(project_id)
-
-    if not project or project.workspace_id != workspace_id:
-        raise HTTPException(status_code=404, detail="Project not found")
+    await _assert_visible(db, workspace_id, project_id, str(current_user.id))
 
     success = await project_service.remove_team(project_id, team_id)
     if not success:
@@ -829,16 +944,7 @@ async def update_roadmap_request(
     ):
         raise HTTPException(status_code=403, detail="Permission denied")
 
-    # Verify project belongs to workspace
-    result = await db.execute(
-        select(Project).where(
-            Project.id == project_id,
-            Project.workspace_id == workspace_id,
-        )
-    )
-    project = result.scalar_one_or_none()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    await _assert_visible(db, workspace_id, project_id, str(current_user.id))
 
     # Get the roadmap request
     result = await db.execute(

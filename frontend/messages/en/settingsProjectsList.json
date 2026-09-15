@@ -28,6 +28,20 @@
     "confirmRemoveMember": "Remove this member from the project?",
     "confirmDeleteProject": "Are you sure you want to delete this project? This action cannot be undone.",
     "routingNothing": "Nothing — tickets stay where they are.",
-    "allMembersAdded": "All workspace members added"
+    "allMembersAdded": "All workspace members added",
+    "archiveProject": "Archive Project",
+    "unarchiveProject": "Restore Project",
+    "confirmArchiveProject": "Archive “{name}”? It disappears from project lists and its board stops being offered. You can restore it at any time.",
+    "showArchived": "Show archived",
+    "projectCount": "{count, plural, one {# project} other {# projects}}",
+    "archivedCount": "{count, plural, one {# archived} other {# archived}}",
+    "visibilityTitle": "Who sees which projects",
+    "visibilityDescription": "Admins, managers and the workspace owner always see every project.",
+    "visibilityAllLabel": "Everyone sees every project",
+    "visibilityAllHint": "How this workspace has always worked.",
+    "visibilityMembersLabel": "People see the projects they are on",
+    "visibilityMembersHint": "Membership counts either way: added to the project, or on a team working its board.",
+    "visibilitySaved": "Project visibility updated",
+    "visibilitySaveFailed": "Failed to update project visibility"
   }
 }

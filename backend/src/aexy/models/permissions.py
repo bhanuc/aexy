@@ -81,6 +81,16 @@ PERMISSIONS: dict[str, dict] = {
         "description": "View projects and their details",
         "default_for": ["admin", "manager", "developer", "hr", "support", "sales", "viewer"],
     },
+    # The pair above and below answer two different questions. `can_view_projects`
+    # is "may this person open a project at all"; this one is "which projects".
+    # Without it, a developer sees the projects they are a member of, or whose
+    # board they are on. With it, they see every project in the workspace —
+    # which is what everybody got before this permission existed.
+    "can_view_all_projects": {
+        "category": PermissionCategory.PROJECTS,
+        "description": "See every project in the workspace, not only their own",
+        "default_for": ["admin", "manager"],
+    },
     # Team Management
     "can_create_teams": {
         "category": PermissionCategory.TEAMS,

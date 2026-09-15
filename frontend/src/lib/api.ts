@@ -14738,6 +14738,18 @@ export interface RoleUpdate {
 // Project Management Types
 export type ProjectStatus = "active" | "on_hold" | "completed" | "archived";
 
+/**
+ * "workspace" — everyone who can view projects sees all of them, which is what
+ * every workspace did before scoping existed.
+ * "members" — the list is narrowed to the projects a person belongs to, either
+ * as a project member or through a team on that project's board.
+ */
+export type ProjectVisibilityMode = "workspace" | "members";
+
+export interface ProjectVisibilityConfig {
+  mode: ProjectVisibilityMode;
+}
+
 export interface Project {
   id: string;
   workspace_id: string;
@@ -14907,10 +14919,50 @@ export const roleApi = {
 
 // Project Management API
 export const projectApi = {
-  // List projects
-  list: async (workspaceId: string, status?: ProjectStatus): Promise<{ projects: Project[] }> => {
+  /**
+   * List projects.
+   *
+   * Archived projects are left out unless asked for. This used to send a
+   * `status` param, which the endpoint has never accepted and FastAPI quietly
+   * dropped — so "show me the archived ones" had no effect at all.
+   */
+  list: async (
+    workspaceId: string,
+    options?: { includeArchived?: boolean },
+  ): Promise<{ projects: Project[] }> => {
     const response = await api.get(`/workspaces/${workspaceId}/projects`, {
-      params: status ? { status } : undefined,
+      params: options?.includeArchived ? { include_archived: true } : undefined,
+    });
+    return response.data;
+  },
+
+  /** Hide a project from listings and pickers. Reversible; loses nothing. */
+  archive: async (workspaceId: string, projectId: string): Promise<Project> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/projects/${projectId}/archive`,
+    );
+    return response.data;
+  },
+
+  unarchive: async (workspaceId: string, projectId: string): Promise<Project> => {
+    const response = await api.post(
+      `/workspaces/${workspaceId}/projects/${projectId}/unarchive`,
+    );
+    return response.data;
+  },
+
+  /** Whether this workspace scopes its project list to membership. */
+  getVisibility: async (workspaceId: string): Promise<ProjectVisibilityConfig> => {
+    const response = await api.get(`/workspaces/${workspaceId}/projects/visibility`);
+    return response.data;
+  },
+
+  setVisibility: async (
+    workspaceId: string,
+    mode: ProjectVisibilityMode,
+  ): Promise<ProjectVisibilityConfig> => {
+    const response = await api.put(`/workspaces/${workspaceId}/projects/visibility`, {
+      mode,
     });
     return response.data;
   },

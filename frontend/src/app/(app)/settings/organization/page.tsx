@@ -453,10 +453,18 @@ function InviteMemberModal({ onClose, onInvite, isInviting, workspaceId }: Invit
               >
                 {ROLE_OPTIONS.filter(r => r.value !== "owner").map((option) => (
                   <option key={option.value} value={option.value}>
-                    {option.label} - {option.description}
+                    {option.label}
                   </option>
                 ))}
               </select>
+              {/* Below the control rather than inside the option. A native
+                  select takes its intrinsic width from its widest option, and
+                  "Member - Can view and contribute" made this one the widest
+                  thing in the dialog — for text a reader only needs once,
+                  while the selected value is then truncated to fit. */}
+              <p className="text-muted-foreground text-xs mt-1">
+                {ROLE_OPTIONS.find((o) => o.value === role)?.description}
+              </p>
             </div>
             {departments && departments.length > 0 && (
               <div>
@@ -498,7 +506,7 @@ function InviteMemberModal({ onClose, onInvite, isInviting, workspaceId }: Invit
                   <select
                     value={teamId}
                     onChange={(e) => setTeamId(e.target.value)}
-                    className="flex-1 px-4 py-2 bg-muted border border-border rounded-lg text-foreground focus:outline-none focus:border-primary-500"
+                    className="flex-1 min-w-0 px-4 py-2 bg-muted border border-border rounded-lg text-foreground focus:outline-none focus:border-primary-500"
                   >
                     <option value="">{t("invite.noTeamLater")}</option>
                     {teams.map((t) => (
@@ -513,7 +521,7 @@ function InviteMemberModal({ onClose, onInvite, isInviting, workspaceId }: Invit
                       onChange={(e) =>
                         setRoleInTeam(e.target.value as "lead" | "manager" | "member")
                       }
-                      className="px-3 py-2 bg-muted border border-border rounded-lg text-foreground focus:outline-none focus:border-primary-500"
+                      className="shrink-0 px-3 py-2 bg-muted border border-border rounded-lg text-foreground focus:outline-none focus:border-primary-500"
                     >
                       <option value="member">{t("invite.roleMember")}</option>
                       <option value="manager">{t("invite.roleManager")}</option>

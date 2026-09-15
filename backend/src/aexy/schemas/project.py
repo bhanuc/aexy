@@ -1,6 +1,7 @@
 """Pydantic schemas for Project management."""
 
 from datetime import date, datetime
+from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 from enum import Enum
 from aexy.schemas.role import RoleSummary
@@ -515,3 +516,15 @@ class PaginatedRoadmapRequestsResponse(BaseModel):
     page: int
     page_size: int
     total_pages: int
+
+
+class ProjectVisibilityConfig(BaseModel):
+    """How much of the workspace's project list a plain member sees.
+
+    ``workspace`` — everyone who can view projects sees all of them, which is
+    what every workspace did before this setting existed.
+    ``members`` — the list is narrowed to the projects a person belongs to,
+    either as a project member or through a team on that project's board.
+    """
+
+    mode: Literal["workspace", "members"]

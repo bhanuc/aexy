@@ -46,7 +46,12 @@
       "points": "पॉइंट्स",
       "sprints": "Sprint",
       "completed": "पूर्ण",
-      "openTasks": "खुले कार्य"
+      "openTasks": "खुले कार्य",
+      "archived": "आर्काइव",
+      "archive": "प्रोजेक्ट आर्काइव करें",
+      "unarchive": "प्रोजेक्ट बहाल करें",
+      "showArchived": "आर्काइव दिखाएँ",
+      "manage": "{name} प्रबंधित करें"
     },
     "board": {
       "title": "बोर्ड",

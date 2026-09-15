@@ -6,14 +6,27 @@ from uuid import uuid4
 
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, or_
 
 from aexy.models.project import Project, ProjectMember, ProjectTeam
-from aexy.models.workspace import WorkspaceMember
+from aexy.models.workspace import Workspace, WorkspaceMember
 from aexy.models.developer import Developer
 from aexy.models.organization import Department
 from aexy.models.service_desk import ServiceDeskStakeholder
 from aexy.models.team import Team, TeamMember, TeamMemberRole
+
+#: How much of a workspace's project list a plain member sees.
+#:
+#: "workspace" is what every workspace did before membership scoping existed:
+#: everyone who could view projects saw all of them. "members" narrows the list
+#: to the projects a person actually belongs to.
+#:
+#: Existing workspaces are stamped "workspace" by the migration so nothing
+#: disappears on deploy; the absence of the key means "members", so workspaces
+#: created from here on start scoped.
+PROJECT_VISIBILITY_WORKSPACE = "workspace"
+PROJECT_VISIBILITY_MEMBERS = "members"
+PROJECT_VISIBILITY_MODES = (PROJECT_VISIBILITY_WORKSPACE, PROJECT_VISIBILITY_MEMBERS)
 
 #: "Not mentioned in this request", as distinct from "set this to nothing".
 #: The other update fields use None for both, which is fine while none of
@@ -28,6 +41,53 @@ def generate_slug(name: str) -> str:
     slug = re.sub(r"[^\w\s-]", "", slug)
     slug = re.sub(r"[-\s]+", "-", slug)
     return slug[:100]
+
+
+async def can_see_project(
+    db: AsyncSession, workspace_id: str, project_id: str, developer_id: str
+) -> bool:
+    """May this developer know that this project exists?
+
+    True for a workspace still set to `project_visibility="workspace"`, for
+    anyone holding `can_view_all_projects` (owners, admins and managers by
+    default), and for anyone attached to the project itself.
+    """
+    # Imported here rather than at module scope: PermissionService imports the
+    # project models, and a top-level import in both directions is a cycle.
+    from aexy.services.permission_service import PermissionService
+
+    service = ProjectService(db)
+    if await service.get_visibility_mode(workspace_id) == PROJECT_VISIBILITY_WORKSPACE:
+        return True
+    if await PermissionService(db).check_permission(
+        workspace_id, developer_id, "can_view_all_projects"
+    ):
+        return True
+    return await service.is_member_of(project_id, developer_id)
+
+
+async def assert_project_visible(
+    db: AsyncSession, workspace_id: str, project_id: str, developer_id: str
+) -> None:
+    """Raise 404 if `project_id` names a project this developer may not see.
+
+    Silent when the id names no project at all, so callers holding a team id
+    that merely *might* be a board can use it unconditionally.
+
+    404 rather than 403: a 403 confirms that a project with that id exists,
+    which is the one thing scoped visibility is meant to withhold.
+    """
+    service = ProjectService(db)
+    # Cheapest question first: this runs on every board read, and a workspace
+    # that has not switched over needs neither of the queries below.
+    if await service.get_visibility_mode(workspace_id) == PROJECT_VISIBILITY_WORKSPACE:
+        return
+
+    project = await service.get_project(project_id)
+    if project is None or project.workspace_id != workspace_id:
+        return
+    if not await can_see_project(db, workspace_id, project_id, developer_id):
+        raise HTTPException(status_code=404, detail="Project not found")
 
 
 class ProjectService:
@@ -164,12 +224,46 @@ class ProjectService:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
+    @staticmethod
+    def _membership_clause(developer_id: str):
+        """Is this developer attached to the project, by either route?
+
+        Two routes, and both are needed. `project_members` is the explicit one,
+        but projects only auto-enrol their *creator* there — in practice people
+        are added to the project's board, which is a `Team` linked through
+        `project_teams`. Checking only the first would hide projects from the
+        very people doing the work in them.
+        """
+        return or_(
+            select(ProjectMember.id)
+            .where(
+                ProjectMember.project_id == Project.id,
+                ProjectMember.developer_id == developer_id,
+                ProjectMember.status == "active",
+            )
+            .exists(),
+            select(TeamMember.id)
+            .join(ProjectTeam, ProjectTeam.team_id == TeamMember.team_id)
+            .where(
+                ProjectTeam.project_id == Project.id,
+                TeamMember.developer_id == developer_id,
+            )
+            .exists(),
+        )
+
     async def list_projects(
         self,
         workspace_id: str,
         include_archived: bool = False,
+        visible_to_developer_id: str | None = None,
     ) -> list[Project]:
-        """List all projects in a workspace."""
+        """List projects in a workspace.
+
+        `visible_to_developer_id` narrows the list to the projects that
+        developer belongs to. Callers who may see everything — the workspace
+        owner, anyone holding `can_view_all_projects`, and every caller in a
+        workspace still set to `project_visibility="workspace"` — pass None.
+        """
         conditions = [
             Project.workspace_id == workspace_id,
             Project.is_active == True,
@@ -178,6 +272,9 @@ class ProjectService:
         if not include_archived:
             conditions.append(Project.status != "archived")
 
+        if visible_to_developer_id is not None:
+            conditions.append(self._membership_clause(visible_to_developer_id))
+
         stmt = (
             select(Project)
             .where(and_(*conditions))
@@ -185,6 +282,47 @@ class ProjectService:
         )
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
+
+    async def is_member_of(self, project_id: str, developer_id: str) -> bool:
+        """Whether this developer is attached to this project.
+
+        Same two routes as the listing clause, asked of one project — so a
+        listing and a direct fetch can never disagree about who belongs.
+        """
+        stmt = select(Project.id).where(
+            Project.id == project_id,
+            self._membership_clause(developer_id),
+        )
+        return (await self.db.execute(stmt)).scalar_one_or_none() is not None
+
+    async def get_visibility_mode(self, workspace_id: str) -> str:
+        """Whether this workspace scopes its project list to membership."""
+        settings = (
+            await self.db.execute(
+                select(Workspace.settings).where(Workspace.id == workspace_id)
+            )
+        ).scalar_one_or_none()
+        mode = (settings or {}).get("project_visibility")
+        return mode if mode in PROJECT_VISIBILITY_MODES else PROJECT_VISIBILITY_MEMBERS
+
+    async def set_visibility_mode(self, workspace_id: str, mode: str) -> str:
+        """Set the workspace's project visibility mode."""
+        if mode not in PROJECT_VISIBILITY_MODES:
+            raise HTTPException(
+                status_code=422,
+                detail=f"project_visibility must be one of {list(PROJECT_VISIBILITY_MODES)}",
+            )
+
+        workspace = (
+            await self.db.execute(select(Workspace).where(Workspace.id == workspace_id))
+        ).scalar_one_or_none()
+        if workspace is None:
+            raise HTTPException(status_code=404, detail="Workspace not found")
+
+        # JSONB columns are replaced, not mutated in place — assigning a new dict
+        # is what makes SQLAlchemy notice the change.
+        workspace.settings = {**(workspace.settings or {}), "project_visibility": mode}
+        return mode
 
     async def update_project(
         self,
@@ -316,21 +454,61 @@ class ProjectService:
                     )
             team.desk_stakeholder_slug = desk_stakeholder_slug or None
 
+    async def _set_board_active(self, project_id: str, is_active: bool) -> None:
+        """Mirror a project's availability onto the board that shares its id.
+
+        A project whose board stays active is still offered by every team
+        picker, sprint board and assignment dropdown in the product, which is
+        the opposite of what archiving it is for.
+        """
+        team = (
+            await self.db.execute(select(Team).where(Team.id == project_id))
+        ).scalar_one_or_none()
+        if team:
+            team.is_active = is_active
+
+    async def archive_project(self, project_id: str) -> Project | None:
+        """Archive a project: hidden by default, and reversible.
+
+        Distinct from ``delete_project`` on purpose. Deleting used to write
+        ``status = "archived"`` as well as ``is_active = False``, while
+        ``list_projects`` filters on ``is_active`` unconditionally — so
+        ``include_archived=True`` could never return anything, and the one
+        parameter offered for seeing archived projects had no effect for the
+        whole life of the endpoint. Archiving now owns ``status`` and deleting
+        owns ``is_active``, so each is legible on its own.
+        """
+        project = await self.get_project(project_id)
+        if not project:
+            return None
+
+        project.status = "archived"
+        await self._set_board_active(project_id, False)
+        return project
+
+    async def unarchive_project(self, project_id: str) -> Project | None:
+        """Bring an archived project back as active."""
+        project = await self.get_project(project_id)
+        if not project:
+            return None
+
+        project.status = "active"
+        await self._set_board_active(project_id, True)
+        return project
+
     async def delete_project(self, project_id: str) -> bool:
-        """Soft delete a project and its associated team."""
+        """Soft delete a project and its associated team.
+
+        Leaves ``status`` alone: a deleted project is gone from every listing
+        regardless of it, and overwriting it would lose what the project was
+        when it was deleted.
+        """
         project = await self.get_project(project_id)
         if not project:
             return False
 
         project.is_active = False
-        project.status = "archived"
-
-        # Also deactivate the associated team (if using same ID)
-        stmt = select(Team).where(Team.id == project_id)
-        result = await self.db.execute(stmt)
-        team = result.scalar_one_or_none()
-        if team:
-            team.is_active = False
+        await self._set_board_active(project_id, False)
 
         return True
 
