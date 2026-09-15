@@ -347,3 +347,31 @@ async def test_sprints_on_a_hidden_board_are_filtered_from_the_workspace_list(
     visible = [s for s in all_sprints if str(s.team_id) not in hidden]
 
     assert [s.id for s in visible] == [ours.id]
+
+
+@pytest.mark.asyncio
+async def test_boards_of_hidden_projects_are_filtered_from_the_team_list(
+    db_session: AsyncSession,
+) -> None:
+    """What `GET /workspaces/{id}/teams` does with the hidden set.
+
+    A project's board is a Team carrying the project's id, so an unfiltered
+    team list names every project in the workspace — and `/teams/{id}/members`
+    names its people. Scoping the project list and leaving this open would be
+    a filter on a menu rather than a permission.
+    """
+    from aexy.services.team_management_service import TeamManagementService
+
+    ws, _ = await _workspace(db_session, "ws-team-list", PROJECT_VISIBILITY_MEMBERS)
+    dev = await _developer(db_session, "dev-team-list")
+    await _join(db_session, ws, dev)
+    mine = await _project(db_session, ws, "mine-t", creator=dev)
+    theirs = await _project(db_session, ws, "theirs-t")
+
+    teams = await TeamManagementService(db_session).list_workspace_teams(ws.id)
+    assert {str(t.id) for t in teams} == {mine.id, theirs.id}
+
+    hidden = await hidden_project_ids(db_session, ws.id, str(dev.id))
+    visible = [t for t in teams if str(t.id) not in hidden]
+
+    assert [str(t.id) for t in visible] == [mine.id]

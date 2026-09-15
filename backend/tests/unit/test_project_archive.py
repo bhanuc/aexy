@@ -16,10 +16,15 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from datetime import date
+from uuid import uuid4
+
 from aexy.models.developer import Developer
+from aexy.models.sprint import Sprint
 from aexy.models.team import Team
 from aexy.models.workspace import Workspace
 from aexy.services.project_service import ProjectService
+from aexy.services.sprint_service import SprintService
 
 
 async def _make_workspace(db: AsyncSession, slug: str) -> Workspace:
@@ -146,3 +151,43 @@ async def test_delete_leaves_the_recorded_status_alone(
 
     assert project.is_active is False
     assert project.status == "on_hold"
+
+
+@pytest.mark.asyncio
+async def test_archiving_takes_the_projects_sprints_out_of_the_workspace_picker(
+    db_session: AsyncSession,
+) -> None:
+    """The board goes quiet, so the sprints named after it do too.
+
+    `list_workspace_sprints` is what a picker with no team of its own reads —
+    turning a document into tasks, for one — and it names each sprint by its
+    board. Leaving an archived project's sprints in it would put the project
+    back in front of people by a route that never mentions projects.
+    """
+    ws = await _make_workspace(db_session, "ws-archive-sprints")
+    project = await _make_project(db_session, ws, "picker")
+    db_session.add(
+        Sprint(
+            id=str(uuid4()),
+            workspace_id=ws.id,
+            team_id=project.id,  # the board shares the project's id
+            name="Sprint 1",
+            status="active",
+            start_date=date(2026, 9, 1),
+            end_date=date(2026, 9, 14),
+        )
+    )
+    await db_session.commit()
+
+    service = SprintService(db_session)
+    assert [s.name for s in await service.list_workspace_sprints(ws.id)] == ["Sprint 1"]
+
+    await ProjectService(db_session).archive_project(project.id)
+    await db_session.commit()
+
+    assert await service.list_workspace_sprints(ws.id) == []
+
+    await ProjectService(db_session).unarchive_project(project.id)
+    await db_session.commit()
+
+    assert [s.name for s in await service.list_workspace_sprints(ws.id)] == ["Sprint 1"]

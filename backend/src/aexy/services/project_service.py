@@ -43,27 +43,41 @@ def generate_slug(name: str) -> str:
     return slug[:100]
 
 
+async def _sees_every_project(
+    db: AsyncSession, workspace_id: str, developer_id: str
+) -> bool:
+    """Whether this developer's view of this workspace is narrowed at all.
+
+    True — the common case — for a workspace still on
+    `project_visibility="workspace"`, and for anyone holding
+    `can_view_all_projects` (owners, admins and managers by default). Both
+    questions cost a query, and every guard below asks them in the same order,
+    so they are asked in exactly one place.
+    """
+    # Imported here rather than at module scope: PermissionService imports the
+    # project models, and a top-level import in both directions is a cycle.
+    from aexy.services.permission_service import PermissionService
+
+    mode = await ProjectService(db).get_visibility_mode(workspace_id)
+    if mode == PROJECT_VISIBILITY_WORKSPACE:
+        return True
+    return await PermissionService(db).check_permission(
+        workspace_id, developer_id, "can_view_all_projects"
+    )
+
+
 async def can_see_project(
     db: AsyncSession, workspace_id: str, project_id: str, developer_id: str
 ) -> bool:
     """May this developer know that this project exists?
 
     True for a workspace still set to `project_visibility="workspace"`, for
-    anyone holding `can_view_all_projects` (owners, admins and managers by
-    default), and for anyone attached to the project itself.
+    anyone holding `can_view_all_projects`, and for anyone attached to the
+    project itself.
     """
-    # Imported here rather than at module scope: PermissionService imports the
-    # project models, and a top-level import in both directions is a cycle.
-    from aexy.services.permission_service import PermissionService
-
-    service = ProjectService(db)
-    if await service.get_visibility_mode(workspace_id) == PROJECT_VISIBILITY_WORKSPACE:
+    if await _sees_every_project(db, workspace_id, developer_id):
         return True
-    if await PermissionService(db).check_permission(
-        workspace_id, developer_id, "can_view_all_projects"
-    ):
-        return True
-    return await service.is_member_of(project_id, developer_id)
+    return await ProjectService(db).is_member_of(project_id, developer_id)
 
 
 async def assert_project_visible(
@@ -77,16 +91,27 @@ async def assert_project_visible(
     404 rather than 403: a 403 confirms that a project with that id exists,
     which is the one thing scoped visibility is meant to withhold.
     """
-    service = ProjectService(db)
-    # Cheapest question first: this runs on every board read, and a workspace
-    # that has not switched over needs neither of the queries below.
-    if await service.get_visibility_mode(workspace_id) == PROJECT_VISIBILITY_WORKSPACE:
+    if await _sees_every_project(db, workspace_id, developer_id):
         return
 
-    project = await service.get_project(project_id)
-    if project is None or project.workspace_id != workspace_id:
+    # Existence, ownership and membership in one query. This runs on every
+    # board read in a scoped workspace, and loading the Project itself would
+    # drag its workspace, its members and its teams along with it — three
+    # extra selects for a question that wants one boolean.
+    row = (
+        await db.execute(
+            select(
+                Project.id,
+                ProjectService._membership_clause(developer_id).label("is_member"),
+            ).where(
+                Project.id == project_id,
+                Project.workspace_id == workspace_id,
+            )
+        )
+    ).first()
+    if row is None:
         return
-    if not await can_see_project(db, workspace_id, project_id, developer_id):
+    if not row.is_member:
         raise HTTPException(status_code=404, detail="Project not found")
 
 
@@ -104,14 +129,7 @@ async def hidden_project_ids(
     Ids that are not projects at all are never in here: a plain team's sprints
     are not a project's to hide.
     """
-    from aexy.services.permission_service import PermissionService
-
-    service = ProjectService(db)
-    if await service.get_visibility_mode(workspace_id) == PROJECT_VISIBILITY_WORKSPACE:
-        return set()
-    if await PermissionService(db).check_permission(
-        workspace_id, developer_id, "can_view_all_projects"
-    ):
+    if await _sees_every_project(db, workspace_id, developer_id):
         return set()
 
     everything = {

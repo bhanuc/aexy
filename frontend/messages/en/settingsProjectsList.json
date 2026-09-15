@@ -41,6 +41,7 @@
     "visibilityAllHint": "How this workspace has always worked.",
     "visibilityMembersLabel": "People see the projects they are on",
     "visibilityMembersHint": "Membership counts either way: added to the project, or on a team working its board.",
+    "confirmScopeToMembers": "Narrow this workspace so people only see the projects they are on? Anyone who is not a member of a project — and does not hold \u201cSee every project\u201d — loses access to it until they are added.",
     "visibilitySaved": "Project visibility updated",
     "visibilitySaveFailed": "Failed to update project visibility"
   }

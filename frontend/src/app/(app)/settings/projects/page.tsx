@@ -671,7 +671,21 @@ function ProjectVisibilitySection({ workspaceId }: { workspaceId: string }) {
     },
   });
 
-  const mode = data?.mode ?? "workspace";
+  // No fallback while it loads: guessing "everyone" would show the wrong radio
+  // selected on a workspace that is in fact scoped, and a setting that appears
+  // to say one thing and then changes its mind is worse than one that is
+  // briefly blank.
+  const mode = data?.mode;
+
+  // Narrowing the workspace takes projects away from people who can see them
+  // today — the one change on this page that nobody makes twice by accident.
+  // Widening it gives access back, so it goes through unasked.
+  const choose = (option: ProjectVisibilityMode) => {
+    if (option === "members" && !confirm(t("confirmScopeToMembers"))) {
+      return;
+    }
+    mutation.mutate(option);
+  };
 
   return (
     <SettingsSection title={t("visibilityTitle")} description={t("visibilityDescription")}>
@@ -683,7 +697,7 @@ function ProjectVisibilitySection({ workspaceId }: { workspaceId: string }) {
               name="project-visibility"
               value={option}
               checked={mode === option}
-              onChange={() => mutation.mutate(option)}
+              onChange={() => choose(option)}
               className="mt-1 h-4 w-4"
             />
             <span>
