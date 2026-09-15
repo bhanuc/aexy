@@ -24,6 +24,7 @@ from aexy.llm.gateway import get_llm_gateway
 from aexy.models.developer import Developer
 from aexy.models.team import Team
 from aexy.models.workspace import WorkspaceMember
+from aexy.services.project_service import assert_team_filter_visible
 from aexy.services.workspace_service import WorkspaceService
 from aexy.schemas.career import (
     BusFactorRisk,
@@ -369,6 +370,9 @@ async def list_hiring_requirements(
         team_ws = await _resolve_team_workspace_or_403(db, team_id, str(current_user.id))
         if team_ws != organization_id:
             raise HTTPException(status_code=400, detail="Team does not belong to this organization")
+        await assert_team_filter_visible(
+            db, team_id, str(current_user.id), organization_id
+        )
 
     llm_gateway = get_llm_gateway()
     service = HiringIntelligenceService(db, llm_gateway)

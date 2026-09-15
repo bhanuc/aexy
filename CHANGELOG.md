@@ -7,17 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.40.3] - 2026-09-15
 
-Every route that takes a team id in its path respects scoped project
-visibility. The ones that take it as a filter do not yet — see the end of this
-entry.
+Every route that takes a team id — in its path or as a filter — respects
+scoped project visibility.
 
-### Fixed: seven modules answered for boards their caller could not see
+### Fixed: the routes that take a board id in their path
 
 A project's sprint board is a `Team` carrying the project's own id, so every
 route keyed by a team is a route that can be handed a project id. The project,
 board, task, sprint and team surfaces were closed when member-scoped
-visibility landed. These were not, and each describes a project plainly enough
-on its own:
+visibility landed. Fourteen modules were not. Seven of them take the board id
+in the path, and each describes a project plainly enough on its own:
 
 - **on-call** — who is on the rota for it;
 - **learning** — the team's people, their skill gaps and what is recommended
@@ -50,18 +49,25 @@ it, so `GET /learning/manager/team/{team_id}/progress` — and the budget
 summary beside it — answered 500 for the whole of their existence. Found
 because the new test asked for a 200 and got a stack trace.
 
-### Known: the filters are not covered
+### Fixed: and the ones that take it as a filter
 
-Twenty-six routes across nine modules still take `?team_id=` as a filter while
-authorising on workspace membership alone — the `insights` routes
-(leaderboard, bus factor, sprint capacity and the AI narrative, root-cause,
-retro and trajectory endpoints), the calendar summaries, `analysis`, the Jira
-and Linear syncs, ticket and task listings, learning budgets and active
-blockers.
+Twenty-six more routes took the team as `?team_id=` while authorising on
+workspace membership alone — the `insights` routes (leaderboard, bus factor,
+sprint capacity and the AI narrative, root-cause, retro and trajectory
+endpoints), the calendar summaries, `analysis`, the Jira and Linear syncs,
+ticket and task listings, learning budgets and active blockers.
 
-They need a decision the path routes did not: refuse the id, or drop the
-filter and answer for what the caller can see. That is a product question per
-endpoint rather than one guard, which is why they are not bundled in here.
+A filter naming a board is still a question about that board: "show me this
+team's leaderboard" is not a smaller ask than "show me this team". So an id
+the caller may not see is **refused**, not quietly ignored — dropping it would
+answer a different question from the one asked, from a wider scope, and say
+nothing about having done so. No `team_id` is no filter, and nothing happens.
+
+One of them needed both halves. `GET /workspaces/{id}/tasks` lists across
+every team, so a caller who names no team at all would still have been handed
+the tasks of every project they were never shown — the same hole the
+cross-team sprint list had. It now leaves those out as well as refusing a
+board named outright.
 
 Nothing changes for a workspace that has not scoped its projects, which is
 every workspace that exists today, and nothing changes for a team that is not

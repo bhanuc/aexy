@@ -115,6 +115,37 @@ async def assert_project_visible(
         raise HTTPException(status_code=404, detail="Project not found")
 
 
+async def assert_team_filter_visible(
+    db: AsyncSession,
+    team_id: str | None,
+    developer_id: str,
+    workspace_id: str | None = None,
+) -> None:
+    """The same guard, for a team that arrives as `?team_id=` rather than in the path.
+
+    A filter naming a board is still a question about that board — "show me
+    this team's leaderboard" is not a smaller ask than "show me this team".
+    So a team id the caller may not see is refused rather than quietly
+    ignored: dropping the filter would answer a different question from the
+    one asked, with data from a wider scope, and say nothing about it.
+
+    No `team_id` is no filter, and nothing happens. Routes with no workspace
+    in their path pass none: the team row says which workspace it belongs to,
+    and an id that names no team is left to the route's own handling.
+    """
+    if not team_id:
+        return
+
+    if workspace_id is None:
+        workspace_id = (
+            await db.execute(select(Team.workspace_id).where(Team.id == team_id))
+        ).scalar_one_or_none()
+        if workspace_id is None:
+            return
+
+    await assert_project_visible(db, str(workspace_id), team_id, developer_id)
+
+
 async def hidden_project_ids(
     db: AsyncSession, workspace_id: str, developer_id: str
 ) -> set[str]:

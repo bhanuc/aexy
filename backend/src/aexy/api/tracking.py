@@ -25,7 +25,10 @@ from aexy.models.tracking import (
     WorkLog,
 )
 from aexy.services.app_access_service import AppAccessService
-from aexy.services.project_service import assert_project_visible
+from aexy.services.project_service import (
+    assert_project_visible,
+    assert_team_filter_visible,
+)
 from aexy.services.workspace_service import WorkspaceService
 from aexy.schemas.tracking import (
     BlockerCreate,
@@ -816,6 +819,9 @@ async def get_active_blockers(
             str(team.workspace_id), str(current_developer.id), "viewer"
         ):
             raise HTTPException(status_code=403, detail="Not a member of this workspace")
+        await assert_team_filter_visible(
+            db, team_id, str(current_developer.id), str(team.workspace_id)
+        )
         await ensure_app_enabled(db, str(team.workspace_id), "tracking")
         scope.append(Blocker.team_id == team_id)
     else:

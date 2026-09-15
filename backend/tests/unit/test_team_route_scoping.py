@@ -193,7 +193,10 @@ async def test_an_unscoped_workspace_is_unchanged(
 import pytest_asyncio  # noqa: E402
 from httpx import AsyncClient  # noqa: E402
 
-from aexy.api.developers import get_current_developer  # noqa: E402
+from aexy.api.developers import (  # noqa: E402
+    get_current_developer,
+    get_current_developer_id,
+)
 from aexy.main import app  # noqa: E402
 from aexy.models.role import CustomRole  # noqa: E402
 from aexy.models.permissions import ROLE_TEMPLATES  # noqa: E402
@@ -205,9 +208,14 @@ async def as_developer():
 
     def _use(developer: Developer):
         app.dependency_overrides[get_current_developer] = lambda: developer
+        # Both, because the two are separate dependencies: the insights routes
+        # resolve the caller through the id one, and overriding only the other
+        # leaves them answering 401 to everybody.
+        app.dependency_overrides[get_current_developer_id] = lambda: str(developer.id)
 
     yield _use
-    app.dependency_overrides.pop(get_current_developer, None)
+    for dependency in (get_current_developer, get_current_developer_id):
+        app.dependency_overrides.pop(dependency, None)
 
 
 @pytest.mark.asyncio
@@ -315,3 +323,95 @@ async def test_google_calendar_select_is_404_for_a_hidden_board(
     as_developer(admin)
     response = await client.post(path, json={"calendar_id": "cal-1"})
     assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# `?team_id=` as a filter.
+#
+# A filter naming a board is still a question about that board — "show me this
+# team's leaderboard" is not a smaller ask than "show me this team" — so the
+# id is refused rather than quietly ignored. Dropping it would answer a
+# different question from the one asked, from a wider scope, and say nothing.
+# ---------------------------------------------------------------------------
+
+from aexy.models.sprint import SprintTask  # noqa: E402
+
+
+@pytest.mark.asyncio
+async def test_insights_refuse_a_team_filter_the_caller_cannot_see(
+    db_session: AsyncSession, client: AsyncClient, as_developer
+) -> None:
+    ws, owner, outsider = await _scoped_workspace(db_session, "ws-http-insights")
+    hidden = await _project(db_session, ws, "insights-hidden", creator=owner)
+    mine = await _project(db_session, ws, "insights-mine", creator=outsider)
+
+    base = f"/api/v1/workspaces/{ws.id}/insights/team"
+    as_developer(outsider)
+
+    assert (await client.get(f"{base}?team_id={hidden.id}")).status_code == 404
+    # Their own board, and no filter at all, are both unaffected.
+    assert (await client.get(f"{base}?team_id={mine.id}")).status_code == 200
+    assert (await client.get(base)).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_team_calendar_refuses_a_team_filter_the_caller_cannot_see(
+    db_session: AsyncSession, client: AsyncClient, as_developer
+) -> None:
+    ws, owner, outsider = await _scoped_workspace(db_session, "ws-http-calendar")
+    hidden = await _project(db_session, ws, "calendar", creator=owner)
+
+    base = (
+        f"/api/v1/workspaces/{ws.id}/calendar/team"
+        "?start_date=2026-09-01&end_date=2026-09-30"
+    )
+    as_developer(outsider)
+
+    assert (await client.get(f"{base}&team_id={hidden.id}")).status_code == 404
+    assert (await client.get(base)).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_the_workspace_task_list_leaves_out_hidden_boards(
+    db_session: AsyncSession, client: AsyncClient, as_developer
+) -> None:
+    """The half a filter cannot cover.
+
+    This list is across every team, so without the second rule someone who
+    never names a team still gets the tasks of every project they were not
+    shown — the same hole the cross-team sprint list had.
+    """
+    ws, owner, outsider = await _scoped_workspace(db_session, "ws-http-tasks")
+    hidden = await _project(db_session, ws, "tasks-hidden", creator=owner)
+    mine = await _project(db_session, ws, "tasks-mine", creator=outsider)
+
+    for project, title in ((hidden, "Theirs"), (mine, "Mine")):
+        db_session.add(
+            SprintTask(
+                id=str(uuid.uuid4()),
+                workspace_id=ws.id,
+                team_id=project.id,
+                sprint_id=None,
+                title=title,
+                status="todo",
+                source_type="manual",
+                source_id=str(uuid.uuid4()),
+                priority="medium",
+            )
+        )
+    await db_session.commit()
+
+    path = f"/api/v1/workspaces/{ws.id}/tasks"
+    as_developer(outsider)
+
+    response = await client.get(path)
+    assert response.status_code == 200
+    assert [t["title"] for t in response.json()] == ["Mine"]
+
+    # And naming the board outright is refused rather than silently empty.
+    assert (await client.get(f"{path}?team_id={hidden.id}")).status_code == 404
+
+    # The owner, who may see everything, still gets both.
+    as_developer(owner)
+    both = await client.get(path)
+    assert sorted(t["title"] for t in both.json()) == ["Mine", "Theirs"]

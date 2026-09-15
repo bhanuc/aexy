@@ -44,7 +44,10 @@ from aexy.schemas.learning_management import (
     TeamLearningProgressList,
     TransactionTypeEnum,
 )
-from aexy.services.project_service import assert_project_visible
+from aexy.services.project_service import (
+    assert_project_visible,
+    assert_team_filter_visible,
+)
 from aexy.services.learning_management_service import LearningManagementService
 
 router = APIRouter(prefix="/learning/manager", tags=["learning-manager"])
@@ -499,6 +502,10 @@ async def list_learning_budgets(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No workspace selected",
         )
+
+    await assert_team_filter_visible(
+        db, team_id, str(current_user.id), str(current_user.current_workspace_id)
+    )
 
     filters = LearningBudgetFilter(
         developer_id=developer_id,

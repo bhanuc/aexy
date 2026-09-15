@@ -32,6 +32,7 @@ from aexy.schemas.ticketing import (
     TicketSeverity,
     TicketSortKey,
 )
+from aexy.services.project_service import assert_team_filter_visible
 from aexy.services.ticket_service import TicketService, headline_from_field_values
 from aexy.services.workspace_service import WorkspaceService
 
@@ -231,6 +232,9 @@ async def list_tickets(
 ):
     """List tickets in a workspace with filters."""
     await check_workspace_permission(workspace_id, current_user, db)
+    await assert_team_filter_visible(
+        db, team_id, str(current_user.id), workspace_id
+    )
 
     filters = TicketFilters(
         form_id=form_id,
