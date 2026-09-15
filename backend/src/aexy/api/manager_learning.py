@@ -44,6 +44,7 @@ from aexy.schemas.learning_management import (
     TeamLearningProgressList,
     TransactionTypeEnum,
 )
+from aexy.services.project_service import assert_project_visible
 from aexy.services.learning_management_service import LearningManagementService
 
 router = APIRouter(prefix="/learning/manager", tags=["learning-manager"])
@@ -713,6 +714,14 @@ async def get_team_progress(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No workspace selected",
         )
+
+    # A project's board is a Team carrying the project's own id, so this can be
+    # handed a project id — and what comes back is the project's people and how
+    # far through their learning they are. Nothing else here asks whether the
+    # caller may know the project exists.
+    await assert_project_visible(
+        db, str(current_user.current_workspace_id), team_id, str(current_user.id)
+    )
 
     service = LearningManagementService(db)
     return await service.get_team_learning_progress(

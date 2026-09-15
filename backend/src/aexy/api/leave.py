@@ -11,6 +11,7 @@ from aexy.models.developer import Developer
 from aexy.models.leave import LeaveType, LeavePolicy, LeaveRequest, Holiday
 from aexy.models.team import Team
 from aexy.models.workspace import WorkspaceMember
+from aexy.services.project_service import assert_project_visible
 from aexy.services.workspace_service import WorkspaceService
 from aexy.schemas.leave import (
     LeaveTypeCreate,
@@ -452,6 +453,10 @@ async def get_team_balances(
     await _require_workspace_role(db, workspace_id, str(current_developer.id), "viewer")
     # Team must belong to this workspace.
     await _assert_resource_in_workspace(db, Team, workspace_id, team_id, "Team")
+    # And be one this caller may know about: a project's board is a Team
+    # carrying the project's own id, so this is otherwise a project's leave
+    # balances read by someone the project was never shown to.
+    await assert_project_visible(db, workspace_id, team_id, str(current_developer.id))
     effective_year = year or datetime.now().year
     service = LeaveBalanceService(db)
     balances = await service.get_team_balances(workspace_id, team_id, effective_year)

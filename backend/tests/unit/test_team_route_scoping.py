@@ -23,6 +23,7 @@ import uuid
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aexy.api.learning import _require_team_workspace_member
@@ -178,3 +179,139 @@ async def test_an_unscoped_workspace_is_unchanged(
     await oncall_verify(ws.id, outsider, db_session, "viewer", team_id=project.id)
     assert await _require_team_workspace_member(db_session, project.id, str(outsider.id))
     assert await _verify_team_role(db_session, project.id, str(outsider.id), "viewer")
+
+
+# ---------------------------------------------------------------------------
+# The routes that take a board id in the path, over HTTP.
+#
+# The three modules above funnel through a helper and can be tested at it.
+# These four cannot: the guard sits in the route body, and what matters is
+# that the request gets a 404 rather than the data — so they are driven
+# through the app.
+# ---------------------------------------------------------------------------
+
+import pytest_asyncio  # noqa: E402
+from httpx import AsyncClient  # noqa: E402
+
+from aexy.api.developers import get_current_developer  # noqa: E402
+from aexy.main import app  # noqa: E402
+from aexy.models.role import CustomRole  # noqa: E402
+from aexy.models.permissions import ROLE_TEMPLATES  # noqa: E402
+
+
+@pytest_asyncio.fixture
+async def as_developer():
+    """Answer requests as a chosen developer, and put the app back afterwards."""
+
+    def _use(developer: Developer):
+        app.dependency_overrides[get_current_developer] = lambda: developer
+
+    yield _use
+    app.dependency_overrides.pop(get_current_developer, None)
+
+
+@pytest.mark.asyncio
+async def test_tracking_standups_and_dashboard_are_404_for_a_hidden_board(
+    db_session: AsyncSession, client: AsyncClient, as_developer
+) -> None:
+    """The plainest of them: a project's daily standup text."""
+    ws, owner, outsider = await _scoped_workspace(db_session, "ws-http-tracking")
+    project = await _project(db_session, ws, "tracking", creator=owner)
+
+    for path in (
+        f"/api/v1/tracking/standups/team/{project.id}",
+        f"/api/v1/tracking/dashboard/team/{project.id}",
+    ):
+        as_developer(outsider)
+        assert (await client.get(path)).status_code == 404, path
+
+        as_developer(owner)
+        assert (await client.get(path)).status_code == 200, path
+
+
+@pytest.mark.asyncio
+async def test_manager_learning_progress_is_404_for_a_hidden_board(
+    db_session: AsyncSession, client: AsyncClient, as_developer
+) -> None:
+    ws, owner, outsider = await _scoped_workspace(db_session, "ws-http-learning")
+    project = await _project(db_session, ws, "mgr-learning", creator=owner)
+    for developer in (owner, outsider):
+        developer.current_workspace_id = ws.id
+    await db_session.commit()
+
+    path = f"/api/v1/learning/manager/team/{project.id}/progress"
+
+    as_developer(outsider)
+    assert (await client.get(path)).status_code == 404
+
+    as_developer(owner)
+    assert (await client.get(path)).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_leave_team_balances_are_404_for_a_hidden_board(
+    db_session: AsyncSession, client: AsyncClient, as_developer
+) -> None:
+    ws, owner, outsider = await _scoped_workspace(db_session, "ws-http-leave")
+    project = await _project(db_session, ws, "leave", creator=owner)
+
+    path = f"/api/v1/workspaces/{ws.id}/leave/balance/team/{project.id}"
+
+    as_developer(outsider)
+    assert (await client.get(path)).status_code == 404
+
+    as_developer(owner)
+    assert (await client.get(path)).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_google_calendar_select_is_404_for_a_hidden_board(
+    db_session: AsyncSession, client: AsyncClient, as_developer
+) -> None:
+    """The one write among them, and the one whose caller is an admin.
+
+    It needs the workspace "admin" *role*, which is a different question from
+    holding `can_view_all_projects` — the role comes off the membership row and
+    the permission off the custom role. An admin on a role that was built
+    without it is exactly who this guard is for.
+
+    The route had no team-in-workspace check either, so this also pins that a
+    team from another workspace is refused.
+    """
+    ws, owner, admin = await _scoped_workspace(db_session, "ws-http-gcal")
+    project = await _project(db_session, ws, "gcal", creator=owner)
+
+    narrow = CustomRole(
+        id=str(uuid.uuid4()),
+        workspace_id=ws.id,
+        name="Admin without every project",
+        slug="admin-without-every-project",
+        permissions=[
+            p
+            for p in ROLE_TEMPLATES["admin"]["permissions"]
+            if p != "can_view_all_projects"
+        ],
+        is_active=True,
+    )
+    db_session.add(narrow)
+    await db_session.flush()
+
+    member = (
+        await db_session.execute(
+            select(WorkspaceMember).where(
+                WorkspaceMember.workspace_id == ws.id,
+                WorkspaceMember.developer_id == admin.id,
+            )
+        )
+    ).scalar_one()
+    member.role = "admin"
+    member.role_id = narrow.id
+    await db_session.commit()
+
+    path = (
+        f"/api/v1/workspaces/{ws.id}/integrations/google-calendar"
+        f"/select-calendar/{project.id}"
+    )
+    as_developer(admin)
+    response = await client.post(path, json={"calendar_id": "cal-1"})
+    assert response.status_code == 404

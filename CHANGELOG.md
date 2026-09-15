@@ -7,49 +7,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.40.3] - 2026-09-15
 
-Three more team-keyed surfaces respect scoped project visibility. Not the last
-of them — see the end of this entry.
+Every route that takes a team id in its path respects scoped project
+visibility. The ones that take it as a filter do not yet — see the end of this
+entry.
 
-### Fixed: on-call, learning and repositories answered for boards their caller could not see
+### Fixed: seven modules answered for boards their caller could not see
 
 A project's sprint board is a `Team` carrying the project's own id, so every
 route keyed by a team is a route that can be handed a project id. The project,
 board, task, sprint and team surfaces were closed when member-scoped
-visibility landed; these three were not, and each describes a project plainly
-enough on its own:
+visibility landed. These were not, and each describes a project plainly enough
+on its own:
 
 - **on-call** — who is on the rota for it;
 - **learning** — the team's people, their skill gaps and what is recommended
-  for them;
+  for them, and separately the manager view of how far through it they are;
 - **repositories** — which repositories the project works on, and linking
-  more to it.
+  more to it;
+- **tracking** — its people's daily standups, and the dashboard over them;
+- **leave** — the board's leave balances;
+- **Google Calendar** — pointing the board's on-call schedule at a calendar.
 
-Each module funnels its team routes through a single helper — `oncall`'s
-`verify_workspace_access`, `learning`'s `_require_team_workspace_member`,
-`workspace_repositories`' `_verify_team_role` — so one call each closes all
-twenty: fifteen on-call routes, two learning, three repositories. As
-everywhere else the answer is 404 rather than 403, because a 403 confirms that
-a project with that id is there.
+Four of the modules funnel their team routes through a single helper — on-call's
+`verify_workspace_access`, learning's `_require_team_workspace_member`,
+repositories' `_verify_team_role`, and a new one in tracking that also removes
+the ten lines the two routes there had been duplicating — so one call each
+closes twenty-two routes. The remaining three take the call in the route body.
+As everywhere else the answer is 404 rather than 403, because a 403 confirms
+that a project with that id is there.
+
+### Fixed: two things found while guarding those routes
+
+**Google Calendar's calendar picker never checked the team was the
+workspace's.** `POST /workspaces/A/integrations/google-calendar/select-calendar/<B_team_id>`
+pointed team B's on-call schedule at a calendar chosen by an admin of
+workspace A. It now refuses a team that does not belong to the workspace in
+the URL, the same way the on-call routes have.
+
+**The manager learning progress endpoint raised `NameError` for everyone.**
+`learning_management_service` used `Integer` in four casts and never imported
+it, so `GET /learning/manager/team/{team_id}/progress` — and the budget
+summary beside it — answered 500 for the whole of their existence. Found
+because the new test asked for a 200 and got a stack trace.
+
+### Known: the filters are not covered
+
+Twenty-six routes across nine modules still take `?team_id=` as a filter while
+authorising on workspace membership alone — the `insights` routes
+(leaderboard, bus factor, sprint capacity and the AI narrative, root-cause,
+retro and trajectory endpoints), the calendar summaries, `analysis`, the Jira
+and Linear syncs, ticket and task listings, learning budgets and active
+blockers.
+
+They need a decision the path routes did not: refuse the id, or drop the
+filter and answer for what the caller can see. That is a product question per
+endpoint rather than one guard, which is why they are not bundled in here.
 
 Nothing changes for a workspace that has not scoped its projects, which is
 every workspace that exists today, and nothing changes for a team that is not
 a project's board — the majority of them.
-
-### Known: the scoping is not finished
-
-Roughly thirty routes across a dozen modules still authorise on workspace
-membership alone while taking a team id, and a team id can be a board's. The
-ones worth knowing about are `GET /tracking/standups/team/{team_id}` and the
-tracking dashboard beside it, the fourteen `insights` routes that accept
-`?team_id=` (leaderboard, bus factor, sprint capacity and the AI narrative,
-root-cause, retro and trajectory endpoints), team leave balances, manager
-learning progress, and the calendar, analysis and ticket listings that filter
-by team.
-
-The path-parameter ones take the same single call these three took. The
-`?team_id=` filters need a decision first — refuse the id, or drop the filter
-and answer for what the caller can see — which is why they are not bundled in
-here.
 
 ## [0.40.2] - 2026-09-15
 
