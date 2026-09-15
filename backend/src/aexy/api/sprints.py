@@ -1,4 +1,12 @@
-"""Sprint API endpoints."""
+"""Sprint API endpoints.
+
+Every route keyed by a team calls `assert_project_visible` after its workspace
+permission check. A board and the project it belongs to share an id, so a board
+reached by URL is a project reached by URL — and scoping the project list while
+leaving these open would be a filter on a menu rather than a permission. The
+guard answers 404 (never 403: that would confirm the project is there) and does
+nothing at all in a workspace that has not scoped its projects to membership.
+"""
 
 from typing import cast
 
@@ -19,6 +27,10 @@ from aexy.schemas.sprint import (
     SprintStatsResponse,
     CarryOverRequest,
     CarryOverResponse,
+)
+from aexy.services.project_service import (
+    assert_project_visible,
+    hidden_project_ids,
 )
 from aexy.services.sprint_service import SprintService
 from aexy.services.sprint_task_response import task_to_response
@@ -94,6 +106,8 @@ async def create_sprint(
             detail="Not a member of this workspace",
         )
 
+    await assert_project_visible(db, workspace_id, team_id, str(current_user.id))
+
     # Check team membership OR workspace admin status
     is_team_member = await sprint_service.check_team_membership(team_id, str(current_user.id))
     is_workspace_admin = await workspace_service.check_permission(workspace_id, str(current_user.id), "admin")
@@ -154,6 +168,16 @@ async def list_workspace_sprints(
         workspace_id,
         statuses=None if include_closed else SprintService.OPEN_TO_NEW_WORK,
     )
+
+    # A sprint is keyed by its board, and a board that belongs to a project the
+    # caller cannot see should not be offered here either — a picker naming a
+    # sprint is a picker naming the project it belongs to. Resolved in one pass
+    # rather than per row, and empty in a workspace that has not scoped its
+    # projects.
+    hidden = await hidden_project_ids(db, workspace_id, str(current_user.id))
+    if hidden:
+        sprints = [s for s in sprints if str(s.team_id) not in hidden]
+
     return [
         WorkspaceSprintListResponse(
             id=str(sprint.id),
@@ -197,6 +221,8 @@ async def list_sprints(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not a member of this workspace",
         )
+
+    await assert_project_visible(db, workspace_id, team_id, str(current_user.id))
 
     # Verify team belongs to this workspace — without this, members of WS A can
     # read WS B's sprints by passing a cross-workspace team_id.
@@ -242,6 +268,8 @@ async def get_active_sprint(
             detail="Not a member of this workspace",
         )
 
+    await assert_project_visible(db, workspace_id, team_id, str(current_user.id))
+
     # Verify team belongs to this workspace.
     from aexy.models.team import Team
     team_check = await db.execute(
@@ -280,6 +308,8 @@ async def get_sprint(
             detail="Not a member of this workspace",
         )
 
+    await assert_project_visible(db, workspace_id, team_id, str(current_user.id))
+
     sprint = await sprint_service.get_sprint(sprint_id)
     if not sprint or sprint.team_id != team_id:
         raise HTTPException(
@@ -313,6 +343,8 @@ async def update_sprint(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not a member of this workspace",
         )
+
+    await assert_project_visible(db, workspace_id, team_id, str(current_user.id))
 
     sprint = await sprint_service.update_sprint(
         sprint_id=sprint_id,
@@ -358,6 +390,8 @@ async def delete_sprint(
             detail="Admin permission required",
         )
 
+    await assert_project_visible(db, workspace_id, team_id, str(current_user.id))
+
     try:
         if not await sprint_service.delete_sprint(sprint_id):
             raise HTTPException(
@@ -395,6 +429,8 @@ async def start_sprint(
             detail="Not a member of this workspace",
         )
 
+    await assert_project_visible(db, workspace_id, team_id, str(current_user.id))
+
     try:
         sprint = await sprint_service.start_sprint(sprint_id)
         await db.commit()
@@ -427,6 +463,8 @@ async def start_sprint_review(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not a member of this workspace",
         )
+
+    await assert_project_visible(db, workspace_id, team_id, str(current_user.id))
 
     try:
         sprint = await sprint_service.start_review(sprint_id)
@@ -461,6 +499,8 @@ async def start_sprint_retro(
             detail="Not a member of this workspace",
         )
 
+    await assert_project_visible(db, workspace_id, team_id, str(current_user.id))
+
     try:
         sprint = await sprint_service.start_retrospective(sprint_id)
         await db.commit()
@@ -493,6 +533,8 @@ async def complete_sprint(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not a member of this workspace",
         )
+
+    await assert_project_visible(db, workspace_id, team_id, str(current_user.id))
 
     try:
         sprint = await sprint_service.complete_sprint(sprint_id)
@@ -528,6 +570,8 @@ async def get_sprint_stats(
             detail="Not a member of this workspace",
         )
 
+    await assert_project_visible(db, workspace_id, team_id, str(current_user.id))
+
     sprint = await sprint_service.get_sprint(sprint_id)
     if not sprint or sprint.team_id != team_id:
         raise HTTPException(
@@ -562,6 +606,8 @@ async def carry_over_tasks(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not a member of this workspace",
         )
+
+    await assert_project_visible(db, workspace_id, team_id, str(current_user.id))
 
     try:
         carried_tasks = await sprint_service.carry_over_tasks(

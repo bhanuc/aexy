@@ -20,6 +20,7 @@ from aexy.schemas.team import (
     TeamBusFactorResponse,
     TeamSkillCoverageResponse,
 )
+from aexy.services.project_service import assert_project_visible, hidden_project_ids
 from aexy.services.workspace_service import WorkspaceService
 from aexy.services.team_management_service import TeamManagementService
 from aexy.services.team_service import TeamService
@@ -77,6 +78,32 @@ async def verify_workspace_access(
             detail=f"{required_role.capitalize()} permission required",
         )
 
+    return workspace_service
+
+
+async def verify_team_access(
+    workspace_id: str,
+    team_id: str,
+    current_user: Developer,
+    db: AsyncSession,
+    required_role: str = "viewer",
+) -> WorkspaceService:
+    """Workspace access, plus: is this team one the caller may know about?
+
+    A project's sprint board is a Team carrying the project's own id, so every
+    route here that takes a `team_id` is a route that can be handed a project
+    id. Without this, a workspace that scopes its project list to membership
+    would still name every project — and list its people — to anyone who
+    asked for the teams, which makes the scoping a filter on a menu rather
+    than a permission. Answers 404, never 403, for the same reason the project
+    routes do: a 403 confirms the project is there.
+
+    Costs one query in a workspace that has not scoped its projects.
+    """
+    workspace_service = await verify_workspace_access(
+        workspace_id, current_user, db, required_role
+    )
+    await assert_project_visible(db, workspace_id, team_id, str(current_user.id))
     return workspace_service
 
 
@@ -152,6 +179,13 @@ async def list_teams(
     service = TeamManagementService(db)
     teams = await service.list_workspace_teams(workspace_id, include_inactive=include_inactive)
 
+    # Boards belonging to projects this caller is not on are not theirs to see.
+    # Resolved in one pass rather than per row, and empty in a workspace that
+    # has not scoped its projects.
+    hidden = await hidden_project_ids(db, workspace_id, str(current_user.id))
+    if hidden:
+        teams = [team for team in teams if str(team.id) not in hidden]
+
     results = []
     for team in teams:
         member_count = await service.get_member_count(str(team.id))
@@ -178,7 +212,7 @@ async def get_team(
     db: AsyncSession = Depends(get_db),
 ):
     """Get a team by ID."""
-    await verify_workspace_access(workspace_id, current_user, db, "viewer")
+    await verify_team_access(workspace_id, team_id, current_user, db, "viewer")
 
     service = TeamManagementService(db)
     team = await service.get_team(team_id)
@@ -202,7 +236,7 @@ async def update_team(
     db: AsyncSession = Depends(get_db),
 ):
     """Update a team."""
-    await verify_workspace_access(workspace_id, current_user, db, "admin")
+    await verify_team_access(workspace_id, team_id, current_user, db, "admin")
 
     service = TeamManagementService(db)
 
@@ -235,7 +269,7 @@ async def delete_team(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a team (soft delete)."""
-    await verify_workspace_access(workspace_id, current_user, db, "admin")
+    await verify_team_access(workspace_id, team_id, current_user, db, "admin")
 
     service = TeamManagementService(db)
 
@@ -265,7 +299,7 @@ async def list_team_members(
     db: AsyncSession = Depends(get_db),
 ):
     """List all members of a team."""
-    await verify_workspace_access(workspace_id, current_user, db, "viewer")
+    await verify_team_access(workspace_id, team_id, current_user, db, "viewer")
 
     service = TeamManagementService(db)
 
@@ -290,7 +324,7 @@ async def add_team_member(
     db: AsyncSession = Depends(get_db),
 ):
     """Add a member to a team."""
-    await verify_workspace_access(workspace_id, current_user, db, "admin")
+    await verify_team_access(workspace_id, team_id, current_user, db, "admin")
 
     service = TeamManagementService(db)
     workspace_service = WorkspaceService(db)
@@ -338,7 +372,7 @@ async def update_team_member_role(
     db: AsyncSession = Depends(get_db),
 ):
     """Update a team member's role."""
-    await verify_workspace_access(workspace_id, current_user, db, "admin")
+    await verify_team_access(workspace_id, team_id, current_user, db, "admin")
 
     service = TeamManagementService(db)
 
@@ -379,9 +413,9 @@ async def remove_team_member(
     # Can remove self or need admin permission
     is_self = developer_id == str(current_user.id)
     if not is_self:
-        await verify_workspace_access(workspace_id, current_user, db, "admin")
+        await verify_team_access(workspace_id, team_id, current_user, db, "admin")
     else:
-        await verify_workspace_access(workspace_id, current_user, db, "viewer")
+        await verify_team_access(workspace_id, team_id, current_user, db, "viewer")
 
     service = TeamManagementService(db)
 
@@ -441,7 +475,7 @@ async def sync_team_members(
     db: AsyncSession = Depends(get_db),
 ):
     """Sync members for a repo-based team."""
-    await verify_workspace_access(workspace_id, current_user, db, "admin")
+    await verify_team_access(workspace_id, team_id, current_user, db, "admin")
 
     service = TeamManagementService(db)
 
@@ -479,7 +513,7 @@ async def get_team_profile(
     db: AsyncSession = Depends(get_db),
 ):
     """Get team profile with aggregated skills and metrics."""
-    await verify_workspace_access(workspace_id, current_user, db, "viewer")
+    await verify_team_access(workspace_id, team_id, current_user, db, "viewer")
 
     mgmt_service = TeamManagementService(db)
 
@@ -528,7 +562,7 @@ async def get_team_velocity(
     db: AsyncSession = Depends(get_db),
 ):
     """Get team velocity metrics."""
-    await verify_workspace_access(workspace_id, current_user, db, "viewer")
+    await verify_team_access(workspace_id, team_id, current_user, db, "viewer")
 
     mgmt_service = TeamManagementService(db)
 
@@ -559,7 +593,7 @@ async def get_team_bus_factor(
     db: AsyncSession = Depends(get_db),
 ):
     """Get team bus factor analysis."""
-    await verify_workspace_access(workspace_id, current_user, db, "viewer")
+    await verify_team_access(workspace_id, team_id, current_user, db, "viewer")
 
     mgmt_service = TeamManagementService(db)
 
@@ -602,7 +636,7 @@ async def get_team_skill_coverage(
     Args:
         required_skills: Comma-separated list of skills to check coverage for.
     """
-    await verify_workspace_access(workspace_id, current_user, db, "viewer")
+    await verify_team_access(workspace_id, team_id, current_user, db, "viewer")
 
     mgmt_service = TeamManagementService(db)
 

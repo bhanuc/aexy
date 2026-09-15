@@ -11,7 +11,6 @@ import {
   ProjectUpdate,
   ProjectMemberAdd,
   ProjectMemberUpdate,
-  ProjectStatus,
   MyPermissionsResponse,
   ProjectInviteRequest,
   ProjectInviteResult,
@@ -20,8 +19,12 @@ import {
 /**
  * Hook for managing workspace projects
  */
-export function useProjects(workspaceId: string | null, status?: ProjectStatus) {
+export function useProjects(
+  workspaceId: string | null,
+  options?: { includeArchived?: boolean },
+) {
   const queryClient = useQueryClient();
+  const includeArchived = !!options?.includeArchived;
 
   const {
     data,
@@ -29,8 +32,10 @@ export function useProjects(workspaceId: string | null, status?: ProjectStatus) 
     error,
     refetch,
   } = useQuery({
-    queryKey: ["projects", workspaceId, status],
-    queryFn: () => projectApi.list(workspaceId!, status),
+    // Part of the cache key, so toggling "Show archived" refetches instead of
+    // reusing the active-only list.
+    queryKey: ["projects", workspaceId, { includeArchived }],
+    queryFn: () => projectApi.list(workspaceId!, { includeArchived }),
     enabled: !!workspaceId,
   });
 
@@ -67,6 +72,32 @@ export function useProjects(workspaceId: string | null, status?: ProjectStatus) 
     },
   });
 
+  const archiveMutation = useMutation({
+    mutationFn: (projectId: string) => projectApi.archive(workspaceId!, projectId),
+    onSuccess: () => {
+      toast.success("Project archived");
+      queryClient.invalidateQueries({ queryKey: ["projects", workspaceId] });
+      // The board shares the project's id and goes inactive with it, so every
+      // team picker in the app is now showing something that is gone.
+      queryClient.invalidateQueries({ queryKey: ["teams", workspaceId] });
+    },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error, "Failed to archive project"));
+    },
+  });
+
+  const unarchiveMutation = useMutation({
+    mutationFn: (projectId: string) => projectApi.unarchive(workspaceId!, projectId),
+    onSuccess: () => {
+      toast.success("Project restored");
+      queryClient.invalidateQueries({ queryKey: ["projects", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["teams", workspaceId] });
+    },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error, "Failed to restore project"));
+    },
+  });
+
   return {
     projects: data?.projects ?? EMPTY_ARRAY,
     isLoading,
@@ -75,9 +106,12 @@ export function useProjects(workspaceId: string | null, status?: ProjectStatus) 
     createProject: createMutation.mutateAsync,
     updateProject: updateMutation.mutateAsync,
     deleteProject: deleteMutation.mutateAsync,
+    archiveProject: archiveMutation.mutateAsync,
+    unarchiveProject: unarchiveMutation.mutateAsync,
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,
     isDeleting: deleteMutation.isPending,
+    isArchiving: archiveMutation.isPending || unarchiveMutation.isPending,
   };
 }
 

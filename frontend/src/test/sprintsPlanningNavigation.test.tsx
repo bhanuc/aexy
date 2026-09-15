@@ -35,7 +35,16 @@ vi.mock("@/hooks/useWorkspace", () => ({
   useWorkspaceMembers: () => ({ members: [], isLoading: false }),
 }));
 vi.mock("@/hooks/useProjects", () => ({
-  useProjects: () => ({ projects: [], isLoading: false, createProject: vi.fn(), isCreating: false }),
+  useProjects: () => ({
+    projects: [], isLoading: false, createProject: vi.fn(), isCreating: false,
+    archiveProject: vi.fn(), unarchiveProject: vi.fn(),
+  }),
+}));
+// The page asks whether the viewer may archive a project. The real hook reaches
+// through to `useMyProjectPermissions`, which lives in the module mocked above.
+vi.mock("@/hooks/usePermissions", async (orig) => ({
+  ...(await orig<Record<string, unknown>>()),
+  usePermissions: () => ({ hasPermission: () => false, permissions: [], isLoading: false }),
 }));
 
 const EPIC = {

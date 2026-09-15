@@ -5,6 +5,84 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.40.2] - 2026-09-15
+
+Projects can be put away, people see the ones they are on, and a dialog that
+had been drawing over the page behind it stays inside itself.
+
+Nothing changes for an existing workspace on deploy: the migration stamps
+every one of them with the visibility it has today.
+
+### Added: archiving a project
+
+`GET /projects` has always taken an `include_archived` flag and it has never
+worked. Deleting a project wrote both `is_active = False` and
+`status = "archived"`, while the listing filters on `is_active`
+unconditionally — so the one action that ever set the archived status also
+made the row permanently invisible, flag or no flag. Nothing else set it, and
+the frontend sent a `status` parameter the endpoint does not accept, which
+FastAPI dropped. There was no way to put a finished project away short of
+deleting it.
+
+Archiving now owns `status` and deleting owns `is_active`. `POST
+/{id}/archive` and `/unarchive` are gated on `can_edit_projects` rather than
+the owner-only delete, because they lose nothing, and each mirrors the board
+team's `is_active` so an archived project stops being offered by every team
+picker in the product — including the cross-team sprint picker that turns a
+document into tasks.
+
+`/sprints` and the projects settings page both gained a **Show archived**
+toggle and an Archive / Restore action. Archiving switches the toggle on
+rather than letting the card vanish, which reads like a delete.
+
+### Added: people see the projects they are on
+
+`GET /projects` returned every project in the workspace to anyone holding
+`can_view_projects`, which is every role that has not been deliberately
+stripped of it. A developer on one team saw, and could open, every other
+team's board.
+
+A workspace set to `project_visibility = "members"` now shows a person the
+projects they are attached to — as a project member, or through a team on the
+project's board. That second route is not a nicety: projects only auto-enrol
+their *creator* in `project_members`, so in practice people are attached
+through the board, and a rule that checked only the first would have hidden
+projects from the people doing the work.
+
+`can_view_all_projects` opts a role out of the narrowing; owners, admins and
+managers hold it. Two scripts come with it — a dry-run backfill that writes
+down the access people already have, and a report that says, per project, who
+would lose access if the workspace were switched over. Switching a workspace
+to member-scoped asks first, since it takes access away; switching back only
+gives access back and goes through unasked.
+
+Filtering the list alone would have been a filter on a menu rather than a
+permission, because a project and its sprint board share an id: every route
+under `/teams/{team_id}` is a route that can be handed a project id. The guard
+covers the project routes, the 12 team-keyed sprint routes, the 8 in sprint
+analytics, every board task route, and the team routes — where an unfiltered
+listing had been naming each project, and `/teams/{id}/members` its people, to
+anyone who asked for the teams. It answers 404 rather than 403 throughout: a
+403 confirms that a project with that id is there, which is the one thing
+scoped visibility withholds. In a workspace that has not scoped its projects
+it costs a single query and changes nothing.
+
+### Fixed: the invite dialog rendered outside its own panel
+
+Two compounding causes, both `min-width: auto`. The team row is a flex row of
+two `<select>`s, and a native select takes its intrinsic width from its
+**widest** option — so the longest team name in the workspace decided how wide
+that row insisted on being. `DialogContent` is a grid, so the form is a grid
+item that expands to its own min-content, which is why *every* field rendered
+wider than the panel and not just the row that caused it. The panel itself
+stayed at its `max-w-*`, so the fields drew over the page behind it.
+
+Fixed in both places — either alone leaves part of it — and every dialog in
+the product can now scroll rather than running off the bottom of the viewport
+with its submit button out of reach. The same `min-width: auto` was cutting
+the new `/sprints` card menu in half, on any project whose name has no spaces
+in it.
+
 ## [0.40.0] - 2026-09-12
 
 The platform admin area is reachable, its dashboard answers whether the

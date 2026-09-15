@@ -38,6 +38,19 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
+        // Two ways a dialog used to render outside its own panel.
+        //
+        // Sideways: this is a grid, and a grid item's `min-width: auto` never
+        // shrinks below its min-content width. The invite dialog puts two
+        // controls in a flex row, and a native <select> takes its min-content
+        // width from its widest option — so one long team name made the row,
+        // and with it the form, wider than the panel's `max-w-*`. The panel
+        // stayed 448px and its fields rendered past the edge, over the page.
+        //
+        // Downwards: nothing here ever offered to scroll, so a tall dialog ran
+        // off the bottom of the viewport and its submit button was
+        // unreachable.
+        "[&>*]:min-w-0 max-h-[calc(100vh-2rem)] overflow-y-auto",
         "fixed left-[50%] top-[50%] z-50 grid w-[calc(100%-2rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-border bg-muted p-4 sm:p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] rounded-lg",
         className
       )}

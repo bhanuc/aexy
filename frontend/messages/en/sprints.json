@@ -46,7 +46,12 @@
       "points": "points",
       "sprints": "Sprints",
       "completed": "Completed",
-      "openTasks": "Open Tasks"
+      "openTasks": "Open Tasks",
+      "archived": "Archived",
+      "archive": "Archive project",
+      "unarchive": "Restore project",
+      "showArchived": "Show archived",
+      "manage": "Manage {name}"
     },
     "board": {
       "title": "Board",

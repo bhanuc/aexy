@@ -117,6 +117,7 @@ def github_link_to_response(link: TaskGitHubLink) -> ProjectTaskGitHubLinkRespon
 
 
 from aexy.services.sprint_task_response import task_to_response  # noqa: E402,F401
+from aexy.services.project_service import assert_project_visible  # noqa: E402
 
 
 async def get_team_and_check_permission(
@@ -147,6 +148,14 @@ async def get_team_and_check_permission(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not a member of this workspace",
         )
+
+    # A project and the board it works on share an id, so a board reached
+    # directly by URL is a project reached directly by URL. Without this, a
+    # workspace that scopes its project list to membership would still hand
+    # every task on every board to anyone who knew the id — the list would be
+    # filtered and the data would not be, which is the weaker half of a
+    # permission pretending to be the whole of one.
+    await assert_project_visible(db, team.workspace_id, str(team.id), str(current_user.id))
 
     return team
 

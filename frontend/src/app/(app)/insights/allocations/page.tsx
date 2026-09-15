@@ -46,10 +46,10 @@ export default function AllocationsPage() {
     Map<string, ProjectWithInsights>
   >(new Map());
 
-  const { projects, isLoading: projectsLoading } = useProjects(
-    currentWorkspaceId,
-    "active"
-  );
+  // Active projects only — the default. The "active" argument this passed was
+  // a `status` filter the endpoint never accepted, so it has always been the
+  // full list; archived projects are now genuinely left out.
+  const { projects, isLoading: projectsLoading } = useProjects(currentWorkspaceId);
 
   // Build a cross-project developer map
   const developerProjects = new Map<

@@ -21,10 +21,14 @@ import {
   ClipboardCheck,
   Link2,
   Zap,
+  Archive,
+  ArchiveRestore,
+  MoreVertical,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useProjects } from "@/hooks/useProjects";
+import { PERMISSIONS, usePermissions } from "@/hooks/usePermissions";
 import { useSprints, useActiveSprint } from "@/hooks/useSprints";
 import { useQuery } from "@tanstack/react-query";
 import { redirect } from "next/navigation";
@@ -44,11 +48,20 @@ function ProjectCard({
   project,
   workspaceId,
   index,
+  canArchive,
+  onArchive,
+  onUnarchive,
 }: {
   project: Project;
   workspaceId: string;
   index: number;
+  canArchive: boolean;
+  onArchive: (project: Project) => void;
+  onUnarchive: (project: Project) => void;
 }) {
+  const t = useTranslations("sprints");
+  const [showMenu, setShowMenu] = useState(false);
+  const archived = project.status === "archived";
   const { sprints, isLoading } = useSprints(workspaceId, project.id);
   const { sprint: activeSprint } = useActiveSprint(workspaceId, project.id);
 
@@ -76,7 +89,15 @@ function ProjectCard({
       className="group relative"
     >
       <div className="absolute inset-0 bg-gradient-to-br from-primary-500/10 to-purple-500/10 rounded-2xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-      <div className="relative bg-background/80 backdrop-blur-sm rounded-2xl border border-border/80 overflow-hidden hover:border-border/80 transition-all duration-300">
+      <div
+        className={cn(
+          "relative bg-background/80 backdrop-blur-sm rounded-2xl border border-border/80 overflow-hidden hover:border-border/80 transition-all duration-300",
+          // Still readable, still openable — an archived project is dormant,
+          // not forbidden. Dimming it is what distinguishes it from the live
+          // ones once "Show archived" is on.
+          archived && "opacity-60 border-dashed",
+        )}
+      >
         {/* Stretched link: the whole card opens the project (same target as
             the footer's "Open"), as a real <a> so middle-click / cmd-click
             work. Inner links sit above it via `relative z-10`. */}
@@ -87,14 +108,18 @@ function ProjectCard({
         />
         {/* Header */}
         <div className="p-5 pb-4">
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-primary-500/20 to-blue-500/20 rounded-xl flex items-center justify-center border border-primary-500/20">
+          <div className="flex items-start justify-between gap-2 mb-4">
+            {/* min-w-0 down the chain: a project name with no spaces in it
+                (every board a sync creates is named like that) otherwise sets
+                this row's min-content width and pushes the menu button past
+                the card's edge, where `overflow-hidden` cuts it in half. */}
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="w-12 h-12 bg-gradient-to-br from-primary-500/20 to-blue-500/20 rounded-xl flex items-center justify-center border border-primary-500/20 shrink-0">
                 <Users className="h-6 w-6 text-primary-400" />
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-semibold text-foreground group-hover:text-primary-400 transition-colors">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-lg font-semibold text-foreground group-hover:text-primary-400 transition-colors break-words">
                     {project.name}
                   </h3>
                   <div className="flex items-center gap-2">
@@ -102,6 +127,12 @@ function ProjectCard({
                       <Globe className="h-3 w-3" />
                       {project.is_public ? "Public" : "Private"}
                     </div>
+                    {archived && (
+                      <span className="flex items-center gap-1 px-2 py-0.5 bg-muted text-muted-foreground text-xs rounded-full border border-border">
+                        <Archive className="h-3 w-3" />
+                        {t("projectCard.archived")}
+                      </span>
+                    )}
                     {project.is_public && (
 
                     <Link href={`/p/${project.public_slug}`} className="relative z-10">
@@ -115,6 +146,70 @@ function ProjectCard({
                 </p>
               </div>
             </div>
+
+            {/* Above the stretched card link, or clicking the menu button
+                would open the board instead of the menu. Higher than the z-10
+                the sprint blocks below carry, too: they come later in the DOM,
+                so at equal z-index they paint over the open menu. */}
+            {canArchive && (
+              <div className="relative z-30 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowMenu((open) => !open)}
+                  aria-label={t("projectCard.manage", { name: project.name })}
+                  aria-haspopup="menu"
+                  aria-expanded={showMenu}
+                  className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition"
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </button>
+                {showMenu && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-30"
+                      onClick={() => setShowMenu(false)}
+                    />
+                    <div
+                      role="menu"
+                      aria-label={project.name}
+                      className="absolute right-0 top-full mt-1 w-56 bg-muted rounded-lg shadow-xl z-40 py-1 border border-border"
+                    >
+                      <button
+                        role="menuitem"
+                        type="button"
+                        onClick={() => {
+                          setShowMenu(false);
+                          if (archived) {
+                            onUnarchive(project);
+                          } else {
+                            onArchive(project);
+                          }
+                        }}
+                        className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-accent flex items-center gap-2"
+                      >
+                        {archived ? (
+                          <ArchiveRestore className="h-4 w-4" />
+                        ) : (
+                          <Archive className="h-4 w-4" />
+                        )}
+                        {archived
+                          ? t("projectCard.unarchive")
+                          : t("projectCard.archive")}
+                      </button>
+                      <Link
+                        role="menuitem"
+                        href={`/settings/projects/${project.id}`}
+                        className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-accent flex items-center gap-2"
+                        onClick={() => setShowMenu(false)}
+                      >
+                        <Settings className="h-4 w-4" />
+                        {t("actions.settings")}
+                      </Link>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {isLoading ? (
@@ -294,12 +389,20 @@ function SprintsContent({
   workspaceId,
   hasWorkspaces,
   onCreateProject,
+  canArchive,
+  onArchive,
+  onUnarchive,
+  showArchived,
 }: {
   projects: Project[];
   projectsLoading: boolean;
   workspaceId: string | null;
   hasWorkspaces: boolean;
   onCreateProject: () => void;
+  canArchive: boolean;
+  onArchive: (project: Project) => void;
+  onUnarchive: (project: Project) => void;
+  showArchived: boolean;
 }) {
   if (!hasWorkspaces) {
     return (
@@ -367,14 +470,27 @@ function SprintsContent({
     );
   }
 
+  // Live projects first: with "Show archived" on, a dormant project sorting
+  // above the one somebody is actually working in would be the wrong answer to
+  // a request to *also* see the archived ones.
+  const ordered = showArchived
+    ? [...projects].sort(
+        (a, b) =>
+          Number(a.status === "archived") - Number(b.status === "archived"),
+      )
+    : projects;
+
   return (
     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {projects.map((project, index) => (
+      {ordered.map((project, index) => (
         <ProjectCard
           key={project.id}
           project={project}
           workspaceId={workspaceId!}
           index={index}
+          canArchive={canArchive}
+          onArchive={onArchive}
+          onUnarchive={onUnarchive}
         />
       ))}
     </div>
@@ -415,14 +531,24 @@ function TabIcon({ icon: Icon }: { icon: typeof Calendar }) {
 
 function SprintsPageContent() {
   const tTabs = useTranslations("sprints.tabs");
+  const tSprints = useTranslations("sprints");
   const { isLoading: authLoading, isAuthenticated } = useAuth();
   const { currentWorkspaceId, currentWorkspaceLoading, hasWorkspaces } = useWorkspace();
   const searchParams = useSearchParams();
   const router = useRouter();
 
   const activeTab = searchParams.get("tab") || "sprints";
-  const { projects, isLoading: projectsLoading, createProject, isCreating } =
-    useProjects(currentWorkspaceId);
+  const [showArchived, setShowArchived] = useState(false);
+  const {
+    projects,
+    isLoading: projectsLoading,
+    createProject,
+    isCreating,
+    archiveProject,
+    unarchiveProject,
+  } = useProjects(currentWorkspaceId, { includeArchived: showArchived });
+  const { hasPermission } = usePermissions(currentWorkspaceId);
+  const canArchive = hasPermission(PERMISSIONS.CAN_EDIT_PROJECTS);
   const [showCreateProject, setShowCreateProject] = useState(false);
 
   // Deep link: /sprints?task=<id>. Activity feeds and chat widgets emit this
@@ -460,6 +586,21 @@ function SprintsPageContent() {
   // Resolved but no match: task was deleted, isn't accessible, or has no
   // project. Surface a notice rather than silently showing the overview.
   const taskNotFound = !!taskIdParam && !openingTask;
+
+  const handleArchive = async (project: Project) => {
+    await archiveProject(project.id);
+    // Show it in its new state rather than having the card vanish. Archiving
+    // is reversible, and a card that disappears on click reads like a delete.
+    setShowArchived(true);
+  };
+
+  const handleUnarchive = async (project: Project) => {
+    await unarchiveProject(project.id);
+    // Restoring while the list is filtered to active projects would otherwise
+    // look like nothing happened — the project comes back into a list this
+    // view is not showing.
+    setShowArchived(true);
+  };
 
   const handleCreateProject = async (data: CreateProjectInput) => {
     const project = await createProject(data);
@@ -578,6 +719,15 @@ function SprintsPageContent() {
           <div className="flex items-center gap-3">
             {hasWorkspaces && activeTab === "sprints" && (
               <>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showArchived}
+                    onChange={(e) => setShowArchived(e.target.checked)}
+                    className="h-3.5 w-3.5"
+                  />
+                  {tSprints("projectCard.showArchived")}
+                </label>
                 <button
                   type="button"
                   onClick={() => setShowCreateProject(true)}
@@ -646,6 +796,10 @@ function SprintsPageContent() {
             workspaceId={currentWorkspaceId}
             hasWorkspaces={hasWorkspaces}
             onCreateProject={() => setShowCreateProject(true)}
+            canArchive={canArchive}
+            onArchive={handleArchive}
+            onUnarchive={handleUnarchive}
+            showArchived={showArchived}
           />
         ) : activeTab === "automations" ? (
           <ModuleAutomationsPanel module="sprints" moduleLabel="Sprints" />

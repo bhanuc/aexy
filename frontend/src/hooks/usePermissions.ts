@@ -131,6 +131,9 @@ export const PERMISSIONS = {
   CAN_EDIT_PROJECTS: "can_edit_projects",
   CAN_DELETE_PROJECTS: "can_delete_projects",  // owner-only by default
   CAN_VIEW_PROJECTS: "can_view_projects",
+  // "may they open a project" vs "which projects" — see the workspace's
+  // project_visibility setting.
+  CAN_VIEW_ALL_PROJECTS: "can_view_all_projects",
 
   // Teams
   CAN_CREATE_TEAMS: "can_create_teams",

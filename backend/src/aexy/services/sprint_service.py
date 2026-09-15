@@ -161,10 +161,20 @@ class SprintService:
         The team is eager-loaded: a picker has to show which team each sprint
         belongs to — two teams routinely have a "Sprint 24" — and doing it lazily
         would be a query per row.
+
+        Inactive boards are left out. Archiving a project deactivates the board
+        that shares its id precisely so that nothing goes on offering it; a
+        sprint is offered under its board's name, so listing one from an
+        archived project here would put the project back in front of people by
+        another route.
         """
         stmt = (
             select(Sprint)
-            .where(Sprint.workspace_id == workspace_id)
+            .join(Team, Team.id == Sprint.team_id)
+            .where(
+                Sprint.workspace_id == workspace_id,
+                Team.is_active.is_(True),
+            )
             .options(selectinload(Sprint.team))
         )
         if statuses:
