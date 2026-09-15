@@ -34,6 +34,7 @@ from aexy.schemas.career import (
 )
 from aexy.services.developer_service import DeveloperService
 from aexy.services.learning_path import LearningPathService
+from aexy.services.project_service import assert_project_visible
 from aexy.services.workspace_service import WorkspaceService
 
 router = APIRouter(prefix="/learning")
@@ -106,7 +107,13 @@ async def _require_path_access(
 async def _require_team_workspace_member(
     db: AsyncSession, team_id: str, caller_id: str, role: str = "viewer"
 ):
-    """Load Team and require active membership in its workspace."""
+    """Load Team and require active membership in its workspace.
+
+    A project's board is a Team carrying the project's own id, so this can be
+    handed a project id — and a team learning overview names the team's people
+    and what they are weak at. In a workspace that scopes its projects to
+    membership, that is not a project the caller may ask about.
+    """
     from aexy.models.team import Team
     team = (
         await db.execute(select(Team).where(Team.id == team_id))
@@ -117,6 +124,7 @@ async def _require_team_workspace_member(
         str(team.workspace_id), caller_id, role
     ):
         raise HTTPException(status_code=403, detail="Not a member of team's workspace")
+    await assert_project_visible(db, str(team.workspace_id), team_id, caller_id)
     return team
 
 

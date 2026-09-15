@@ -22,6 +22,7 @@ from aexy.schemas.integrations import (
     RemoteTeam,
     RemoteProject,
 )
+from aexy.services.project_service import assert_team_filter_visible
 from aexy.services.jira_integration_service import JiraIntegrationService
 from aexy.services.linear_integration_service import LinearIntegrationService
 from aexy.services.workspace_service import WorkspaceService
@@ -259,6 +260,9 @@ async def sync_jira_issues(
 ):
     """Manually sync issues from Jira."""
     await check_workspace_permission(workspace_id, current_user, db, "admin")
+    await assert_team_filter_visible(
+        db, team_id, str(current_user.id), workspace_id
+    )
 
     service = JiraIntegrationService(db)
     result = await service.sync_issues(workspace_id, team_id)
@@ -447,6 +451,9 @@ async def sync_linear_issues(
 ):
     """Manually sync issues from Linear."""
     await check_workspace_permission(workspace_id, current_user, db, "admin")
+    await assert_team_filter_visible(
+        db, team_id, str(current_user.id), workspace_id
+    )
 
     service = LinearIntegrationService(db)
     result = await service.sync_issues(workspace_id, team_id)

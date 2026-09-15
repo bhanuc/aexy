@@ -18,6 +18,7 @@ from aexy.core.database import get_db
 from aexy.llm.base import AnalysisResult, MatchScore, TaskSignals
 from aexy.llm.gateway import get_llm_gateway
 from aexy.models.developer import Developer
+from aexy.services.project_service import assert_team_filter_visible
 from aexy.services.code_analyzer import CodeAnalyzer
 from aexy.services.peer_benchmarking import PeerBenchmarkingService
 from aexy.services.soft_skills_analyzer import SoftSkillsAnalyzer, SoftSkillsProfile
@@ -325,6 +326,7 @@ async def match_task_to_developers(
         workspace_id: Optional workspace to filter developers
         team_id: Optional team to filter developers
     """
+    await assert_team_filter_visible(db, team_id, current_developer_id, workspace_id)
     from aexy.models.workspace import WorkspaceMember
 
     # A named workspace has to be one the caller is actually in. Checked
@@ -477,6 +479,7 @@ async def get_peer_benchmark(
     Compares the developer's skills against their peers
     (team or organization-wide) and provides percentile rankings.
     """
+    await assert_team_filter_visible(db, team_id, current_developer_id)
     from uuid import UUID
 
     try:
@@ -843,6 +846,7 @@ async def get_team_skill_gaps(
     - At-risk skills (only one expert)
     - Well-covered skills
     """
+    await assert_team_filter_visible(db, team_id, current_developer_id)
     skills_list = [s.strip() for s in target_skills.split(",") if s.strip()]
 
     if not skills_list:

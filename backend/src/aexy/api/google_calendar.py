@@ -2,12 +2,14 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aexy.core.database import get_db
 from aexy.core.config import get_settings
 from aexy.api.developers import get_current_developer
 from aexy.models.developer import Developer
+from aexy.models.team import Team
 from aexy.schemas.oncall import (
     GoogleCalendarConnectResponse,
     GoogleCalendarStatusResponse,
@@ -20,6 +22,7 @@ from aexy.services.google_calendar_service import (
     GoogleCalendarError,
     GoogleCalendarAuthError,
 )
+from aexy.services.project_service import assert_project_visible
 from aexy.services.workspace_service import WorkspaceService
 from aexy.services.oncall_service import OnCallService
 
@@ -182,6 +185,25 @@ async def select_calendar(
 ):
     """Select a calendar to sync on-call schedules to."""
     await verify_workspace_access(workspace_id, current_user, db, "admin")
+
+    # The team has to be this workspace's, and one this caller may know about.
+    # Neither was checked: `/workspaces/A/.../select-calendar/<B_team_id>`
+    # pointed team B's on-call schedule at a calendar chosen in workspace A,
+    # and a project's board is a Team carrying the project's own id, so the
+    # id can name a project the caller was never shown.
+    team = (
+        await db.execute(
+            select(Team.id).where(
+                Team.id == team_id,
+                Team.workspace_id == workspace_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if team is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Team not found"
+        )
+    await assert_project_visible(db, workspace_id, team_id, str(current_user.id))
 
     # Update the on-call config with the selected calendar
     oncall_service = OnCallService(db)

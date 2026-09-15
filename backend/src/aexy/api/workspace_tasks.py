@@ -13,6 +13,10 @@ from aexy.schemas.sprint import (
     SprintTaskStatusUpdate,
     WorkspaceTaskCreate,
 )
+from aexy.services.project_service import (
+    assert_team_filter_visible,
+    hidden_project_ids,
+)
 from aexy.services.sprint_task_service import SprintTaskService, TaskValidationError
 from aexy.services.workspace_service import WorkspaceService
 
@@ -46,6 +50,15 @@ async def list_workspace_tasks(
             detail="Not a member of this workspace",
         )
 
+    # Two halves of the same rule. A board named in the filter has to be one
+    # this caller may see, and — filter or no filter — a listing across every
+    # team must not hand over the tasks of a project they were never shown.
+    # Same shape as the cross-team sprint list.
+    for one in team_id or []:
+        await assert_team_filter_visible(db, one, str(current_user.id), workspace_id)
+
+    hidden = await hidden_project_ids(db, workspace_id, str(current_user.id))
+
     task_service = SprintTaskService(db)
     tasks = await task_service.get_workspace_tasks(
         workspace_id,
@@ -63,6 +76,8 @@ async def list_workspace_tasks(
         limit=limit,
         offset=offset,
     )
+    if hidden:
+        tasks = [t for t in tasks if str(t.team_id) not in hidden]
     return [task_to_response(t) for t in tasks]
 
 

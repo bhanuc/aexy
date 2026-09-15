@@ -25,6 +25,10 @@ from aexy.models.tracking import (
     WorkLog,
 )
 from aexy.services.app_access_service import AppAccessService
+from aexy.services.project_service import (
+    assert_project_visible,
+    assert_team_filter_visible,
+)
 from aexy.services.workspace_service import WorkspaceService
 from aexy.schemas.tracking import (
     BlockerCreate,
@@ -346,6 +350,32 @@ async def get_my_standups(
     )
 
 
+async def _require_visible_team(db: AsyncSession, team_id: str, caller_id: str) -> Team:
+    """The team, if this caller is allowed to know it exists.
+
+    A project's board is a Team carrying the project's own id, so a team id
+    here can be a project id — and what this module returns for one is its
+    people's standups and what is blocking them. Workspace membership alone
+    was the whole of the check, which in a workspace that scopes its projects
+    to membership is a project the caller was never shown.
+
+    404 rather than 403: a 403 would confirm the project is there.
+    """
+    team = (
+        await db.execute(select(Team).where(Team.id == team_id))
+    ).scalar_one_or_none()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    if not await WorkspaceService(db).check_permission(
+        str(team.workspace_id), caller_id, "viewer"
+    ):
+        raise HTTPException(status_code=403, detail="Not a member of this workspace")
+    await ensure_app_enabled(db, str(team.workspace_id), "tracking")
+    await assert_project_visible(db, str(team.workspace_id), team_id, caller_id)
+    return team
+
+
 @router.get("/standups/team/{team_id}", response_model=list[StandupResponse])
 async def get_team_standups(
     team_id: str,
@@ -356,16 +386,7 @@ async def get_team_standups(
     """Get team standups for a date."""
     target_date = standup_date or date.today()
 
-    team_result = await db.execute(select(Team).where(Team.id == team_id))
-    team = team_result.scalar_one_or_none()
-    if not team:
-        raise HTTPException(status_code=404, detail="Team not found")
-
-    if not await WorkspaceService(db).check_permission(
-        str(team.workspace_id), str(current_developer.id), "viewer"
-    ):
-        raise HTTPException(status_code=403, detail="Not a member of this workspace")
-    await ensure_app_enabled(db, str(team.workspace_id), "tracking")
+    await _require_visible_team(db, team_id, str(current_developer.id))
 
     result = await db.execute(
         select(DeveloperStandup)
@@ -798,6 +819,9 @@ async def get_active_blockers(
             str(team.workspace_id), str(current_developer.id), "viewer"
         ):
             raise HTTPException(status_code=403, detail="Not a member of this workspace")
+        await assert_team_filter_visible(
+            db, team_id, str(current_developer.id), str(team.workspace_id)
+        )
         await ensure_app_enabled(db, str(team.workspace_id), "tracking")
         scope.append(Blocker.team_id == team_id)
     else:
@@ -1191,16 +1215,7 @@ async def get_team_tracking_dashboard(
     today = date.today()
 
     # Get team
-    team_result = await db.execute(select(Team).where(Team.id == team_id))
-    team = team_result.scalar_one_or_none()
-    if not team:
-        raise HTTPException(status_code=404, detail="Team not found")
-
-    if not await WorkspaceService(db).check_permission(
-        str(team.workspace_id), str(current_developer.id), "viewer"
-    ):
-        raise HTTPException(status_code=403, detail="Not a member of this workspace")
-    await ensure_app_enabled(db, str(team.workspace_id), "tracking")
+    team = await _require_visible_team(db, team_id, str(current_developer.id))
 
     # Get team members
     members_result = await db.execute(

@@ -16,6 +16,7 @@ from aexy.schemas.team_calendar import (
     WhoIsOutResponse,
     AvailabilitySummary,
 )
+from aexy.services.project_service import assert_team_filter_visible
 from aexy.services.team_calendar_service import TeamCalendarService
 from aexy.services.workspace_service import WorkspaceService
 
@@ -43,6 +44,9 @@ async def _require_workspace_and_team(
         )
         if team_check.scalar_one_or_none() is None:
             raise HTTPException(status_code=404, detail="Team not found")
+    # And, if the team is a project's board, one this caller may see: asking
+    # who is out on a team is asking about that team.
+    await assert_team_filter_visible(db, team_id, developer_id, workspace_id)
 
 
 @router.get("/team", response_model=TeamCalendarResponse)

@@ -23,6 +23,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from aexy.api.developers import get_current_developer_id
 from aexy.core.database import get_db
 from aexy.models.developer import Developer
+# `?team_id=` on any of these names a team, and a project's board is a Team
+# carrying the project's own id — so the filter is a question about that
+# project. `developer_id` in these signatures is the caller, resolved by
+# `verify_workspace_membership`.
+from aexy.services.project_service import assert_team_filter_visible
 from aexy.models.developer_insights import PeriodType
 from aexy.models.workspace import WorkspaceMember
 from aexy.models.team import Team, TeamMember
@@ -658,6 +663,7 @@ async def get_developer_percentile(
     end_date: datetime | None = Query(default=None),
 ):
     """Get percentile rankings for a developer within their peer group."""
+    await assert_team_filter_visible(db, team_id, developer_id, workspace_id)
     from aexy.services.developer_insights_service import DeveloperInsightsService
 
     if not start_date or not end_date:
@@ -775,6 +781,7 @@ async def get_team_insights(
     ),
 ):
     """Get team-wide insights with workload distribution."""
+    await assert_team_filter_visible(db, team_id, developer_id, workspace_id)
     from aexy.services.developer_insights_service import DeveloperInsightsService
     from aexy.cache.insights_cache import InsightsCache
 
@@ -999,6 +1006,7 @@ async def get_leaderboard(
     limit: int = Query(default=10, ge=1, le=50),
 ):
     """Ranked metrics view for team members."""
+    await assert_team_filter_visible(db, team_id, developer_id, workspace_id)
     from aexy.services.developer_insights_service import DeveloperInsightsService
     from aexy.cache.insights_cache import InsightsCache
 
@@ -1150,6 +1158,7 @@ async def get_rotation_impact(
     end_date: datetime | None = Query(default=None),
 ):
     """Predict velocity impact when specific developers rotate off the team."""
+    await assert_team_filter_visible(db, team_id, developer_id, workspace_id)
     from aexy.services.developer_insights_service import DeveloperInsightsService
 
     if not start_date or not end_date:
@@ -1214,6 +1223,7 @@ async def get_sprint_capacity(
     periods_back: int = Query(default=4, ge=2, le=12),
 ):
     """Estimate next sprint capacity based on historical velocity."""
+    await assert_team_filter_visible(db, team_id, developer_id, workspace_id)
     from aexy.services.developer_insights_service import DeveloperInsightsService
     from aexy.cache.insights_cache import InsightsCache
 
@@ -1328,6 +1338,7 @@ async def get_bus_factor(
     threshold: float = Query(default=0.8, ge=0.5, le=1.0),
 ):
     """Get bus factor analysis per repository for team or workspace."""
+    await assert_team_filter_visible(db, team_id, developer_id, workspace_id)
     from aexy.services.developer_insights_service import DeveloperInsightsService
 
     if not start_date or not end_date:
@@ -1489,6 +1500,7 @@ async def get_insight_settings(
     team_id: str | None = Query(default=None),
 ):
     """Get insight settings for workspace (org defaults) or a specific team override."""
+    await assert_team_filter_visible(db, team_id, developer_id, workspace_id)
     stmt = select(InsightSettings).where(
         and_(
             InsightSettings.workspace_id == workspace_id,
@@ -1854,6 +1866,7 @@ async def get_team_narrative(
     end_date: datetime | None = Query(default=None),
 ):
     """Generate an LLM-powered narrative summary of team metrics."""
+    await assert_team_filter_visible(db, team_id, developer_id, workspace_id)
     from aexy.services.insights_ai_service import InsightsAIService
 
     if not start_date or not end_date:
@@ -1955,6 +1968,7 @@ async def get_root_cause_analysis(
     end_date: datetime | None = Query(default=None),
 ):
     """Analyze root causes for metric changes using LLM."""
+    await assert_team_filter_visible(db, team_id, developer_id, workspace_id)
     from aexy.services.insights_ai_service import InsightsAIService
 
     if not start_date or not end_date:
@@ -2026,6 +2040,7 @@ async def get_sprint_retro(
     end_date: datetime | None = Query(default=None),
 ):
     """Generate AI-powered sprint retrospective insights."""
+    await assert_team_filter_visible(db, team_id, developer_id, workspace_id)
     from aexy.services.insights_ai_service import InsightsAIService
 
     if not start_date or not end_date:
@@ -2068,6 +2083,7 @@ async def get_team_trajectory(
     end_date: datetime | None = Query(default=None),
 ):
     """Generate LLM-enhanced team trajectory forecast."""
+    await assert_team_filter_visible(db, team_id, developer_id, workspace_id)
     from aexy.services.insights_ai_service import InsightsAIService
 
     if not start_date or not end_date:
@@ -2110,6 +2126,7 @@ async def get_composition_recommendations(
     end_date: datetime | None = Query(default=None),
 ):
     """Get AI-powered team composition recommendations."""
+    await assert_team_filter_visible(db, team_id, developer_id, workspace_id)
     from aexy.services.insights_ai_service import InsightsAIService
 
     if not start_date or not end_date:
@@ -2152,6 +2169,7 @@ async def get_hiring_forecast(
     end_date: datetime | None = Query(default=None),
 ):
     """Estimate when the team will need additional headcount."""
+    await assert_team_filter_visible(db, team_id, developer_id, workspace_id)
     from aexy.services.insights_ai_service import InsightsAIService
 
     if not start_date or not end_date:

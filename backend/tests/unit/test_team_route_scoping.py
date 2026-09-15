@@ -1,0 +1,417 @@
+"""The team-keyed routes outside sprints, when a workspace scopes its projects.
+
+A project's sprint board is a `Team` carrying the project's own id, so every
+`/teams/{team_id}/...` route in the product is a route that can be handed a
+project id. The sprint and board surfaces were closed with the scoping itself;
+these three were not, and each describes the project plainly enough:
+
+* **on-call** — who is on the rota for it, and the ability to change that;
+* **learning** — the team's people, their skill gaps and recommendations;
+* **repositories** — which repositories the project works on, and linking more.
+
+Each module funnels its team routes through one helper, so one call each closes
+all of them. These tests pin the helpers, not the routes, because the helper is
+the thing every route shares.
+
+The guard is silent for a team that is not a project's board, which is what
+keeps ordinary teams — the majority — working exactly as before.
+"""
+
+from __future__ import annotations
+
+import uuid
+
+import pytest
+from fastapi import HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from aexy.api.learning import _require_team_workspace_member
+from aexy.api.oncall import verify_workspace_access as oncall_verify
+from aexy.api.workspace_repositories import _verify_team_role
+from aexy.models.developer import Developer
+from aexy.models.team import Team
+from aexy.models.workspace import Workspace, WorkspaceMember
+from aexy.services.project_service import (
+    PROJECT_VISIBILITY_MEMBERS,
+    PROJECT_VISIBILITY_WORKSPACE,
+    ProjectService,
+)
+
+
+async def _developer(db: AsyncSession, name: str) -> Developer:
+    dev = Developer(name=name)
+    db.add(dev)
+    await db.flush()
+    return dev
+
+
+async def _scoped_workspace(db: AsyncSession, slug: str, mode: str = PROJECT_VISIBILITY_MEMBERS):
+    """A workspace, its owner, and a plain member who is on nothing."""
+    owner = await _developer(db, f"owner-{slug}")
+    ws = Workspace(
+        name=f"WS {slug}",
+        slug=slug,
+        owner_id=owner.id,
+        settings={"project_visibility": mode},
+    )
+    db.add(ws)
+    await db.flush()
+
+    outsider = await _developer(db, f"outsider-{slug}")
+    # Both hold a membership row: these helpers ask `WorkspaceService` for a
+    # workspace role before anything else, and that reads the row rather than
+    # `workspaces.owner_id`. Without one for the owner the test would be
+    # measuring a 403 it never meant to provoke.
+    for developer, role in ((owner, "owner"), (outsider, "member")):
+        db.add(
+            WorkspaceMember(
+                id=str(uuid.uuid4()),
+                workspace_id=ws.id,
+                developer_id=developer.id,
+                role=role,
+                status="active",
+            )
+        )
+    await db.commit()
+    await db.refresh(ws)
+    return ws, owner, outsider
+
+
+async def _project(db: AsyncSession, ws: Workspace, slug: str, creator: Developer | None = None):
+    project = await ProjectService(db).create_project(
+        workspace_id=ws.id,
+        name=f"P {slug}",
+        created_by_id=str(creator.id) if creator else None,
+    )
+    await db.commit()
+    await db.refresh(project)
+    return project
+
+
+async def _plain_team(db: AsyncSession, ws: Workspace, name: str) -> Team:
+    """A team that is nobody's board — the majority of them."""
+    team = Team(
+        id=str(uuid.uuid4()),
+        workspace_id=ws.id,
+        name=name,
+        slug=name.lower().replace(" ", "-"),
+    )
+    db.add(team)
+    await db.commit()
+    return team
+
+
+@pytest.mark.asyncio
+async def test_oncall_hides_the_rota_of_a_project_the_caller_is_not_on(
+    db_session: AsyncSession,
+) -> None:
+    ws, owner, outsider = await _scoped_workspace(db_session, "ws-oncall")
+    project = await _project(db_session, ws, "oncall", creator=owner)
+
+    with pytest.raises(HTTPException) as caught:
+        await oncall_verify(ws.id, outsider, db_session, "viewer", team_id=project.id)
+    assert caught.value.status_code == 404
+
+    # The person whose project it is still gets through.
+    await oncall_verify(ws.id, owner, db_session, "viewer", team_id=project.id)
+
+
+@pytest.mark.asyncio
+async def test_learning_hides_a_board_the_caller_is_not_on(
+    db_session: AsyncSession,
+) -> None:
+    ws, owner, outsider = await _scoped_workspace(db_session, "ws-learning")
+    project = await _project(db_session, ws, "learning", creator=owner)
+
+    with pytest.raises(HTTPException) as caught:
+        await _require_team_workspace_member(db_session, project.id, str(outsider.id))
+    assert caught.value.status_code == 404
+
+    team = await _require_team_workspace_member(db_session, project.id, str(owner.id))
+    assert str(team.id) == project.id
+
+
+@pytest.mark.asyncio
+async def test_repositories_hide_a_board_the_caller_is_not_on(
+    db_session: AsyncSession,
+) -> None:
+    ws, owner, outsider = await _scoped_workspace(db_session, "ws-repos")
+    project = await _project(db_session, ws, "repos", creator=owner)
+
+    with pytest.raises(HTTPException) as caught:
+        await _verify_team_role(db_session, project.id, str(outsider.id), "viewer")
+    assert caught.value.status_code == 404
+
+    team = await _verify_team_role(db_session, project.id, str(owner.id), "viewer")
+    assert str(team.id) == project.id
+
+
+@pytest.mark.asyncio
+async def test_a_team_that_is_not_a_board_is_untouched(
+    db_session: AsyncSession,
+) -> None:
+    """The guard must ignore ids that name no project.
+
+    Most teams are not boards, and every route in these three modules now calls
+    it — so a guard that treated "no project with this id" as "not allowed"
+    would take on-call, learning and repositories away from every ordinary team
+    in a scoped workspace.
+    """
+    ws, _, outsider = await _scoped_workspace(db_session, "ws-plain")
+    team = await _plain_team(db_session, ws, "Support")
+
+    await oncall_verify(ws.id, outsider, db_session, "viewer", team_id=str(team.id))
+    assert await _require_team_workspace_member(db_session, str(team.id), str(outsider.id))
+    assert await _verify_team_role(db_session, str(team.id), str(outsider.id), "viewer")
+
+
+@pytest.mark.asyncio
+async def test_an_unscoped_workspace_is_unchanged(
+    db_session: AsyncSession,
+) -> None:
+    """Every workspace that exists today is on this setting."""
+    ws, owner, outsider = await _scoped_workspace(
+        db_session, "ws-unscoped", PROJECT_VISIBILITY_WORKSPACE
+    )
+    project = await _project(db_session, ws, "unscoped", creator=owner)
+
+    await oncall_verify(ws.id, outsider, db_session, "viewer", team_id=project.id)
+    assert await _require_team_workspace_member(db_session, project.id, str(outsider.id))
+    assert await _verify_team_role(db_session, project.id, str(outsider.id), "viewer")
+
+
+# ---------------------------------------------------------------------------
+# The routes that take a board id in the path, over HTTP.
+#
+# The three modules above funnel through a helper and can be tested at it.
+# These four cannot: the guard sits in the route body, and what matters is
+# that the request gets a 404 rather than the data — so they are driven
+# through the app.
+# ---------------------------------------------------------------------------
+
+import pytest_asyncio  # noqa: E402
+from httpx import AsyncClient  # noqa: E402
+
+from aexy.api.developers import (  # noqa: E402
+    get_current_developer,
+    get_current_developer_id,
+)
+from aexy.main import app  # noqa: E402
+from aexy.models.role import CustomRole  # noqa: E402
+from aexy.models.permissions import ROLE_TEMPLATES  # noqa: E402
+
+
+@pytest_asyncio.fixture
+async def as_developer():
+    """Answer requests as a chosen developer, and put the app back afterwards."""
+
+    def _use(developer: Developer):
+        app.dependency_overrides[get_current_developer] = lambda: developer
+        # Both, because the two are separate dependencies: the insights routes
+        # resolve the caller through the id one, and overriding only the other
+        # leaves them answering 401 to everybody.
+        app.dependency_overrides[get_current_developer_id] = lambda: str(developer.id)
+
+    yield _use
+    for dependency in (get_current_developer, get_current_developer_id):
+        app.dependency_overrides.pop(dependency, None)
+
+
+@pytest.mark.asyncio
+async def test_tracking_standups_and_dashboard_are_404_for_a_hidden_board(
+    db_session: AsyncSession, client: AsyncClient, as_developer
+) -> None:
+    """The plainest of them: a project's daily standup text."""
+    ws, owner, outsider = await _scoped_workspace(db_session, "ws-http-tracking")
+    project = await _project(db_session, ws, "tracking", creator=owner)
+
+    for path in (
+        f"/api/v1/tracking/standups/team/{project.id}",
+        f"/api/v1/tracking/dashboard/team/{project.id}",
+    ):
+        as_developer(outsider)
+        assert (await client.get(path)).status_code == 404, path
+
+        as_developer(owner)
+        assert (await client.get(path)).status_code == 200, path
+
+
+@pytest.mark.asyncio
+async def test_manager_learning_progress_is_404_for_a_hidden_board(
+    db_session: AsyncSession, client: AsyncClient, as_developer
+) -> None:
+    ws, owner, outsider = await _scoped_workspace(db_session, "ws-http-learning")
+    project = await _project(db_session, ws, "mgr-learning", creator=owner)
+    for developer in (owner, outsider):
+        developer.current_workspace_id = ws.id
+    await db_session.commit()
+
+    path = f"/api/v1/learning/manager/team/{project.id}/progress"
+
+    as_developer(outsider)
+    assert (await client.get(path)).status_code == 404
+
+    as_developer(owner)
+    assert (await client.get(path)).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_leave_team_balances_are_404_for_a_hidden_board(
+    db_session: AsyncSession, client: AsyncClient, as_developer
+) -> None:
+    ws, owner, outsider = await _scoped_workspace(db_session, "ws-http-leave")
+    project = await _project(db_session, ws, "leave", creator=owner)
+
+    path = f"/api/v1/workspaces/{ws.id}/leave/balance/team/{project.id}"
+
+    as_developer(outsider)
+    assert (await client.get(path)).status_code == 404
+
+    as_developer(owner)
+    assert (await client.get(path)).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_google_calendar_select_is_404_for_a_hidden_board(
+    db_session: AsyncSession, client: AsyncClient, as_developer
+) -> None:
+    """The one write among them, and the one whose caller is an admin.
+
+    It needs the workspace "admin" *role*, which is a different question from
+    holding `can_view_all_projects` — the role comes off the membership row and
+    the permission off the custom role. An admin on a role that was built
+    without it is exactly who this guard is for.
+
+    The route had no team-in-workspace check either, so this also pins that a
+    team from another workspace is refused.
+    """
+    ws, owner, admin = await _scoped_workspace(db_session, "ws-http-gcal")
+    project = await _project(db_session, ws, "gcal", creator=owner)
+
+    narrow = CustomRole(
+        id=str(uuid.uuid4()),
+        workspace_id=ws.id,
+        name="Admin without every project",
+        slug="admin-without-every-project",
+        permissions=[
+            p
+            for p in ROLE_TEMPLATES["admin"]["permissions"]
+            if p != "can_view_all_projects"
+        ],
+        is_active=True,
+    )
+    db_session.add(narrow)
+    await db_session.flush()
+
+    member = (
+        await db_session.execute(
+            select(WorkspaceMember).where(
+                WorkspaceMember.workspace_id == ws.id,
+                WorkspaceMember.developer_id == admin.id,
+            )
+        )
+    ).scalar_one()
+    member.role = "admin"
+    member.role_id = narrow.id
+    await db_session.commit()
+
+    path = (
+        f"/api/v1/workspaces/{ws.id}/integrations/google-calendar"
+        f"/select-calendar/{project.id}"
+    )
+    as_developer(admin)
+    response = await client.post(path, json={"calendar_id": "cal-1"})
+    assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# `?team_id=` as a filter.
+#
+# A filter naming a board is still a question about that board — "show me this
+# team's leaderboard" is not a smaller ask than "show me this team" — so the
+# id is refused rather than quietly ignored. Dropping it would answer a
+# different question from the one asked, from a wider scope, and say nothing.
+# ---------------------------------------------------------------------------
+
+from aexy.models.sprint import SprintTask  # noqa: E402
+
+
+@pytest.mark.asyncio
+async def test_insights_refuse_a_team_filter_the_caller_cannot_see(
+    db_session: AsyncSession, client: AsyncClient, as_developer
+) -> None:
+    ws, owner, outsider = await _scoped_workspace(db_session, "ws-http-insights")
+    hidden = await _project(db_session, ws, "insights-hidden", creator=owner)
+    mine = await _project(db_session, ws, "insights-mine", creator=outsider)
+
+    base = f"/api/v1/workspaces/{ws.id}/insights/team"
+    as_developer(outsider)
+
+    assert (await client.get(f"{base}?team_id={hidden.id}")).status_code == 404
+    # Their own board, and no filter at all, are both unaffected.
+    assert (await client.get(f"{base}?team_id={mine.id}")).status_code == 200
+    assert (await client.get(base)).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_team_calendar_refuses_a_team_filter_the_caller_cannot_see(
+    db_session: AsyncSession, client: AsyncClient, as_developer
+) -> None:
+    ws, owner, outsider = await _scoped_workspace(db_session, "ws-http-calendar")
+    hidden = await _project(db_session, ws, "calendar", creator=owner)
+
+    base = (
+        f"/api/v1/workspaces/{ws.id}/calendar/team"
+        "?start_date=2026-09-01&end_date=2026-09-30"
+    )
+    as_developer(outsider)
+
+    assert (await client.get(f"{base}&team_id={hidden.id}")).status_code == 404
+    assert (await client.get(base)).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_the_workspace_task_list_leaves_out_hidden_boards(
+    db_session: AsyncSession, client: AsyncClient, as_developer
+) -> None:
+    """The half a filter cannot cover.
+
+    This list is across every team, so without the second rule someone who
+    never names a team still gets the tasks of every project they were not
+    shown — the same hole the cross-team sprint list had.
+    """
+    ws, owner, outsider = await _scoped_workspace(db_session, "ws-http-tasks")
+    hidden = await _project(db_session, ws, "tasks-hidden", creator=owner)
+    mine = await _project(db_session, ws, "tasks-mine", creator=outsider)
+
+    for project, title in ((hidden, "Theirs"), (mine, "Mine")):
+        db_session.add(
+            SprintTask(
+                id=str(uuid.uuid4()),
+                workspace_id=ws.id,
+                team_id=project.id,
+                sprint_id=None,
+                title=title,
+                status="todo",
+                source_type="manual",
+                source_id=str(uuid.uuid4()),
+                priority="medium",
+            )
+        )
+    await db_session.commit()
+
+    path = f"/api/v1/workspaces/{ws.id}/tasks"
+    as_developer(outsider)
+
+    response = await client.get(path)
+    assert response.status_code == 200
+    assert [t["title"] for t in response.json()] == ["Mine"]
+
+    # And naming the board outright is refused rather than silently empty.
+    assert (await client.get(f"{path}?team_id={hidden.id}")).status_code == 404
+
+    # The owner, who may see everything, still gets both.
+    as_developer(owner)
+    both = await client.get(path)
+    assert sorted(t["title"] for t in both.json()) == ["Mine", "Theirs"]

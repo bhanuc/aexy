@@ -5,6 +5,74 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.40.3] - 2026-09-15
+
+Every route that takes a team id — in its path or as a filter — respects
+scoped project visibility.
+
+### Fixed: the routes that take a board id in their path
+
+A project's sprint board is a `Team` carrying the project's own id, so every
+route keyed by a team is a route that can be handed a project id. The project,
+board, task, sprint and team surfaces were closed when member-scoped
+visibility landed. Fourteen modules were not. Seven of them take the board id
+in the path, and each describes a project plainly enough on its own:
+
+- **on-call** — who is on the rota for it;
+- **learning** — the team's people, their skill gaps and what is recommended
+  for them, and separately the manager view of how far through it they are;
+- **repositories** — which repositories the project works on, and linking
+  more to it;
+- **tracking** — its people's daily standups, and the dashboard over them;
+- **leave** — the board's leave balances;
+- **Google Calendar** — pointing the board's on-call schedule at a calendar.
+
+Four of the modules funnel their team routes through a single helper — on-call's
+`verify_workspace_access`, learning's `_require_team_workspace_member`,
+repositories' `_verify_team_role`, and a new one in tracking that also removes
+the ten lines the two routes there had been duplicating — so one call each
+closes twenty-two routes. The remaining three take the call in the route body.
+As everywhere else the answer is 404 rather than 403, because a 403 confirms
+that a project with that id is there.
+
+### Fixed: two things found while guarding those routes
+
+**Google Calendar's calendar picker never checked the team was the
+workspace's.** `POST /workspaces/A/integrations/google-calendar/select-calendar/<B_team_id>`
+pointed team B's on-call schedule at a calendar chosen by an admin of
+workspace A. It now refuses a team that does not belong to the workspace in
+the URL, the same way the on-call routes have.
+
+**The manager learning progress endpoint raised `NameError` for everyone.**
+`learning_management_service` used `Integer` in four casts and never imported
+it, so `GET /learning/manager/team/{team_id}/progress` — and the budget
+summary beside it — answered 500 for the whole of their existence. Found
+because the new test asked for a 200 and got a stack trace.
+
+### Fixed: and the ones that take it as a filter
+
+Twenty-six more routes took the team as `?team_id=` while authorising on
+workspace membership alone — the `insights` routes (leaderboard, bus factor,
+sprint capacity and the AI narrative, root-cause, retro and trajectory
+endpoints), the calendar summaries, `analysis`, the Jira and Linear syncs,
+ticket and task listings, learning budgets and active blockers.
+
+A filter naming a board is still a question about that board: "show me this
+team's leaderboard" is not a smaller ask than "show me this team". So an id
+the caller may not see is **refused**, not quietly ignored — dropping it would
+answer a different question from the one asked, from a wider scope, and say
+nothing about having done so. No `team_id` is no filter, and nothing happens.
+
+One of them needed both halves. `GET /workspaces/{id}/tasks` lists across
+every team, so a caller who names no team at all would still have been handed
+the tasks of every project they were never shown — the same hole the
+cross-team sprint list had. It now leaves those out as well as refusing a
+board named outright.
+
+Nothing changes for a workspace that has not scoped its projects, which is
+every workspace that exists today, and nothing changes for a team that is not
+a project's board — the majority of them.
+
 ## [0.40.2] - 2026-09-15
 
 Projects can be put away, people see the ones they are on, and a dialog that

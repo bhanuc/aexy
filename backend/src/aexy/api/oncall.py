@@ -30,6 +30,7 @@ from aexy.services.oncall_service import (
     ScheduleConflictError,
     SwapNotAllowedError,
 )
+from aexy.services.project_service import assert_project_visible
 from aexy.services.workspace_service import WorkspaceService
 from aexy.services.google_calendar_service import GoogleCalendarService
 
@@ -51,9 +52,10 @@ async def verify_workspace_access(
     team_id: str | None = None,
 ) -> WorkspaceService:
     """Verify the user has access to the workspace, and (when `team_id` is
-    supplied) that the team actually belongs to this workspace. Without the
-    team check, the prior shape `/workspaces/A/teams/<B_team_id>/oncall/...`
-    silently operated on team B for any caller who had access to workspace A.
+    supplied) that the team actually belongs to this workspace and is one the
+    caller may know about. Without the team check, the prior shape
+    `/workspaces/A/teams/<B_team_id>/oncall/...` silently operated on team B
+    for any caller who had access to workspace A.
     """
     workspace_service = WorkspaceService(db)
 
@@ -74,6 +76,14 @@ async def verify_workspace_access(
         )
         if team_check.scalar_one_or_none() is None:
             raise HTTPException(status_code=404, detail="Team not found")
+
+        # A project's board is a Team carrying the project's own id, so a
+        # team id here can be a project id. In a workspace that scopes its
+        # projects to membership, this says who is on the rota for a project
+        # the caller is not allowed to know exists.
+        await assert_project_visible(
+            db, workspace_id, team_id, str(current_user.id)
+        )
 
     return workspace_service
 
