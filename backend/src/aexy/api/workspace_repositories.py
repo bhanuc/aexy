@@ -18,6 +18,7 @@ from aexy.core.database import get_db
 from aexy.models.repository import DeveloperRepository, Repository
 from aexy.models.team import Team
 from aexy.models.workspace import WorkspaceMember
+from aexy.services.project_service import assert_project_visible
 from aexy.services.workspace_repository_service import WorkspaceRepositoryService
 from aexy.services.workspace_service import WorkspaceService
 
@@ -134,6 +135,11 @@ async def _verify_team_role(
     await _verify_workspace_role(
         db, str(team.workspace_id), developer_id, required_role
     )
+    # A project's board is a Team carrying the project's own id, so a team id
+    # here can be a project id — and which repositories a project works on is
+    # a description of the project. In a workspace that scopes its projects to
+    # membership, this one is not the caller's to read or to link to.
+    await assert_project_visible(db, str(team.workspace_id), team_id, developer_id)
     return team
 
 

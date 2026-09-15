@@ -5,6 +5,52 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.40.3] - 2026-09-15
+
+Three more team-keyed surfaces respect scoped project visibility. Not the last
+of them — see the end of this entry.
+
+### Fixed: on-call, learning and repositories answered for boards their caller could not see
+
+A project's sprint board is a `Team` carrying the project's own id, so every
+route keyed by a team is a route that can be handed a project id. The project,
+board, task, sprint and team surfaces were closed when member-scoped
+visibility landed; these three were not, and each describes a project plainly
+enough on its own:
+
+- **on-call** — who is on the rota for it;
+- **learning** — the team's people, their skill gaps and what is recommended
+  for them;
+- **repositories** — which repositories the project works on, and linking
+  more to it.
+
+Each module funnels its team routes through a single helper — `oncall`'s
+`verify_workspace_access`, `learning`'s `_require_team_workspace_member`,
+`workspace_repositories`' `_verify_team_role` — so one call each closes all
+twenty: fifteen on-call routes, two learning, three repositories. As
+everywhere else the answer is 404 rather than 403, because a 403 confirms that
+a project with that id is there.
+
+Nothing changes for a workspace that has not scoped its projects, which is
+every workspace that exists today, and nothing changes for a team that is not
+a project's board — the majority of them.
+
+### Known: the scoping is not finished
+
+Roughly thirty routes across a dozen modules still authorise on workspace
+membership alone while taking a team id, and a team id can be a board's. The
+ones worth knowing about are `GET /tracking/standups/team/{team_id}` and the
+tracking dashboard beside it, the fourteen `insights` routes that accept
+`?team_id=` (leaderboard, bus factor, sprint capacity and the AI narrative,
+root-cause, retro and trajectory endpoints), team leave balances, manager
+learning progress, and the calendar, analysis and ticket listings that filter
+by team.
+
+The path-parameter ones take the same single call these three took. The
+`?team_id=` filters need a decision first — refuse the id, or drop the filter
+and answer for what the caller can see — which is why they are not bundled in
+here.
+
 ## [0.40.2] - 2026-09-15
 
 Projects can be put away, people see the ones they are on, and a dialog that
