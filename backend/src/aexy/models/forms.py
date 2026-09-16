@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 import secrets
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func, Index
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -134,6 +134,14 @@ class Form(Base):
         default=FormAuthMode.ANONYMOUS.value,
         nullable=False,
     )
+    # The contact block — name and email — is rendered by the public page
+    # above the designed fields, and used to be hardcoded there: a form with
+    # four fields in the builder showed six on the page, and neither of the
+    # extra two appeared anywhere in the designer. These make it the form's
+    # decision. Defaults reproduce exactly what the page did before.
+    collect_name: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    require_name: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    collect_email: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     require_email: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # Form appearance
@@ -375,6 +383,21 @@ class Form(Base):
     __table_args__ = (
         UniqueConstraint("workspace_id", "slug", name="uq_form_slug"),
         Index("ix_forms_workspace_active", "workspace_id", "is_active"),
+        # "Required but not collected" is a form nobody can submit.
+        CheckConstraint(
+            "(collect_name OR NOT require_name) "
+            "AND (collect_email OR NOT require_email)",
+            name="ck_form_contact_required_is_collected",
+        ),
+        # Email verification has nothing to verify without an address. The
+        # constraint above only ties `require_email` to `collect_email`, so
+        # this combination stayed reachable: the submission is accepted, the
+        # response says `requires_email_verification`, and the page asks the
+        # submitter to check an inbox nobody asked them for.
+        CheckConstraint(
+            "collect_email OR auth_mode <> 'email_verification'",
+            name="ck_form_email_verification_collects_email",
+        ),
     )
 
 

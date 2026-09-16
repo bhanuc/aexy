@@ -87,11 +87,26 @@ def stream_attachment(meta: dict, range_header: str | None = None) -> StreamingR
     )
 
 
+def origin_form_name(ticket) -> str | None:
+    """The name of whichever form raised the ticket.
+
+    Two form systems, two columns, exactly one of them set. Reading only
+    `ticket.form` left every ticket raised through the Forms module with no
+    form name at all.
+    """
+    if ticket.form:
+        return ticket.form.name
+    if ticket.forms_form:
+        return ticket.forms_form.name
+    return None
+
+
 def ticket_to_response(ticket) -> TicketResponseSchema:
     """Convert Ticket model to response schema."""
     return TicketResponseSchema(
         id=str(ticket.id),
-        form_id=str(ticket.form_id),
+        form_id=str(ticket.form_id) if ticket.form_id else None,
+        forms_form_id=str(ticket.forms_form_id) if ticket.forms_form_id else None,
         workspace_id=str(ticket.workspace_id),
         ticket_number=ticket.ticket_number,
         title=ticket.title or headline_from_field_values(ticket.field_values),
@@ -118,7 +133,7 @@ def ticket_to_response(ticket) -> TicketResponseSchema:
         sla_breached=ticket.sla_breached,
         created_at=ticket.created_at,
         updated_at=ticket.updated_at,
-        form_name=ticket.form.name if ticket.form else None,
+        form_name=origin_form_name(ticket),
         assignee_name=ticket.assignee.name if ticket.assignee else None,
         team_name=ticket.team.name if ticket.team else None,
     )
@@ -128,7 +143,8 @@ def ticket_to_list_response(ticket) -> TicketListResponse:
     """Convert Ticket model to list response schema."""
     return TicketListResponse(
         id=str(ticket.id),
-        form_id=str(ticket.form_id),
+        form_id=str(ticket.form_id) if ticket.form_id else None,
+        forms_form_id=str(ticket.forms_form_id) if ticket.forms_form_id else None,
         ticket_number=ticket.ticket_number,
         title=ticket.title or headline_from_field_values(ticket.field_values),
         submitter_email=ticket.submitter_email,
@@ -140,7 +156,7 @@ def ticket_to_list_response(ticket) -> TicketListResponse:
         sla_breached=ticket.sla_breached,
         created_at=ticket.created_at,
         updated_at=ticket.updated_at,
-        form_name=ticket.form.name if ticket.form else None,
+        form_name=origin_form_name(ticket),
         assignee_name=ticket.assignee.name if ticket.assignee else None,
         source=ticket.source,
         dedup_key=ticket.dedup_key,

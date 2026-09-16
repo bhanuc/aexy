@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 import secrets
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -14,6 +14,7 @@ from aexy.core.database import Base
 
 if TYPE_CHECKING:
     from aexy.models.developer import Developer
+    from aexy.models.forms import Form
     from aexy.models.team import Team
     from aexy.models.workspace import Workspace
     from aexy.models.sprint import SprintTask
@@ -307,10 +308,33 @@ class Ticket(Base):
         primary_key=True,
         default=lambda: str(uuid4()),
     )
-    form_id: Mapped[str] = mapped_column(
+    # A ticket comes from one of two form systems, and they are different
+    # tables. `form_id` points at a ticket form; `forms_form_id` at a Forms
+    # module form. Exactly one is set — see the CHECK constraint below.
+    #
+    # `form_id` was NOT NULL and the Forms module wrote its own `forms.id`
+    # into it, which `tickets_form_id_fkey` rejected: every submission to a
+    # Forms module form with `auto_create_ticket` on answered 500, for the
+    # whole life of the feature.
+    form_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False),
         ForeignKey("ticket_forms.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
+        index=True,
+    )
+    # RESTRICT, not CASCADE. `ticket_forms` cascades — deleting one takes its
+    # tickets with it — but nothing ever pointed at `forms.id` before, so that
+    # precedent is being extended rather than preserved. A Forms module form is
+    # deleted from a list page by one click, and the tickets it raised are
+    # support history with replies, SLA clocks and share links hanging off
+    # them. `forms_service.delete_form` refuses with a count instead.
+    #
+    # ON DELETE SET NULL is not available here: it would leave both columns
+    # null and violate ck_ticket_exactly_one_form.
+    forms_form_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("forms.id", ondelete="RESTRICT"),
+        nullable=True,
         index=True,
     )
     workspace_id: Mapped[str] = mapped_column(
@@ -461,7 +485,13 @@ class Ticket(Base):
     )
 
     # Relationships
-    form: Mapped["TicketForm"] = relationship("TicketForm", back_populates="tickets")
+    # Optional since a ticket raised through the Forms module has no ticket
+    # form. Readers must guard; the annotation says so rather than leaving the
+    # next unguarded `ticket.form.name` for mypy to wave through.
+    form: Mapped["TicketForm | None"] = relationship(
+        "TicketForm", back_populates="tickets"
+    )
+    forms_form: Mapped["Form | None"] = relationship("Form")
     workspace: Mapped["Workspace"] = relationship("Workspace", lazy="selectin")
     assignee: Mapped["Developer"] = relationship("Developer", lazy="selectin")
     team: Mapped["Team"] = relationship("Team", lazy="selectin")
@@ -482,6 +512,14 @@ class Ticket(Base):
 
     __table_args__ = (
         UniqueConstraint("workspace_id", "ticket_number", name="uq_ticket_number"),
+        # Exactly one origin. Making `form_id` nullable to let Forms module
+        # tickets exist would otherwise also allow a ticket belonging to no
+        # form at all, or to one of each — neither of which any reader of
+        # these columns is prepared for.
+        CheckConstraint(
+            "(form_id IS NULL) <> (forms_form_id IS NULL)",
+            name="ck_ticket_exactly_one_form",
+        ),
     )
 
 

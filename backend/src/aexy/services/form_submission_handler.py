@@ -28,6 +28,8 @@ from aexy.models.crm import (
     CRMRecordRelation,
 )
 from aexy.schemas.forms import PublicFormSubmission
+from aexy.services.ticket_numbering import next_ticket_number
+from aexy.services.ticket_service import headline_from_field_values
 from aexy.services.automation_service import dispatch_automation_event
 
 
@@ -318,25 +320,32 @@ class FormSubmissionHandler:
         if not form.auto_create_ticket:
             return None
 
-        # Get next ticket number
-        query = select(func.coalesce(func.max(Ticket.ticket_number), 0) + 1).where(
-            Ticket.workspace_id == form.workspace_id
-        )
-        ticket_number = await self.db.scalar(query)
+        # Shared atomic allocation — counting here raced with itself and left
+        # the workspace counter behind, which broke public ticket forms.
+        ticket_number = await next_ticket_number(self.db, form.workspace_id)
 
         # Map form fields to ticket fields
         mappings = form.ticket_field_mappings or {}
         ticket_config = form.ticket_config or {}
 
-        # Get title and description from mappings or use defaults
-        title = self._get_mapped_value(submission.data, mappings, "title", "Form Submission")
-        description = self._get_mapped_value(submission.data, mappings, "description", "")
-
-        # Apply templates if configured
+        # The ticket's headline, most specific source first. This was computed
+        # and then never passed to the Ticket below, so every ticket a Forms
+        # module form created had a null title and showed up in queues under
+        # whatever the read path could reconstruct.
+        #
+        # `headline_from_field_values` sits between the explicit mapping and the
+        # generic fallback so an unmapped form still titles its tickets from the
+        # subject the submitter typed — the same rule ticket forms use, rather
+        # than a page of rows all reading "Form Submission".
+        title = None
         if "title_template" in ticket_config:
             title = self._apply_template(ticket_config["title_template"], submission.data)
-        if "description_template" in ticket_config:
-            description = self._apply_template(ticket_config["description_template"], submission.data)
+        if not title:
+            title = self._get_mapped_value(submission.data, mappings, "title")
+        if not title:
+            title = headline_from_field_values(submission.data)
+        if not title:
+            title = "Form Submission"
 
         # Get priority/severity from mappings or use defaults
         priority = self._get_mapped_value(submission.data, mappings, "priority", form.default_priority)
@@ -344,12 +353,15 @@ class FormSubmissionHandler:
 
         ticket = Ticket(
             id=str(uuid4()),
-            form_id=form.id,
+            # A Forms module form, not a ticket form — `form_id` points at the
+            # other table and rejected this id outright.
+            forms_form_id=form.id,
             workspace_id=form.workspace_id,
             ticket_number=ticket_number,
             submitter_email=submission.email,
             submitter_name=submission.name,
             email_verified=submission.is_verified,
+            title=title,
             field_values=submission.data,
             # Carry the submission's uploads onto the ticket so agents see the
             # attachments on the record they actually work from.

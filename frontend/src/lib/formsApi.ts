@@ -151,6 +151,9 @@ export interface Form {
   public_url_token: string;
   is_active: boolean;
   auth_mode: FormAuthMode;
+  collect_name: boolean;
+  require_name: boolean;
+  collect_email: boolean;
   require_email: boolean;
   theme: FormTheme;
   thank_you_page: ThankYouPageConfig;
@@ -291,6 +294,9 @@ export interface PublicForm {
   name: string;
   description?: string;
   auth_mode: FormAuthMode;
+  collect_name: boolean;
+  require_name: boolean;
+  collect_email: boolean;
   require_email: boolean;
   theme: FormTheme;
   thank_you_page: ThankYouPageConfig;

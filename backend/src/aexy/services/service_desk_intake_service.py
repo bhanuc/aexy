@@ -66,6 +66,8 @@ from aexy.services.service_desk_mailer import OUTBOUND_MARKER_HEADER
 from aexy.services.service_desk_industry_templates import SEMANTIC_EXTERNAL
 from aexy.services.service_desk_taxonomy import external_slug_for, load_taxonomy
 
+from aexy.services.ticket_numbering import next_ticket_number
+
 logger = logging.getLogger(__name__)
 
 # How many addresses of one thread are kept for reply-all. A long chain of
@@ -1500,10 +1502,11 @@ class ServiceDeskIntakeService:
     async def _insert_ticket(self, workspace_id: str, **fields) -> Ticket:
         """Add a ``Ticket``, retrying its number against concurrent intake.
 
-        ticket_number is max()+1 against a real uq_ticket_number constraint, so
-        two emails arriving together collide. Retry inside a savepoint instead of
-        letting the IntegrityError escape — in the webhook path it was swallowed
-        by the caller and the email was dropped.
+        Numbers now come from the shared atomic allocator, which serializes
+        concurrent intake on the workspace row, so the collision this loop was
+        written for no longer happens. The retry stays because the savepoint is
+        what keeps an IntegrityError from escaping: in the webhook path the
+        caller swallowed it and the email was silently dropped.
         """
         for attempt in range(_TICKET_NUMBER_ATTEMPTS):
             candidate = Ticket(
@@ -2048,8 +2051,8 @@ class ServiceDeskIntakeService:
             raise
 
     async def _next_ticket_number(self, workspace_id: str) -> int:
-        stmt = select(func.max(Ticket.ticket_number)).where(Ticket.workspace_id == workspace_id)
-        return ((await self.db.execute(stmt)).scalar() or 0) + 1
+        """Shared with every other ticket creator — see ticket_numbering."""
+        return await next_ticket_number(self.db, workspace_id)
 
     # ------------------------------------------------------- best-effort hooks
 

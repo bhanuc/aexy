@@ -439,6 +439,9 @@ class FormCreate(BaseModel):
     description: str | None = None
     template_type: FormTemplateType | None = None
     auth_mode: FormAuthMode = "anonymous"
+    collect_name: bool = True
+    require_name: bool = False
+    collect_email: bool = True
     require_email: bool = True
     theme: FormTheme | None = None
     thank_you_page: ThankYouPageConfig | None = None
@@ -459,6 +462,9 @@ class FormUpdate(BaseModel):
     description: str | None = None
     is_active: bool | None = None
     auth_mode: FormAuthMode | None = None
+    collect_name: bool | None = None
+    require_name: bool | None = None
+    collect_email: bool | None = None
     require_email: bool | None = None
     theme: FormTheme | None = None
     thank_you_page: ThankYouPageConfig | None = None
@@ -482,6 +488,9 @@ class FormResponse(BaseModel):
     public_url_token: str
     is_active: bool
     auth_mode: FormAuthMode
+    collect_name: bool
+    require_name: bool
+    collect_email: bool
     require_email: bool
     theme: dict
     thank_you_page: dict
@@ -557,6 +566,9 @@ class PublicFormResponse(BaseModel):
     name: str
     description: str | None = None
     auth_mode: FormAuthMode
+    collect_name: bool = True
+    require_name: bool = False
+    collect_email: bool = True
     require_email: bool
     theme: dict
     thank_you_page: dict
