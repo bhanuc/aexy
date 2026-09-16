@@ -329,7 +329,46 @@ class GitHubTaskSyncService:
             )
 
         result = await self.db.execute(stmt)
-        return result.scalar_one_or_none()
+        task = result.scalar_one_or_none()
+        if task is not None:
+            return task
+
+        # Nothing matched. Say which of the two reasons it was, because from
+        # the outside they look identical — the task panel just keeps saying
+        # "nothing linked yet" whether the slug was wrong or the repo was
+        # simply never adopted. One extra query, only ever on the miss path.
+        if repository:
+            unguarded = await self.db.execute(
+                select(SprintTask.id)
+                .join(Workspace, Workspace.id == SprintTask.workspace_id)
+                .where(
+                    and_(
+                        Workspace.slug == workspace_slug.lower(),
+                        SprintTask.task_key == task_key,
+                    )
+                )
+                .limit(1)
+            )
+            if unguarded.scalar_one_or_none() is not None:
+                logger.warning(
+                    "Task mention [%s:%s] from %s resolved to a task, but that "
+                    "workspace has not adopted %s (no active workspace_repositories "
+                    "row) — refusing the link to avoid cross-tenant leakage",
+                    workspace_slug,
+                    task_key,
+                    repository,
+                    repository,
+                )
+                return None
+
+        logger.warning(
+            "Task mention [%s:%s] from %s matched no task — no workspace with "
+            "that slug, or no task with that key in it",
+            workspace_slug,
+            task_key,
+            repository or "unknown repo",
+        )
+        return None
 
     async def _find_github_issue_task(
         self,

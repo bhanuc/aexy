@@ -55,6 +55,21 @@ class WorkspaceRepositoryResponse(BaseModel):
     updated_at: datetime
 
 
+class GitHubMentionReadiness(BaseModel):
+    """Why `[slug:task-key]` mentions would or would not link in this workspace.
+
+    Every way this can fail is silent from the outside — GitHub accepts the
+    PR, the webhook 200s or never arrives, and the task panel just keeps
+    saying "nothing linked yet". This is what the panel reads so it can say
+    which one it is.
+    """
+
+    ready: bool
+    reason: str | None = None
+    detail: str | None = None
+    repositories: list[str] = []
+
+
 class AdoptRepositoryRequest(BaseModel):
     repository_id: str
 
@@ -257,6 +272,51 @@ async def list_workspace_repositories(
         )
         for wr in wrs
     ]
+
+
+@router.get(
+    "/workspaces/{workspace_id}/github-mention-readiness",
+    response_model=GitHubMentionReadiness,
+)
+async def github_mention_readiness(
+    workspace_id: str,
+    developer_id: Annotated[str, Depends(get_current_developer_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Report whether a task mention pasted into GitHub could link back here."""
+    await _verify_workspace_role(db, workspace_id, developer_id, "viewer")
+
+    from aexy.core.config import settings
+
+    # Mirrors the guard in `github_webhook` exactly: an unset secret now
+    # refuses every delivery, in every environment.
+    if not settings.github_webhook_secret:
+        return GitHubMentionReadiness(
+            ready=False,
+            reason="webhook_not_configured",
+            detail=(
+                "This deployment has no GitHub webhook secret set, so it "
+                "rejects every delivery from GitHub. Set GITHUB_WEBHOOK_SECRET "
+                "on the backend to match the secret on the repository webhook."
+            ),
+        )
+
+    service = WorkspaceRepositoryService(db)
+    wrs = await service.list_workspace_repositories(workspace_id)
+    names = [wr.repository.full_name for wr in wrs if wr.repository]
+
+    if not names:
+        return GitHubMentionReadiness(
+            ready=False,
+            reason="no_repositories",
+            detail=(
+                "No repository is connected to this workspace, and a mention "
+                "is only honoured from a repository the workspace has adopted. "
+                "Connect one under Settings → Repositories."
+            ),
+        )
+
+    return GitHubMentionReadiness(ready=True, repositories=names)
 
 
 @router.post(

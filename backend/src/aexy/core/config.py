@@ -806,6 +806,39 @@ class Settings(BaseSettings):
         validation_alias="PLATFORM_ORG_ID",
     )
 
+    # Proxy / client-IP resolution
+    #
+    # `X-Forwarded-For` is caller-supplied and worth exactly as much as the hop
+    # that set it. Trusting it unconditionally made every per-IP rate limit
+    # bypassable by rotating the header, so it is now honoured only when the
+    # socket peer is listed here. Empty means "no proxy in front of us" — use
+    # the socket peer and ignore the header.
+    #
+    # Set this in any deployment behind a load balancer or ingress, to the
+    # address(es) or CIDR(s) of that hop, or client IPs will all read as the
+    # proxy's and per-IP limits will bucket every caller together.
+    trusted_proxies: str = Field(
+        default="",
+        description="Comma-separated proxy IPs/CIDRs whose X-Forwarded-For is trusted",
+        validation_alias="TRUSTED_PROXIES",
+    )
+
+    @property
+    def trusted_proxy_networks(self) -> list:
+        """Parsed `trusted_proxies`, ignoring entries that aren't valid."""
+        import ipaddress
+
+        networks = []
+        for entry in self.trusted_proxies.split(","):
+            entry = entry.strip()
+            if not entry:
+                continue
+            try:
+                networks.append(ipaddress.ip_network(entry, strict=False))
+            except ValueError:
+                continue
+        return networks
+
     # Platform Admin Configuration
     admin_emails: str = Field(
         default="",

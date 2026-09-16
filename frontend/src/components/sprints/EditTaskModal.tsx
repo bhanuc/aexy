@@ -38,6 +38,7 @@ import {
   TaskStatus,
   projectTasksApi,
   sprintApi,
+  workspaceRepositoriesApi,
 } from "@/lib/api";
 import type { FileAIMetadata } from "@/lib/api";
 import { TaskDescriptionEditor, TaskDescriptionEditorRef, MentionUser } from "@/components/planning/TaskDescriptionEditor";
@@ -753,6 +754,19 @@ export function EditTaskModal({ task, onClose, onUpdate, onDelete, isUpdating, s
   const issueLinks = githubLinks.filter((link) => link.link_type === "github_issue");
   const mentionToken = task.identifier ?? null;
 
+  // Asked only once the panel has nothing to show, and off exactly the count
+  // the empty state renders on — so the reason appears whenever the blank
+  // "nothing linked yet" does, and never alongside a populated list.
+  const hasNoGithubLinks =
+    !isLoadingGithubLinks && pullRequestLinks.length + issueLinks.length === 0;
+  const { data: mentionReadiness } = useQuery({
+    queryKey: ["githubMentionReadiness", task.workspace_id],
+    queryFn: () => workspaceRepositoriesApi.githubMentionReadiness(task.workspace_id!),
+    enabled: hasNoGithubLinks && !!task.workspace_id,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
   const copyMentionToken = useCallback(async () => {
     if (!mentionToken) return;
     try {
@@ -982,7 +996,22 @@ export function EditTaskModal({ task, onClose, onUpdate, onDelete, isUpdating, s
               {isLoadingGithubLinks ? (
                 <p className="text-sm text-muted-foreground">Loading linked GitHub activity...</p>
               ) : (pullRequestLinks.length + issueLinks.length) === 0 ? (
-                <p className="text-sm text-muted-foreground">Nothing linked yet — mention this task in a PR or issue to populate.</p>
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">Nothing linked yet — mention this task in a PR or issue to populate.</p>
+                  {mentionReadiness && !mentionReadiness.ready && mentionReadiness.detail && (
+                    <p
+                      data-testid="github-mention-blocked"
+                      className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-500"
+                    >
+                      {mentionReadiness.detail}
+                    </p>
+                  )}
+                  {mentionReadiness?.ready && mentionReadiness.repositories.length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Mentions are watched in {mentionReadiness.repositories.join(", ")}.
+                    </p>
+                  )}
+                </div>
               ) : (
                 <div className="space-y-3">
                   {pullRequestLinks.length > 0 && (

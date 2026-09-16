@@ -2,11 +2,14 @@
 
 import logging
 import re
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from aexy.api.email_tracking import get_client_ip
+from aexy.core.client_ip import get_client_ip
 from aexy.core.config import get_settings
 from aexy.core.database import get_db
 from aexy.services.webhook_handler import (
@@ -205,14 +208,38 @@ async def _dispatch_document_impact(db: AsyncSession, event, pr) -> str | None:
         return None
 
 
-async def _enforce_webhook_rate_limit(scope_key: str, limit: int, window_seconds: int = 60) -> None:
-    """Sliding-window via Redis INCR + EXPIRE; fail-open on Redis errors."""
+@asynccontextmanager
+async def _redis() -> AsyncIterator[Any | None]:
+    """A Redis client for the duration of the block, or None if unreachable.
+
+    Every webhook-side use of Redis is advisory — rate limiting and replay
+    suppression both fail open, because a cache outage must not start refusing
+    real deliveries. Yielding None is how that is expressed once instead of in
+    each caller, which is also what keeps the connection from leaking when the
+    body raises (an HTTPException from the rate limiter, say).
+    """
     try:
         import redis.asyncio as _aioredis
+
         client = _aioredis.from_url(settings.redis_url)
     except Exception:
+        logger.debug("Redis unavailable for webhook bookkeeping", exc_info=True)
+        yield None
         return
     try:
+        yield client
+    finally:
+        try:
+            await client.aclose()
+        except Exception:
+            logger.debug("Redis client close failed", exc_info=True)
+
+
+async def _enforce_webhook_rate_limit(scope_key: str, limit: int, window_seconds: int = 60) -> None:
+    """Sliding-window via Redis INCR + EXPIRE; fail-open on Redis errors."""
+    async with _redis() as client:
+        if client is None:
+            return
         count = await client.incr(scope_key)
         if count == 1:
             await client.expire(scope_key, window_seconds)
@@ -221,11 +248,40 @@ async def _enforce_webhook_rate_limit(scope_key: str, limit: int, window_seconds
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail="Webhook rate limit exceeded",
             )
-    finally:
+
+
+# A delivery id is 36 bytes and GitHub retries a failed delivery for about a
+# day, so a day is how long "already applied" needs to be remembered.
+_GITHUB_DELIVERY_TTL_SECONDS = 24 * 60 * 60
+
+
+def _delivery_key(delivery_id: str) -> str:
+    return f"webhook:github:delivery:{delivery_id}"
+
+
+async def _delivery_already_applied(delivery_id: str) -> bool:
+    """True if this delivery id was recorded by an earlier successful run."""
+    async with _redis() as client:
+        if client is None:
+            return False
         try:
-            await client.aclose()
+            return bool(await client.exists(_delivery_key(delivery_id)))
         except Exception:
-            pass
+            logger.debug("Replay lookup failed; allowing delivery", exc_info=True)
+            return False
+
+
+async def _mark_delivery_applied(delivery_id: str) -> None:
+    """Record a delivery as applied, once its processing has succeeded."""
+    async with _redis() as client:
+        if client is None:
+            return
+        try:
+            await client.set(
+                _delivery_key(delivery_id), "1", ex=_GITHUB_DELIVERY_TTL_SECONDS
+            )
+        except Exception:
+            logger.debug("Could not record delivery id", exc_info=True)
 
 
 @router.post("/github")
@@ -261,28 +317,42 @@ async def handle_github_webhook(
     webhook_secret = settings.github_webhook_secret if hasattr(settings, 'github_webhook_secret') else ""
     handler = WebhookHandler(webhook_secret=webhook_secret)
 
-    # Signature verification — fail closed in production. The previous
-    # `if secret and signature` shape silently accepted unsigned
-    # webhooks whenever the secret was misconfigured (empty), turning a
-    # config error into an open ingestion endpoint.
-    if webhook_secret:
-        if not x_hub_signature_256:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Missing X-Hub-Signature-256 header",
-            )
-        if not handler.verify_signature(body, x_hub_signature_256):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid webhook signature",
-            )
-    elif not settings.debug:
-        # No secret AND not in debug mode → refuse rather than fan
-        # out workflow dispatch from unauthenticated callers.
+    # Signature verification — fail closed everywhere, debug included.
+    #
+    # Two earlier shapes were open in practice. `if secret and signature`
+    # accepted unsigned webhooks whenever the secret was misconfigured
+    # (empty); the `elif not settings.debug` that replaced it still let a
+    # debug deployment take arbitrary unauthenticated payloads, and those
+    # payloads reach task linking, task status transitions and LLM analysis
+    # dispatch. A missing secret is a config error in every environment, so
+    # it now refuses in every environment.
+    if not webhook_secret:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="GitHub webhook is not configured",
         )
+    if not x_hub_signature_256:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing X-Hub-Signature-256 header",
+        )
+    if not handler.verify_signature(body, x_hub_signature_256):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid webhook signature",
+        )
+
+    # Replay protection. The signature proves GitHub composed this body once;
+    # it says nothing about how many times someone may resend it. Delivery ids
+    # are recorded only after processing succeeds, so GitHub's own retries of a
+    # failed delivery still go through — it is the repeat of a delivery we
+    # already applied that gets dropped.
+    if x_github_delivery and await _delivery_already_applied(x_github_delivery):
+        return {
+            "status": "duplicate",
+            "delivery_id": x_github_delivery,
+            "reason": "This delivery has already been processed",
+        }
 
     # Parse JSON payload
     try:
@@ -461,6 +531,9 @@ async def handle_github_webhook(
                     result["profile_synced"] = True
                 except Exception:
                     result["profile_synced"] = False
+
+    if x_github_delivery:
+        await _mark_delivery_applied(x_github_delivery)
 
     return {
         "status": "processed",

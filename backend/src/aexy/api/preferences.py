@@ -1,5 +1,6 @@
 """Email subscription preferences API routes."""
 
+from aexy.core.client_ip import get_client_ip
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,17 +45,7 @@ async def check_workspace_permission(
         )
 
 
-def get_client_ip(request: Request) -> str:
-    """Extract client IP from request."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    real_ip = request.headers.get("X-Real-IP")
-    if real_ip:
-        return real_ip
-    if request.client:
-        return request.client.host
-    return "unknown"
+# Client IP resolution is shared — see aexy.core.client_ip.
 
 
 # =============================================================================
