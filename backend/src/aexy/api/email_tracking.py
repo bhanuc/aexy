@@ -3,6 +3,7 @@
 import logging
 from io import BytesIO
 
+from aexy.core.client_ip import get_client_ip
 from fastapi import APIRouter, Request, Response, HTTPException, BackgroundTasks
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
@@ -29,24 +30,7 @@ TRACKING_PIXEL_GIF = bytes([
 ])
 
 
-def get_client_ip(request: Request) -> str:
-    """Extract client IP from request, handling proxies."""
-    # Check X-Forwarded-For header (for proxies/load balancers)
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        # Take the first IP (client IP)
-        return forwarded.split(",")[0].strip()
-
-    # Check X-Real-IP header
-    real_ip = request.headers.get("X-Real-IP")
-    if real_ip:
-        return real_ip
-
-    # Fall back to direct client IP
-    if request.client:
-        return request.client.host
-
-    return "unknown"
+# Client IP resolution is shared — see aexy.core.client_ip.
 
 
 # =============================================================================

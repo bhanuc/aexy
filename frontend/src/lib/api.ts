@@ -2206,7 +2206,26 @@ export interface RepositoryChoice {
   language: string | null;
 }
 
+/** Why a `[slug:task-key]` mention pasted into GitHub would, or would not,
+ *  link back to the task. Every failure here is silent on the GitHub side —
+ *  the panel needs this to say which one it hit. */
+export interface GitHubMentionReadiness {
+  ready: boolean;
+  reason: "webhook_not_configured" | "no_repositories" | null;
+  detail: string | null;
+  repositories: string[];
+}
+
 export const workspaceRepositoriesApi = {
+  githubMentionReadiness: async (
+    workspaceId: string
+  ): Promise<GitHubMentionReadiness> => {
+    const response = await api.get(
+      `/workspaces/${workspaceId}/github-mention-readiness`
+    );
+    return response.data;
+  },
+
   list: async (
     workspaceId: string,
     opts?: { include_inactive?: boolean }

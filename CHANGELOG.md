@@ -5,6 +5,83 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.41.0] - 2026-09-16
+
+Pasting a task's `[workspace-slug:task-key]` into a pull request never linked
+anything, and could not have. The endpoint that was supposed to receive those
+mentions also accepted rather more than it could verify.
+
+### Fixed: a task mention that resolved to nothing said nothing
+
+The parsing and linking behind `[slug:22]` were correct the whole time. What
+was missing was everything around them: the feature is driven entirely by the
+GitHub webhook, and no webhook was registered, so no delivery ever arrived.
+Behind that sat a second stop — `_find_aexy_task` requires the mentioning
+repository to be one the workspace has adopted, which is the WS-083 tenant
+guard doing its job, and no repository had been adopted.
+
+Either way the failure was a bare `continue`. A wrong slug, a wrong task key,
+and a repository the workspace had simply never connected all produced exactly
+the same thing: silence, and a panel that kept saying "nothing linked yet".
+`process_commit` logged how many references it *found* and nothing at all about
+what became of them.
+
+A miss now says which of the two it was, and tells them apart properly — when
+the guarded lookup finds nothing, it re-runs unguarded, so "this task exists but
+that repository isn't yours" is never reported as "no such task". That costs one
+extra query and only ever on the failure path.
+
+### Added: the task panel says why nothing linked
+
+`GET /workspaces/{workspace_id}/github-mention-readiness` answers the question
+the GitHub activity panel could not: it reports `no_repositories` when the
+workspace has adopted none, `webhook_not_configured` when the deployment has no
+secret and would refuse every delivery, and otherwise the repositories mentions
+are actually watched in. The panel asks only when it has nothing to show, off
+the same count the empty state renders on, so the reason appears exactly when
+the blank message does.
+
+### Fixed: the GitHub webhook trusted more than it could verify
+
+Three ways in, none of which needed to be GitHub.
+
+**An unset secret was tolerated under `debug`.** The `elif not settings.debug`
+guard meant a debug deployment accepted arbitrary unsigned payloads — and those
+payloads reach task linking, task status transitions and `analyze_pr` dispatch,
+so an anonymous caller could move tasks and spend LLM budget. A missing secret
+is a configuration error in every environment and is now refused in every
+environment.
+
+**`X-Forwarded-For` was believed unconditionally.** The header is
+caller-supplied; honouring it meant the per-IP rate limit added by WS-082 could
+be reset on every request just by changing it, and every audited `ip_address`
+was whatever the caller typed. It is now read only when the socket peer is a
+proxy named in `TRUSTED_PROXIES`, walking the chain from the right and stopping
+at the first hop we cannot attest to. Two byte-identical copies of the helper
+had the same flaw; both now call one shared implementation, which fixes the
+other six call sites in email tracking and preference-centre auditing too.
+
+**A signed body could be replayed for as long as the secret lived.**
+`X-GitHub-Delivery` was read and echoed back but never remembered. Delivery ids
+are now recorded for 24 hours, and only after processing succeeds — so GitHub's
+own retries of a delivery that failed still go through, and it is the repeat of
+one already applied that gets dropped. The check runs after signature
+verification, so an unsigned caller cannot use it to probe which deliveries have
+been seen.
+
+### Upgrade notes
+
+Two settings need to be present on any deployment that receives GitHub
+webhooks, or deliveries will be refused:
+
+- `GITHUB_WEBHOOK_SECRET` must match the secret on the repository webhook. This
+  was already required outside `debug`; it is now required everywhere.
+- `TRUSTED_PROXIES` must list the address or CIDR of your load balancer or
+  ingress. Empty means "nothing in front of us, use the socket peer", which is
+  correct for a directly-exposed service and safely over-restrictive for a
+  proxied one — client IPs all read as the proxy's and per-IP limits bucket
+  every caller together, rather than the limit not binding at all.
+
 ## [0.40.3] - 2026-09-15
 
 Every route that takes a team id — in its path or as a filter — respects
