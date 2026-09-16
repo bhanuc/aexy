@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Fragment, useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import {
   FileText,
@@ -22,6 +22,7 @@ import {
   Unlink,
   MoreHorizontal,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   Palette,
   PartyPopper,
@@ -39,6 +40,7 @@ import {
   useFormDealConfig,
   useFormAutomations,
   useFormSubmissions,
+  useFormSubmission,
 } from "@/hooks/useForms";
 import { useCRMObjects, useCRMAutomations, useCRMAttributes } from "@/hooks/useCRM";
 import { useTeams } from "@/hooks/useTeams";
@@ -1361,14 +1363,150 @@ function AutomationsTab({
 }
 
 // Submissions Tab
-function SubmissionsTab({
+/** A field key rendered for a person when its definition is gone. */
+function humanizeKey(key: string): string {
+  return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** What a submitted answer should read as, given the field that captured it. */
+function formatAnswer(value: unknown, field?: FormField): string {
+  if (value === null || value === undefined || value === "") return "\u2014";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+
+  // Choice fields store the value, not the label, and the label is the part a
+  // person recognises — "Technical Issue", not "technical".
+  const labelFor = (v: unknown) =>
+    field?.options?.find((o) => o.value === v)?.label ?? String(v);
+
+  if (Array.isArray(value)) {
+    return value.length ? value.map(labelFor).join(", ") : "\u2014";
+  }
+  if (typeof value === "object") return JSON.stringify(value);
+  return labelFor(value);
+}
+
+/**
+ * The answers to one submission, in the order the form asks for them.
+ *
+ * Keys whose field has since been deleted still have answers stored against
+ * them, so they come last under a humanised key rather than disappearing —
+ * the point of this panel is to show what was entered, all of it.
+ */
+function SubmissionAnswers({
+  data,
+  fields,
+}: {
+  data: Record<string, unknown>;
+  fields: FormField[];
+}) {
+  const byKey = new Map(fields.map((f) => [f.field_key, f]));
+  const known = [...fields]
+    .sort((a, b) => a.position - b.position)
+    .filter((f) => f.field_key in data);
+  const orphaned = Object.keys(data).filter((k) => !byKey.has(k));
+
+  if (known.length === 0 && orphaned.length === 0) {
+    return <p className="text-sm text-muted-foreground">No answers recorded.</p>;
+  }
+
+  return (
+    <dl className="grid grid-cols-1 sm:grid-cols-[minmax(8rem,14rem)_1fr] gap-x-6 gap-y-3">
+      {known.map((field) => (
+        <Fragment key={field.field_key}>
+          <dt className="text-sm text-muted-foreground">{field.name}</dt>
+          <dd className="text-sm text-foreground whitespace-pre-wrap break-words">
+            {formatAnswer(data[field.field_key], field)}
+          </dd>
+        </Fragment>
+      ))}
+      {orphaned.map((key) => (
+        <Fragment key={key}>
+          <dt className="text-sm text-muted-foreground">
+            {humanizeKey(key)}
+            <span className="ml-1 text-xs text-amber-500">(field removed)</span>
+          </dt>
+          <dd className="text-sm text-foreground whitespace-pre-wrap break-words">
+            {formatAnswer(data[key])}
+          </dd>
+        </Fragment>
+      ))}
+    </dl>
+  );
+}
+
+function SubmissionDetail({
   workspaceId,
   formId,
+  submissionId,
+  fields,
 }: {
   workspaceId: string;
   formId: string;
+  submissionId: string;
+  fields: FormField[];
+}) {
+  const { submission, isLoading, error } = useFormSubmission(
+    workspaceId,
+    formId,
+    submissionId,
+  );
+
+  if (isLoading) {
+    return <p className="text-sm text-muted-foreground">Loading answers...</p>;
+  }
+  if (error || !submission) {
+    return <p className="text-sm text-red-500">Could not load this submission.</p>;
+  }
+
+  const attachments = submission.attachments || [];
+
+  return (
+    <div className="space-y-4">
+      <SubmissionAnswers data={submission.data || {}} fields={fields} />
+
+      {attachments.length > 0 && (
+        <div>
+          <p className="text-sm text-muted-foreground mb-2">Attachments</p>
+          <ul className="space-y-1">
+            {attachments.map((attachment, index) => (
+              <li key={index} className="text-sm text-foreground">
+                {String(attachment.filename ?? attachment.name ?? "Attachment")}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {(submission.processing_errors || []).length > 0 && (
+        <div>
+          <p className="text-sm text-red-500 mb-2">Processing errors</p>
+          <ul className="space-y-1">
+            {submission.processing_errors.map((problem, index) => (
+              <li key={index} className="text-sm text-red-400">
+                {JSON.stringify(problem)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SubmissionsTab({
+  workspaceId,
+  formId,
+  fields,
+}: {
+  workspaceId: string;
+  formId: string;
+  fields: FormField[];
 }) {
   const { submissions, isLoading, refetch } = useFormSubmissions(workspaceId, formId);
+  // The table listed who submitted and when and nothing they actually wrote.
+  // The answers are a row away rather than in the list payload, so they are
+  // fetched when a row is opened.
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleString();
@@ -1416,6 +1554,7 @@ function SubmissionsTab({
           <table className="w-full min-w-[600px]">
             <thead className="bg-background/50">
               <tr>
+                <th className="w-10" />
                 <th className="text-left px-4 py-3 text-sm font-medium text-muted-foreground">Email</th>
                 <th className="text-left px-4 py-3 text-sm font-medium text-muted-foreground">Name</th>
                 <th className="text-left px-4 py-3 text-sm font-medium text-muted-foreground">Status</th>
@@ -1425,7 +1564,29 @@ function SubmissionsTab({
             </thead>
             <tbody className="divide-y divide-border">
               {submissions.map((submission) => (
-                <tr key={submission.id} className="hover:bg-accent/30 transition">
+                <Fragment key={submission.id}>
+                <tr
+                  className="hover:bg-accent/30 transition cursor-pointer"
+                  onClick={() =>
+                    setExpandedId(expandedId === submission.id ? null : submission.id)
+                  }
+                >
+                  <td className="pl-4 py-3">
+                    <button
+                      type="button"
+                      aria-label={
+                        expandedId === submission.id ? "Hide answers" : "Show answers"
+                      }
+                      aria-expanded={expandedId === submission.id}
+                      className="text-muted-foreground hover:text-foreground transition"
+                    >
+                      <ChevronRight
+                        className={`h-4 w-4 transition-transform ${
+                          expandedId === submission.id ? "rotate-90" : ""
+                        }`}
+                      />
+                    </button>
+                  </td>
                   <td className="px-4 py-3 text-foreground">{submission.email || "-"}</td>
                   <td className="px-4 py-3 text-foreground">{submission.name || "-"}</td>
                   <td className="px-4 py-3">
@@ -1452,6 +1613,19 @@ function SubmissionsTab({
                     </div>
                   </td>
                 </tr>
+                {expandedId === submission.id && (
+                  <tr className="bg-background/50">
+                    <td colSpan={6} className="px-4 py-4">
+                      <SubmissionDetail
+                        workspaceId={workspaceId}
+                        formId={formId}
+                        submissionId={submission.id}
+                        fields={fields}
+                      />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -1784,7 +1958,11 @@ export default function FormEditorPage() {
         )}
 
         {activeTab === "submissions" && (
-          <SubmissionsTab workspaceId={workspaceId} formId={formId} />
+          <SubmissionsTab
+            workspaceId={workspaceId}
+            formId={formId}
+            fields={form.fields || []}
+          />
         )}
 
         {activeTab === "settings" && (

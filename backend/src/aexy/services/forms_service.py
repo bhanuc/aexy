@@ -101,6 +101,7 @@ FORM_TEMPLATES = {
         "name": "Bug Report",
         "description": "Report a bug or issue",
         "suggested_crm_object": None,
+        "contact": {"require_email": True},
         "fields": [
             {
                 "name": "Title",
@@ -139,19 +140,13 @@ FORM_TEMPLATES = {
                     {"value": "critical", "label": "Critical"},
                 ],
             },
-            {
-                "name": "Email",
-                "field_key": "email",
-                "field_type": "email",
-                "placeholder": "your@email.com",
-                "is_required": True,
-            },
         ],
     },
     "feature_request": {
         "name": "Feature Request",
         "description": "Suggest a new feature or improvement",
         "suggested_crm_object": None,
+        "contact": {"require_email": True},
         "fields": [
             {
                 "name": "Feature Title",
@@ -180,19 +175,13 @@ FORM_TEMPLATES = {
                     {"value": "critical", "label": "Critical"},
                 ],
             },
-            {
-                "name": "Email",
-                "field_key": "email",
-                "field_type": "email",
-                "placeholder": "your@email.com",
-                "is_required": True,
-            },
         ],
     },
     "support": {
         "name": "Support Request",
         "description": "Get help with an issue",
         "suggested_crm_object": None,
+        "contact": {"require_email": True},
         "fields": [
             {
                 "name": "Subject",
@@ -220,34 +209,14 @@ FORM_TEMPLATES = {
                 "placeholder": "Please describe your issue",
                 "is_required": True,
             },
-            {
-                "name": "Email",
-                "field_key": "email",
-                "field_type": "email",
-                "placeholder": "your@email.com",
-                "is_required": True,
-            },
         ],
     },
     "contact": {
         "name": "Contact Us",
         "description": "General contact form",
         "suggested_crm_object": "person",
+        "contact": {"require_name": True, "require_email": True},
         "fields": [
-            {
-                "name": "Full Name",
-                "field_key": "name",
-                "field_type": "text",
-                "placeholder": "Your full name",
-                "is_required": True,
-            },
-            {
-                "name": "Email",
-                "field_key": "email",
-                "field_type": "email",
-                "placeholder": "your@email.com",
-                "is_required": True,
-            },
             {
                 "name": "Phone",
                 "field_key": "phone",
@@ -275,21 +244,8 @@ FORM_TEMPLATES = {
         "name": "Lead Capture",
         "description": "Capture leads for sales pipeline",
         "suggested_crm_object": "person",
+        "contact": {"require_name": True, "require_email": True},
         "fields": [
-            {
-                "name": "Full Name",
-                "field_key": "name",
-                "field_type": "text",
-                "placeholder": "Your full name",
-                "is_required": True,
-            },
-            {
-                "name": "Work Email",
-                "field_key": "email",
-                "field_type": "email",
-                "placeholder": "you@company.com",
-                "is_required": True,
-            },
             {
                 "name": "Company",
                 "field_key": "company",
@@ -336,6 +292,7 @@ FORM_TEMPLATES = {
         "name": "Feedback",
         "description": "Collect user feedback",
         "suggested_crm_object": None,
+        "contact": {"require_email": False},
         "fields": [
             {
                 "name": "How would you rate your experience?",
@@ -362,13 +319,6 @@ FORM_TEMPLATES = {
                 "field_key": "improvements",
                 "field_type": "textarea",
                 "placeholder": "Tell us what we can do better",
-                "is_required": False,
-            },
-            {
-                "name": "Email (optional)",
-                "field_key": "email",
-                "field_type": "email",
-                "placeholder": "your@email.com",
                 "is_required": False,
             },
         ],
@@ -465,6 +415,13 @@ class FormsService:
         if existing:
             slug = f"{slug}_{str(uuid4())[:8]}"
 
+        # Every template used to seed its own "Email" field (and the two CRM
+        # ones a "Full Name"), which the public page then rendered *below* the
+        # contact block asking for exactly the same thing — so a support form
+        # asked for an email twice. The fields are gone; what each template
+        # meant by them survives as the contact block it asks for.
+        contact = template.get("contact", {})
+
         form = Form(
             id=str(uuid4()),
             workspace_id=workspace_id,
@@ -472,6 +429,8 @@ class FormsService:
             slug=slug,
             description=template["description"],
             template_type=template_type,
+            require_name=contact.get("require_name", False),
+            require_email=contact.get("require_email", True),
             created_by_id=created_by_id,
         )
         self.db.add(form)

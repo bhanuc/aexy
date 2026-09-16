@@ -390,6 +390,27 @@ class FormSubmissionHandler:
 
         return ticket
 
+    @staticmethod
+    def _mappable_values(submission: FormSubmission) -> dict[str, Any]:
+        """Submitted answers, with the contact block available to mappings.
+
+        `name` and `email` used to be fields on the CRM templates, duplicating
+        the contact block the public page renders above them. The fields are
+        gone, so a mapping of `email -> email` would otherwise resolve to
+        nothing. The contact block fills those two keys when the form does not
+        collect them as fields of its own.
+
+        Only the mapping sees this. The stored submission and the ticket's
+        `field_values` keep exactly what was submitted, so nothing shows the
+        submitter's email twice.
+        """
+        values = dict(submission.data or {})
+        if submission.name and not values.get("name"):
+            values["name"] = submission.name
+        if submission.email and not values.get("email"):
+            values["email"] = submission.email
+        return values
+
     async def _handle_crm_record_creation(
         self,
         form: Form,
@@ -402,10 +423,11 @@ class FormSubmissionHandler:
         # Map form fields to CRM attributes
         mappings = form.crm_field_mappings or {}
         record_values = {}
+        mappable = self._mappable_values(submission)
 
         for form_key, crm_slug in mappings.items():
-            if form_key in submission.data:
-                record_values[crm_slug] = submission.data[form_key]
+            if form_key in mappable:
+                record_values[crm_slug] = mappable[form_key]
 
         # Create display name from primary values
         display_name = self._generate_display_name(record_values, submission)
@@ -449,9 +471,10 @@ class FormSubmissionHandler:
         mappings = form.deal_field_mappings or {}
         deal_values = {}
 
+        mappable = self._mappable_values(submission)
         for form_key, deal_slug in mappings.items():
-            if form_key in submission.data:
-                deal_values[deal_slug] = submission.data[form_key]
+            if form_key in mappable:
+                deal_values[deal_slug] = mappable[form_key]
 
         # Add pipeline and stage
         if form.deal_pipeline_id:
