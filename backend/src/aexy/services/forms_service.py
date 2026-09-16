@@ -640,6 +640,11 @@ class FormsService:
             description=original.description,
             template_type=original.template_type,
             auth_mode=original.auth_mode,
+            # The contact block is part of the design being copied. Left out,
+            # a duplicate of a form that asks for nothing asked for both.
+            collect_name=original.collect_name,
+            require_name=original.require_name,
+            collect_email=original.collect_email,
             require_email=original.require_email,
             theme=original.theme,
             success_message=original.success_message,

@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.42.1] - 2026-09-16
+
+Every endpoint that returns a form answered 500 in 0.42.0.
+
+### Fixed: creating, reading or editing a form answered 500
+
+0.42.0 added `collect_name`, `require_name` and `collect_email` to
+`FormResponse` as required fields. `form_to_response` builds that schema field
+by field and was never given them, so Pydantic raised three "Field required"
+errors on every endpoint returning a form: create, read, update, duplicate and
+create-from-template.
+
+The validation runs *after* the handler returns, so the work was already done
+and committed — a form created this way exists, and the caller was told the
+server broke. Nothing caught it because every test for those settings called
+the service directly. `test_forms_routes_shape.py` drives all five endpoints
+over HTTP, where the response model is actually applied.
+
+`duplicate_form` had the same omission from the other side: it copies a form
+field by field and never copied these three, so a duplicate of a form that asks
+for nothing asked for both.
+
 ## [0.42.0] - 2026-09-16
 
 Submitting a Forms module form that creates tickets answered 500, and had done
