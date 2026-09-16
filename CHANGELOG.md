@@ -5,6 +5,69 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.43.0] - 2026-09-17
+
+Form templates stopped asking for an email the form already asks for, a
+logged-in visitor's details are filled in, and the submissions table shows what
+people actually wrote.
+
+### Fixed: template forms asked for an email twice
+
+The public page renders a contact block — Your Name, Email Address — above the
+designed fields. Every Forms module template also seeded its own "Email" field,
+and the two CRM templates a "Full Name", so a support form created from a
+template asked for an email in two separate boxes and stored the two answers in
+two separate places: one on the submission, one in `field_values`.
+
+The fields are gone. What each template meant by them survives as the contact
+block it asks for: `support`, `bug_report` and `feature_request` require an
+email, `contact` and `lead_capture` require a name as well, and `feedback`
+requires neither — its field was explicitly "Email (optional)". A test asserts
+no template seeds a field on either contact key, so this cannot come back one
+template at a time.
+
+`contact` and `lead_capture` map a person into the CRM, and a mapping naming
+`name` or `email` would have resolved to nothing once those fields were gone.
+Mappings now read the contact block when the form has no field of its own on
+that key. Only the mapping sees this: the stored submission and the ticket's
+`field_values` still hold exactly what was submitted, so nothing shows the
+submitter's address twice by another route.
+
+A migration removes the duplicates from forms already created from a template.
+It is deliberately narrow — only forms with a `template_type`, only the exact
+keys and types the templates seeded, and only where the form still collects
+that contact field. Submitted answers are untouched: they live in JSONB keyed
+by field key, so what is lost is the label, not the data.
+
+### Added: a signed-in visitor's details are filled in
+
+A public form is usually filled in by a stranger, but staff open these too —
+from a shared link, or to file on a customer's behalf — and retyping your own
+name and address on your own product is a small insult. When a session token is
+present the contact block is prefilled from it, above a line naming the account
+and a link to use different details. Nothing already typed is overwritten, and
+a stale or absent token is a no-op: the form stays exactly as anonymous as it
+was.
+
+### Fixed: submissions showed everything except the answers
+
+The submissions table listed who submitted, when, and whether a ticket came out
+of it. What the person actually wrote appeared nowhere — `data` was returned by
+the API and never rendered. Rows expand now, showing every answer in the order
+the form asks for them, with choice values rendered as their labels rather than
+their stored slugs, attachments listed, and processing errors shown when a
+destination failed. Answers whose field has since been deleted still appear,
+last, under a humanised key and marked as removed, because the point of the
+panel is to show what was entered — all of it.
+
+### Upgrade notes
+
+One migration, idempotent and destructive in a bounded way:
+
+- `migrate_2026_09_17_drop_duplicate_contact_fields.sql` — deletes the
+  duplicate `email`/`name` field definitions from template-created forms. Past
+  submissions keep their answers; those answers lose their field label.
+
 ## [0.42.1] - 2026-09-16
 
 Every endpoint that returns a form answered 500 in 0.42.0.

@@ -12,7 +12,7 @@ import {
   Paperclip,
   X,
 } from "lucide-react";
-import { publicFormsApi, TicketFormField } from "@/lib/api";
+import { developerApi, publicFormsApi, TicketFormField } from "@/lib/api";
 import { VALIDATION_PRESETS, ValidationType } from "@/lib/formsApi";
 import type { FormTheme, ThankYouPageConfig, ThankYouButton } from "@/lib/formThemeTypes";
 import { normalizeTheme, getDefaultThankYouPage } from "@/lib/formThemeTypes";
@@ -394,6 +394,45 @@ export default function PublicFormPage() {
   });
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  // The account the contact block was prefilled from, so the visitor can see
+  // whose details they are about to submit and say "not me".
+  const [prefilledFrom, setPrefilledFrom] = useState<string | null>(null);
+
+  // A public form is usually filled in by a stranger, but staff open these too
+  // — from a shared link, or to file on a customer's behalf — and retyping
+  // your own name and address on your own product is a small insult. If a
+  // session token is present, use it; if it is stale or absent, this is a
+  // no-op and the form stays exactly as anonymous as it was.
+  useEffect(() => {
+    let cancelled = false;
+
+    const prefillFromSession = async () => {
+      if (typeof window === "undefined" || !localStorage.getItem("token")) return;
+      try {
+        const me = await developerApi.getMe();
+        if (cancelled || !me?.email) return;
+        setPrefilledFrom(me.email);
+        setFormData((prev) => ({
+          ...prev,
+          // Never overwrite something already typed.
+          submitter_name: prev.submitter_name || me.name || "",
+          submitter_email: prev.submitter_email || me.email,
+        }));
+      } catch {
+        // An expired or foreign token is not an error on a public page.
+      }
+    };
+
+    prefillFromSession();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const clearPrefill = () => {
+    setPrefilledFrom(null);
+    setFormData((prev) => ({ ...prev, submitter_name: "", submitter_email: "" }));
+  };
 
   useEffect(() => {
     const loadForm = async () => {
@@ -887,6 +926,19 @@ export default function PublicFormPage() {
           {/* Contact Info */}
           {(collectName || collectEmail) && (
           <div className="space-y-6 mb-8">
+            {prefilledFrom && (
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
+                <span className="text-gray-600">Filled in from your account,</span>
+                <span className="font-medium text-gray-900">{prefilledFrom}</span>
+                <button
+                  type="button"
+                  onClick={clearPrefill}
+                  className="text-purple-600 hover:text-purple-700 underline underline-offset-2"
+                >
+                  use different details
+                </button>
+              </div>
+            )}
             {collectName && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
