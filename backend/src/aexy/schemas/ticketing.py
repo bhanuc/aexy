@@ -243,6 +243,12 @@ class PublicFormResponse(BaseModel):
     name: str
     description: str | None = None
     auth_mode: TicketFormAuthMode
+    # The contact block the public page renders above the designed fields.
+    # Ticket forms have no settings for it yet and always report the defaults;
+    # the shared page reads these rather than hardcoding them.
+    collect_name: bool = True
+    require_name: bool = False
+    collect_email: bool = True
     require_email: bool
     theme: dict
     fields: list[TicketFormFieldResponse]
@@ -321,7 +327,10 @@ class TicketResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    form_id: str
+    # Absent on tickets created from a Forms module form, which
+    # reference `forms.id` instead.
+    form_id: str | None = None
+    forms_form_id: str | None = None
     workspace_id: str
     ticket_number: int
     # The ticket's own one-line headline. Null for rows raised through a form
@@ -364,7 +373,8 @@ class TicketListResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    form_id: str
+    form_id: str | None = None
+    forms_form_id: str | None = None
     ticket_number: int
     # The ticket's own one-line headline. Null for rows raised through a form
     # with no subject field; clients fall back to field_values.

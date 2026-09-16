@@ -165,6 +165,12 @@ def form_to_public_response(form) -> PublicFormResponse:
         name=form.name,
         description=form.description,
         auth_mode=form.auth_mode,
+        # Ticket forms have no contact-block settings of their own yet, so
+        # they report what the public page hardcoded: both fields shown, only
+        # email ever required.
+        collect_name=True,
+        require_name=False,
+        collect_email=True,
         require_email=form.require_email,
         theme=form.theme or {},
         fields=fields,
@@ -209,6 +215,9 @@ def forms_form_to_public_response(form) -> FormsPublicFormResponse:
         name=form.name,
         description=form.description,
         auth_mode=form.auth_mode,
+        collect_name=form.collect_name,
+        require_name=form.require_name,
+        collect_email=form.collect_email,
         require_email=form.require_email,
         theme=form.theme or {},
         fields=fields,
@@ -349,6 +358,12 @@ async def submit_ticket(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email is required for this form",
+            )
+
+        if forms_form.require_name and not (submission.submitter_name or "").strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Name is required for this form",
             )
 
         # File fields carry signed refs from /uploads; turn them back into

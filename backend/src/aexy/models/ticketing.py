@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 import secrets
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -307,10 +307,24 @@ class Ticket(Base):
         primary_key=True,
         default=lambda: str(uuid4()),
     )
-    form_id: Mapped[str] = mapped_column(
+    # A ticket comes from one of two form systems, and they are different
+    # tables. `form_id` points at a ticket form; `forms_form_id` at a Forms
+    # module form. Exactly one is set — see the CHECK constraint below.
+    #
+    # `form_id` was NOT NULL and the Forms module wrote its own `forms.id`
+    # into it, which `tickets_form_id_fkey` rejected: every submission to a
+    # Forms module form with `auto_create_ticket` on answered 500, for the
+    # whole life of the feature.
+    form_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False),
         ForeignKey("ticket_forms.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
+        index=True,
+    )
+    forms_form_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("forms.id", ondelete="CASCADE"),
+        nullable=True,
         index=True,
     )
     workspace_id: Mapped[str] = mapped_column(
@@ -482,6 +496,14 @@ class Ticket(Base):
 
     __table_args__ = (
         UniqueConstraint("workspace_id", "ticket_number", name="uq_ticket_number"),
+        # Exactly one origin. Making `form_id` nullable to let Forms module
+        # tickets exist would otherwise also allow a ticket belonging to no
+        # form at all, or to one of each — neither of which any reader of
+        # these columns is prepared for.
+        CheckConstraint(
+            "(form_id IS NULL) <> (forms_form_id IS NULL)",
+            name="ck_ticket_exactly_one_form",
+        ),
     )
 
 

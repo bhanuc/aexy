@@ -66,6 +66,8 @@ from aexy.services.service_desk_mailer import OUTBOUND_MARKER_HEADER
 from aexy.services.service_desk_industry_templates import SEMANTIC_EXTERNAL
 from aexy.services.service_desk_taxonomy import external_slug_for, load_taxonomy
 
+from aexy.services.ticket_numbering import next_ticket_number
+
 logger = logging.getLogger(__name__)
 
 # How many addresses of one thread are kept for reply-all. A long chain of
@@ -2048,8 +2050,8 @@ class ServiceDeskIntakeService:
             raise
 
     async def _next_ticket_number(self, workspace_id: str) -> int:
-        stmt = select(func.max(Ticket.ticket_number)).where(Ticket.workspace_id == workspace_id)
-        return ((await self.db.execute(stmt)).scalar() or 0) + 1
+        """Shared with every other ticket creator — see ticket_numbering."""
+        return await next_ticket_number(self.db, workspace_id)
 
     # ------------------------------------------------------- best-effort hooks
 

@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 import bcrypt
-from sqlalchemy import and_, case, func, or_, select, update
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -26,7 +26,7 @@ from aexy.models.ticketing import (
 from aexy.models.ticketing import (
     TicketResponse as TicketResponseModel,
 )
-from aexy.models.workspace import Workspace
+from aexy.services.ticket_numbering import next_ticket_number
 from aexy.schemas.ticketing import (
     EscalationMatrixCreate,
     EscalationMatrixUpdate,
@@ -257,30 +257,11 @@ class TicketService:
     async def _get_next_ticket_number(self, workspace_id: str) -> int:
         """The next ticket number, allocated atomically.
 
-        Was `max(ticket_number) + 1` read in one statement and written in
-        another: two concurrent submissions read the same number and both used
-        it. `tickets` has a unique constraint on (workspace_id, ticket_number),
-        so that surfaced as an IntegrityError — a 500 on a public form, which is
-        the worst place to have one.
-
-        The UPDATE...RETURNING locks the workspace row, so concurrent
-        submissions serialize on it and get distinct numbers. Same mechanism as
-        `SprintTask.task_key` and the bug and story keys.
-
-        `next_ticket_number` holds the value to assign NEXT, so a fresh
-        workspace's first ticket is #1 and the counter becomes 2.
+        See `aexy.services.ticket_numbering` for why this is shared rather than
+        computed here — three other creation paths were counting instead, and a
+        counting path silently breaks this one.
         """
-        row = (
-            await self.db.execute(
-                update(Workspace)
-                .where(Workspace.id == workspace_id)
-                .values(next_ticket_number=Workspace.next_ticket_number + 1)
-                .returning(Workspace.next_ticket_number)
-            )
-        ).fetchone()
-        if row is None:
-            raise ValueError(f"Workspace {workspace_id} does not exist")
-        return int(row[0]) - 1
+        return await next_ticket_number(self.db, workspace_id)
 
     async def _apply_sla(self, ticket: Ticket) -> None:
         """Apply the first matching SLA policy to a ticket.

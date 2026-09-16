@@ -41,6 +41,7 @@ import {
 import { useCRMObjects, useCRMAutomations, useCRMAttributes } from "@/hooks/useCRM";
 import { useTeams } from "@/hooks/useTeams";
 import type {
+  FieldOption,
   FormField,
   FormFieldType,
   TicketAssignmentMode,
@@ -81,6 +82,21 @@ const ASSIGNMENT_MODES: { value: TicketAssignmentMode; label: string; descriptio
 ];
 
 // Field Editor Component
+/** The conventional stored value for a freshly typed choice label. */
+function slugifyChoice(label: string): string {
+  return label.trim().toLowerCase().replace(/\s+/g, "_");
+}
+
+/** Stored values used by more than one choice, which submissions cannot distinguish. */
+function duplicateChoiceValues(options?: FieldOption[]): string[] {
+  const counts = new Map<string, number>();
+  for (const option of options || []) {
+    if (!option.value) continue;
+    counts.set(option.value, (counts.get(option.value) || 0) + 1);
+  }
+  return [...counts.entries()].filter(([, n]) => n > 1).map(([value]) => value);
+}
+
 function FieldEditor({
   field,
   onUpdate,
@@ -344,6 +360,113 @@ function FieldEditor({
                       className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-sm"
                     />
                   </div>
+                </div>
+              )}
+
+              {/* Choices for select/multiselect/radio.
+                  The stored `value` is what submissions record and what every
+                  automation, mapping and report matches on, so it is editable
+                  separately from the label and never rewritten when the label
+                  changes — renaming "Technical Issue" must not orphan the
+                  submissions already filed under "technical". */}
+              {(localField.field_type === "select" ||
+                localField.field_type === "multiselect" ||
+                localField.field_type === "radio") && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs text-muted-foreground">Choices</label>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setLocalField({
+                          ...localField,
+                          options: [
+                            ...(localField.options || []),
+                            { value: "", label: "" },
+                          ],
+                        })
+                      }
+                      className="flex items-center gap-1 text-xs text-purple-500 hover:text-purple-400 transition"
+                    >
+                      <Plus className="h-3 w-3" />
+                      Add choice
+                    </button>
+                  </div>
+
+                  {(localField.options || []).length === 0 ? (
+                    <p className="text-xs text-muted-foreground py-2">
+                      No choices yet — add one for this dropdown to be usable.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-[1fr_1fr_auto] gap-2 text-[11px] text-muted-foreground">
+                        <span>Label (what people see)</span>
+                        <span>Value (what gets stored)</span>
+                        <span className="w-8" />
+                      </div>
+                      {(localField.options || []).map((option, index) => (
+                        <div
+                          key={index}
+                          className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center"
+                        >
+                          <input
+                            type="text"
+                            aria-label={`Choice ${index + 1} label`}
+                            value={option.label}
+                            placeholder="Technical Issue"
+                            onChange={(e) => {
+                              const options = [...(localField.options || [])];
+                              const label = e.target.value;
+                              // Derive the value only while the author has not
+                              // set one, so a brand-new choice stays convenient
+                              // without ever rewriting a value already in use.
+                              const untouched =
+                                !option.value ||
+                                option.value === slugifyChoice(option.label);
+                              options[index] = {
+                                ...option,
+                                label,
+                                value: untouched ? slugifyChoice(label) : option.value,
+                              };
+                              setLocalField({ ...localField, options });
+                            }}
+                            className="px-3 py-2 bg-background border border-border rounded-lg text-foreground text-sm"
+                          />
+                          <input
+                            type="text"
+                            aria-label={`Choice ${index + 1} stored value`}
+                            value={option.value}
+                            placeholder="technical"
+                            onChange={(e) => {
+                              const options = [...(localField.options || [])];
+                              options[index] = { ...option, value: e.target.value };
+                              setLocalField({ ...localField, options });
+                            }}
+                            className="px-3 py-2 bg-background border border-border rounded-lg text-foreground text-sm font-mono"
+                          />
+                          <button
+                            type="button"
+                            aria-label={`Remove choice ${index + 1}`}
+                            onClick={() => {
+                              const options = [...(localField.options || [])];
+                              options.splice(index, 1);
+                              setLocalField({ ...localField, options });
+                            }}
+                            className="p-2 text-muted-foreground hover:text-red-400 transition"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                      {duplicateChoiceValues(localField.options).length > 0 && (
+                        <p className="text-xs text-amber-500">
+                          Duplicate stored values:{" "}
+                          {duplicateChoiceValues(localField.options).join(", ")} — submissions
+                          using them cannot be told apart.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1670,6 +1793,55 @@ export default function FormEditorPage() {
                   >
                     Copy
                   </button>
+                </div>
+              </div>
+
+              {/* The contact block the public page renders above the designed
+                  fields. It used to be hardcoded there and invisible here, so
+                  a form with four fields showed six and nobody designing it
+                  could tell. */}
+              <div className="border border-border rounded-lg p-4">
+                <p className="text-sm font-medium text-foreground mb-1">Contact details</p>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Shown above your fields on the public form.
+                </p>
+                <div className="space-y-3">
+                  {([
+                    { key: "name", collect: "collect_name", require: "require_name", label: "Name" },
+                    { key: "email", collect: "collect_email", require: "require_email", label: "Email address" },
+                  ] as const).map(({ key, collect, require, label }) => (
+                    <div key={key} className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                      <label className="flex items-center gap-2 text-sm text-foreground min-w-[10rem]">
+                        <input
+                          type="checkbox"
+                          checked={form[collect]}
+                          onChange={(e) =>
+                            updateForm(
+                              // Unchecking "ask" must drop "required" with it —
+                              // a field that is required but never shown is a
+                              // form nobody can submit, and the database
+                              // refuses the combination outright.
+                              e.target.checked
+                                ? { [collect]: true }
+                                : { [collect]: false, [require]: false },
+                            )
+                          }
+                          className="w-4 h-4 rounded border-border"
+                        />
+                        Ask for {label.toLowerCase()}
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <input
+                          type="checkbox"
+                          checked={form[require]}
+                          disabled={!form[collect]}
+                          onChange={(e) => updateForm({ [require]: e.target.checked })}
+                          className="w-4 h-4 rounded border-border disabled:opacity-40"
+                        />
+                        Required
+                      </label>
+                    </div>
+                  ))}
                 </div>
               </div>
 

@@ -38,6 +38,8 @@ from aexy.schemas.uptime import (
 from aexy.services.uptime_checker import CheckResult
 from aexy.services.automation_service import dispatch_automation_event
 
+from aexy.services.ticket_numbering import next_ticket_number
+
 logger = logging.getLogger(__name__)
 
 
@@ -694,13 +696,10 @@ class UptimeService:
                 return None
 
             # Get next ticket number
-            number_stmt = (
-                select(func.max(Ticket.ticket_number))
-                .where(Ticket.workspace_id == monitor.workspace_id)
+            # Shared atomic allocation — see ticket_numbering.
+            ticket_number = await next_ticket_number(
+                self.db, monitor.workspace_id
             )
-            number_result = await self.db.execute(number_stmt)
-            max_number = number_result.scalar() or 0
-            ticket_number = max_number + 1
 
             # Build ticket title and description
             endpoint = monitor.url or f"{monitor.host}:{monitor.port}"

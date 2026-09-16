@@ -29,6 +29,9 @@ interface PublicForm {
   name: string;
   description?: string;
   auth_mode: string;
+  collect_name?: boolean;
+  require_name?: boolean;
+  collect_email?: boolean;
   require_email: boolean;
   theme: FormTheme;
   thank_you_page?: ThankYouPageConfig;
@@ -426,14 +429,23 @@ export default function PublicFormPage() {
     }
   }, [token]);
 
+  // The contact block is the form's decision, not the page's. Older responses
+  // predate these fields, so an absent value means "as it always was".
+  const collectName = form?.collect_name ?? true;
+  const collectEmail = form?.collect_email ?? true;
+
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
 
     // Validate email if required
-    if (form?.require_email && !formData.submitter_email) {
+    if (collectEmail && form?.require_email && !formData.submitter_email) {
       errors["submitter_email"] = "Email is required";
-    } else if (formData.submitter_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.submitter_email)) {
+    } else if (collectEmail && formData.submitter_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.submitter_email)) {
       errors["submitter_email"] = "Please enter a valid email address";
+    }
+
+    if (collectName && form?.require_name && !formData.submitter_name.trim()) {
+      errors["submitter_name"] = "Name is required";
     }
 
     // Validate each field
@@ -873,21 +885,31 @@ export default function PublicFormPage() {
           }}
         >
           {/* Contact Info */}
+          {(collectName || collectEmail) && (
           <div className="space-y-6 mb-8">
+            {collectName && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 <User className="h-4 w-4 inline mr-1" />
                 Your Name
+                {form.require_name && <span className="text-red-500 ml-1">*</span>}
               </label>
               <input
                 type="text"
                 value={formData.submitter_name}
                 onChange={(e) => setFormData({ ...formData, submitter_name: e.target.value })}
                 placeholder="Enter your name"
-                className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+                className={`w-full px-4 py-3 bg-white border rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition ${
+                  fieldErrors["submitter_name"] ? "border-red-500" : "border-gray-200"
+                }`}
               />
+              {fieldErrors["submitter_name"] && (
+                <p className="text-red-500 text-sm mt-1">{fieldErrors["submitter_name"]}</p>
+              )}
             </div>
+            )}
 
+            {collectEmail && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 <Mail className="h-4 w-4 inline mr-1" />
@@ -913,10 +935,12 @@ export default function PublicFormPage() {
                 <p className="text-red-500 text-sm mt-1">{fieldErrors["submitter_email"]}</p>
               )}
             </div>
+            )}
           </div>
+          )}
 
           {/* Divider */}
-          {sortedFields.length > 0 && (
+          {(collectName || collectEmail) && sortedFields.length > 0 && (
             <div className="border-t border-gray-200 my-8" />
           )}
 

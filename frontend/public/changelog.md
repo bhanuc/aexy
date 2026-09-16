@@ -5,6 +5,97 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.42.0] - 2026-09-16
+
+Submitting a Forms module form that creates tickets answered 500, and had done
+since the feature was written. Two form settings that only existed in the
+rendered page now exist in the builder.
+
+### Fixed: a form that creates tickets could never create one
+
+`tickets.form_id` is a `NOT NULL` foreign key to `ticket_forms`. The Forms
+module's submission handler wrote its own `forms.id` into that column — a
+different table — so `tickets_form_id_fkey` refused the insert and the public
+endpoint answered 500. Every submission, every time, for any form with
+`auto_create_ticket` enabled. `git log -L` on the line shows it has read
+`form_id=form.id` since the file was created, so the feature has never once
+worked; nothing was ever written, and there is no bad data to repair, because
+the constraint rejected all of it.
+
+A ticket now records which of the two form systems it came from: `form_id`
+becomes nullable and gains `forms_form_id` pointing at `forms`, with a CHECK
+keeping exactly one of them set — relaxing `NOT NULL` must not quietly permit a
+ticket that belongs to no form at all. `TicketResponse` carries both, and
+`form_id` is now optional in it.
+
+### Fixed: four ticket creators counted their own numbers
+
+`migrate_atomic_issue_keys` moved ticket numbering onto a counter on the
+workspace row, because reading a number in one statement and writing it in
+another lets two submissions pick the same one. Only `TicketService` was moved
+onto it. Form submissions with `auto_create_ticket`, alert ingestion, uptime
+incidents and service-desk intake all kept doing `MAX(ticket_number) + 1`.
+
+That left them racy, and did something worse: each of their inserts advanced the
+high-water mark without advancing the counter. Once those drift apart it is the
+*fixed* path that breaks — its next allocation returns a number a counting path
+already used, `uq_ticket_number` rejects it, and public ticket forms answer 500
+until the counter climbs back past the highest number in use, on its own.
+
+All five now share `services/ticket_numbering.py`, and a migration resyncs the
+workspaces the counting paths already desynchronised.
+
+### Fixed: those tickets had no title either
+
+The same method computed a title — from a `title_template`, or a mapped field —
+and then never passed it to the `Ticket` it built, so the column was always
+null. `headline_from_field_values` now sits between the explicit mapping and the
+generic fallback, the rule ticket forms already use, so an unmapped form titles
+its tickets from the subject the submitter typed rather than leaving a queue of
+rows all reading "Form Submission".
+
+`description` is computed in the same place and is equally unused, but `Ticket`
+has no column for it, so `ticket_config.description_template` still does
+nothing. Left alone rather than guessed at: the obvious home would be
+`field_values`, where it would collide with a form's own `description` field.
+
+### Added: the contact block is the form's decision
+
+The public page rendered "Your Name" and "Email Address" above the designed
+fields unconditionally, and the builder showed neither — a form designed with
+four fields rendered six, and whoever designed it had no way to see that or
+change it. `collect_name`, `require_name` and `collect_email` join the existing
+`require_email` as form settings, with toggles in the builder, enforcement on
+submit, and a CHECK refusing "required but not collected" — a form nobody could
+submit. Defaults reproduce the old rendering exactly, so every existing form
+looks as it does today. Ticket forms have no settings of their own yet and
+report those same defaults.
+
+### Added: editing the choices in a dropdown
+
+The Forms module builder had no options editor at all, so the choices in a
+select, multiselect or radio field could only be set by whatever template
+seeded the form. The API had accepted `options` on field create and update the
+whole time; only the UI was missing.
+
+Label and stored value are edited separately, because the value is what
+submissions record and what every mapping, automation and report matches on. It
+is derived from the label only while the author has not set one, so a new choice
+stays convenient to add and renaming "Technical Issue" never orphans the
+submissions already filed under `technical`. Values used twice are called out,
+since submissions using them cannot be told apart.
+
+### Upgrade notes
+
+Three migrations, all safe to run in either order and all idempotent:
+
+- `migrate_2026_09_16_ticket_forms_module_origin.sql` — the `forms_form_id`
+  column and the one-origin CHECK.
+- `migrate_2026_09_16_resync_ticket_counter.sql` — repairs workspaces whose
+  counter the counting paths left behind. Without it, ticket forms in those
+  workspaces keep answering 500 after the deploy.
+- `migrate_2026_09_16_form_contact_block.sql` — the contact-block settings.
+
 ## [0.41.0] - 2026-09-16
 
 Pasting a task's `[workspace-slug:task-key]` into a pull request never linked

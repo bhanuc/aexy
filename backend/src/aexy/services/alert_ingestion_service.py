@@ -41,6 +41,8 @@ from aexy.models.ticketing import (
 )
 from aexy.services.automation_service import dispatch_automation_event
 
+from aexy.services.ticket_numbering import next_ticket_number
+
 logger = logging.getLogger(__name__)
 
 # Ordering used for severity escalation comparisons.
@@ -520,8 +522,8 @@ class AlertIngestionService:
         return fallback
 
     async def _next_ticket_number(self, workspace_id: str) -> int:
-        stmt = select(func.max(Ticket.ticket_number)).where(Ticket.workspace_id == workspace_id)
-        return ((await self.db.execute(stmt)).scalar() or 0) + 1
+        """Shared with every other ticket creator — see ticket_numbering."""
+        return await next_ticket_number(self.db, workspace_id)
 
     async def _dispatch(
         self, integration: AlertIntegration, ticket: Ticket, trigger_type: str, ctx: AlertContext

@@ -91,7 +91,8 @@ def ticket_to_response(ticket) -> TicketResponseSchema:
     """Convert Ticket model to response schema."""
     return TicketResponseSchema(
         id=str(ticket.id),
-        form_id=str(ticket.form_id),
+        form_id=str(ticket.form_id) if ticket.form_id else None,
+        forms_form_id=str(ticket.forms_form_id) if ticket.forms_form_id else None,
         workspace_id=str(ticket.workspace_id),
         ticket_number=ticket.ticket_number,
         title=ticket.title or headline_from_field_values(ticket.field_values),
@@ -128,7 +129,8 @@ def ticket_to_list_response(ticket) -> TicketListResponse:
     """Convert Ticket model to list response schema."""
     return TicketListResponse(
         id=str(ticket.id),
-        form_id=str(ticket.form_id),
+        form_id=str(ticket.form_id) if ticket.form_id else None,
+        forms_form_id=str(ticket.forms_form_id) if ticket.forms_form_id else None,
         ticket_number=ticket.ticket_number,
         title=ticket.title or headline_from_field_values(ticket.field_values),
         submitter_email=ticket.submitter_email,
