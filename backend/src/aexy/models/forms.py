@@ -389,6 +389,15 @@ class Form(Base):
             "AND (collect_email OR NOT require_email)",
             name="ck_form_contact_required_is_collected",
         ),
+        # Email verification has nothing to verify without an address. The
+        # constraint above only ties `require_email` to `collect_email`, so
+        # this combination stayed reachable: the submission is accepted, the
+        # response says `requires_email_verification`, and the page asks the
+        # submitter to check an inbox nobody asked them for.
+        CheckConstraint(
+            "collect_email OR auth_mode <> 'email_verification'",
+            name="ck_form_email_verification_collects_email",
+        ),
     )
 
 

@@ -25,6 +25,8 @@ import {
   Eye,
   Send,
 } from "lucide-react";
+import { toast } from "sonner";
+import { apiErrorDetail } from "@/lib/apiError";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useForms, useFormTemplates } from "@/hooks/useForms";
@@ -422,8 +424,16 @@ export default function FormsPage() {
   };
 
   const handleDelete = async (formId: string) => {
-    if (confirm("Are you sure you want to delete this form? This action cannot be undone.")) {
+    if (!confirm("Are you sure you want to delete this form? This action cannot be undone.")) {
+      return;
+    }
+    try {
       await deleteForm(formId);
+    } catch (error) {
+      // A form that has raised tickets is refused with a 409 naming the count.
+      // Without this the promise rejected unhandled and the row simply stayed
+      // put, with nothing on screen to say why.
+      toast.error(apiErrorDetail(error) || "Failed to delete the form.");
     }
   };
 

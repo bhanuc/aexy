@@ -27,6 +27,8 @@ import {
   PartyPopper,
   ShieldCheck,
 } from "lucide-react";
+import { toast } from "sonner";
+import { apiErrorDetail } from "@/lib/apiError";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkspace } from "@/hooks/useWorkspace";
@@ -1495,6 +1497,19 @@ export default function FormEditorPage() {
     }
   }, [form]);
 
+  const saveContactSetting = async (data: Record<string, boolean>) => {
+    try {
+      await updateForm(data);
+    } catch (error) {
+      // The API refuses contact settings that make the form unsubmittable and
+      // names the toggle to change. Without this the checkbox silently
+      // snapped back with nothing on screen to explain it.
+      toast.error(
+        apiErrorDetail(error) || "Could not save the contact settings.",
+      );
+    }
+  };
+
   const handleSaveForm = async () => {
     await updateForm({
       name: localFormName,
@@ -1809,14 +1824,21 @@ export default function FormEditorPage() {
                   {([
                     { key: "name", collect: "collect_name", require: "require_name", label: "Name" },
                     { key: "email", collect: "collect_email", require: "require_email", label: "Email address" },
-                  ] as const).map(({ key, collect, require, label }) => (
+                  ] as const).map(({ key, collect, require, label }) => {
+                    // Email verification has nothing to verify without an
+                    // address, so the form cannot stop asking for one. The API
+                    // refuses it; saying so here beats a rejected save.
+                    const pinned =
+                      key === "email" && form.auth_mode === "email_verification";
+                    return (
                     <div key={key} className="flex flex-wrap items-center gap-x-6 gap-y-2">
                       <label className="flex items-center gap-2 text-sm text-foreground min-w-[10rem]">
                         <input
                           type="checkbox"
                           checked={form[collect]}
+                          disabled={pinned}
                           onChange={(e) =>
-                            updateForm(
+                            saveContactSetting(
                               // Unchecking "ask" must drop "required" with it —
                               // a field that is required but never shown is a
                               // form nobody can submit, and the database
@@ -1826,7 +1848,7 @@ export default function FormEditorPage() {
                                 : { [collect]: false, [require]: false },
                             )
                           }
-                          className="w-4 h-4 rounded border-border"
+                          className="w-4 h-4 rounded border-border disabled:opacity-40"
                         />
                         Ask for {label.toLowerCase()}
                       </label>
@@ -1835,13 +1857,19 @@ export default function FormEditorPage() {
                           type="checkbox"
                           checked={form[require]}
                           disabled={!form[collect]}
-                          onChange={(e) => updateForm({ [require]: e.target.checked })}
+                          onChange={(e) => saveContactSetting({ [require]: e.target.checked })}
                           className="w-4 h-4 rounded border-border disabled:opacity-40"
                         />
                         Required
                       </label>
+                      {pinned && (
+                        <span className="text-xs text-muted-foreground basis-full">
+                          This form verifies submitters by email, so it always asks for one.
+                        </span>
+                      )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 

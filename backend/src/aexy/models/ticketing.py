@@ -14,6 +14,7 @@ from aexy.core.database import Base
 
 if TYPE_CHECKING:
     from aexy.models.developer import Developer
+    from aexy.models.forms import Form
     from aexy.models.team import Team
     from aexy.models.workspace import Workspace
     from aexy.models.sprint import SprintTask
@@ -321,9 +322,18 @@ class Ticket(Base):
         nullable=True,
         index=True,
     )
+    # RESTRICT, not CASCADE. `ticket_forms` cascades — deleting one takes its
+    # tickets with it — but nothing ever pointed at `forms.id` before, so that
+    # precedent is being extended rather than preserved. A Forms module form is
+    # deleted from a list page by one click, and the tickets it raised are
+    # support history with replies, SLA clocks and share links hanging off
+    # them. `forms_service.delete_form` refuses with a count instead.
+    #
+    # ON DELETE SET NULL is not available here: it would leave both columns
+    # null and violate ck_ticket_exactly_one_form.
     forms_form_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False),
-        ForeignKey("forms.id", ondelete="CASCADE"),
+        ForeignKey("forms.id", ondelete="RESTRICT"),
         nullable=True,
         index=True,
     )
@@ -475,7 +485,13 @@ class Ticket(Base):
     )
 
     # Relationships
-    form: Mapped["TicketForm"] = relationship("TicketForm", back_populates="tickets")
+    # Optional since a ticket raised through the Forms module has no ticket
+    # form. Readers must guard; the annotation says so rather than leaving the
+    # next unguarded `ticket.form.name` for mypy to wave through.
+    form: Mapped["TicketForm | None"] = relationship(
+        "TicketForm", back_populates="tickets"
+    )
+    forms_form: Mapped["Form | None"] = relationship("Form")
     workspace: Mapped["Workspace"] = relationship("Workspace", lazy="selectin")
     assignee: Mapped["Developer"] = relationship("Developer", lazy="selectin")
     team: Mapped["Team"] = relationship("Team", lazy="selectin")

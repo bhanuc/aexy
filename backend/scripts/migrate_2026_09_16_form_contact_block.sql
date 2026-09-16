@@ -24,3 +24,19 @@ BEGIN
             );
     END IF;
 END $$;
+
+-- Email verification with no address to verify. The constraint above ties
+-- `require_email` to `collect_email` but says nothing about `auth_mode`, so
+-- this pairing stayed reachable through the API: the submission is accepted,
+-- the response reports `requires_email_verification`, and the public page asks
+-- the submitter to check an inbox the form never collected.
+--
+-- No existing row can violate it — `collect_email` defaults to TRUE above.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_form_email_verification_collects_email') THEN
+        ALTER TABLE forms
+            ADD CONSTRAINT ck_form_email_verification_collects_email
+            CHECK (collect_email OR auth_mode <> 'email_verification');
+    END IF;
+END $$;

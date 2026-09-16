@@ -32,7 +32,7 @@ from aexy.schemas.forms import (
     EmailVerificationRequest,
     FormTemplateInfo,
 )
-from aexy.services.forms_service import FormsService
+from aexy.services.forms_service import FormHasTicketsError, FormsService
 from aexy.services.form_submission_handler import FormSubmissionHandler
 from aexy.services.workspace_service import WorkspaceService
 from aexy.services.activity_logger import log_activity
@@ -240,11 +240,16 @@ async def create_form(
     await check_workspace_permission(workspace_id, current_user, db, "admin")
 
     form_service = FormsService(db)
-    form = await form_service.create_form(
-        workspace_id=workspace_id,
-        created_by_id=str(current_user.id),
-        form_data=form_data,
-    )
+    try:
+        form = await form_service.create_form(
+            workspace_id=workspace_id,
+            created_by_id=str(current_user.id),
+            form_data=form_data,
+        )
+    except ValueError as exc:
+        # Contact-block settings that make the form unsubmittable. The database
+        # refuses them too; this says which toggle to change.
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
     await log_activity(
         db,
@@ -316,7 +321,10 @@ async def update_form(
     if not form or form.workspace_id != workspace_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
 
-    form = await form_service.update_form(form_id, form_data)
+    try:
+        form = await form_service.update_form(form_id, form_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
     await log_activity(
         db,
@@ -348,7 +356,20 @@ async def delete_form(
 
     form_name = form.name
 
-    await form_service.delete_form(form_id)
+    try:
+        await form_service.delete_form(form_id)
+    except FormHasTicketsError as exc:
+        # Deleting the form would take real support history with it. Say what
+        # is in the way rather than surfacing a foreign-key violation as a 500.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"{form_name} has raised {exc.ticket_count} "
+                f"ticket{'s' if exc.ticket_count != 1 else ''}. Deleting the form "
+                "would delete them too. Deactivate it instead to stop new "
+                "submissions while keeping the tickets."
+            ),
+        )
 
     await log_activity(
         db,

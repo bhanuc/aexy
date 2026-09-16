@@ -1502,10 +1502,11 @@ class ServiceDeskIntakeService:
     async def _insert_ticket(self, workspace_id: str, **fields) -> Ticket:
         """Add a ``Ticket``, retrying its number against concurrent intake.
 
-        ticket_number is max()+1 against a real uq_ticket_number constraint, so
-        two emails arriving together collide. Retry inside a savepoint instead of
-        letting the IntegrityError escape — in the webhook path it was swallowed
-        by the caller and the email was dropped.
+        Numbers now come from the shared atomic allocator, which serializes
+        concurrent intake on the workspace row, so the collision this loop was
+        written for no longer happens. The retry stays because the savepoint is
+        what keeps an IntegrityError from escaping: in the webhook path the
+        caller swallowed it and the email was silently dropped.
         """
         for attempt in range(_TICKET_NUMBER_ATTEMPTS):
             candidate = Ticket(

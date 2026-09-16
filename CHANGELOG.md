@@ -71,6 +71,16 @@ submit. Defaults reproduce the old rendering exactly, so every existing form
 looks as it does today. Ticket forms have no settings of their own yet and
 report those same defaults.
 
+A second CHECK refuses email verification on a form that never asks for an
+address — the first constraint only ties `require_email` to `collect_email`, so
+that pairing stayed reachable and would have accepted the submission and then
+told the submitter to check an inbox the form never collected. Both are also
+checked before the insert, so the caller gets a 400 naming the toggle to change
+rather than a 500 naming a constraint, and the builder pins the email checkbox
+on a verifying form with a line saying why. `FormCreate` accepted the three new
+settings from the start and the service dropped them before the insert; a form
+created with `collect_name: false` came back collecting one.
+
 ### Added: editing the choices in a dropdown
 
 The Forms module builder had no options editor at all, so the choices in a
@@ -85,16 +95,49 @@ stays convenient to add and renaming "Technical Issue" never orphans the
 submissions already filed under `technical`. Values used twice are called out,
 since submissions using them cannot be told apart.
 
+### Fixed: deleting a form would have deleted its tickets
+
+`tickets.forms_form_id` arrived as `ON DELETE CASCADE`, matching `form_id`. That
+match is not the precedent it looks like: nothing has ever pointed at `forms.id`
+from `tickets`, so the rule was being written for the first time, not preserved.
+A Forms module form is deleted with one click from a list page, and now that it
+raises tickets those carry replies, SLA clocks and share links customers hold.
+
+The foreign key is `ON DELETE RESTRICT`, and `delete_form` refuses before the
+database has to — a 409 naming how many tickets are in the way and suggesting
+deactivation instead, surfaced in the list rather than swallowed as an unhandled
+rejection that left the row sitting there unexplained. `ON DELETE SET NULL` was
+not available: it would leave both form columns null and violate the one-origin
+CHECK.
+
+### Fixed: the share page could not name or label these tickets
+
+`shared_ticket_to_response` read `ticket.form`, the *ticket form* relationship,
+which a ticket raised through the Forms module never has. The page fell back to
+humanising the stored keys, so a question labelled "Phone Number" appeared as
+"field 4", a choice showed its stored value instead of its label, and the form
+name was blank. It now reads the definitions off whichever form raised the
+ticket. The Forms module has four field types `TicketFieldType` has no name for
+(`phone`, `url`, `radio`, `hidden`); since this view is read-only and the type
+only picks how a stored answer is displayed, each maps to the nearest type that
+exists rather than failing the whole response with a validation error the
+visitor would have seen as a 500.
+
+Filtering a ticket list by form matched `form_id` alone, so no filter could ever
+select a ticket from the Forms module. It now matches either origin — the caller
+has no reason to know which table the id belongs to.
+
 ### Upgrade notes
 
 Three migrations, all safe to run in either order and all idempotent:
 
 - `migrate_2026_09_16_ticket_forms_module_origin.sql` — the `forms_form_id`
-  column and the one-origin CHECK.
+  column, its `ON DELETE RESTRICT` foreign key and the one-origin CHECK.
 - `migrate_2026_09_16_resync_ticket_counter.sql` — repairs workspaces whose
   counter the counting paths left behind. Without it, ticket forms in those
   workspaces keep answering 500 after the deploy.
-- `migrate_2026_09_16_form_contact_block.sql` — the contact-block settings.
+- `migrate_2026_09_16_form_contact_block.sql` — the contact-block settings
+  and the two CHECKs that keep them submittable.
 
 ## [0.41.0] - 2026-09-16
 

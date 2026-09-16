@@ -217,3 +217,133 @@ async def test_a_forms_module_ticket_is_titled_from_the_submission(
     assert ticket.title == "Cannot log in"
     assert ticket.forms_form_id == form.id
     assert ticket.form_id is None
+
+
+@pytest.mark.asyncio
+async def test_deleting_a_form_that_raised_tickets_is_refused(db_session: AsyncSession):
+    """`forms_form_id` cascaded, so one click could take support history with it.
+
+    Nothing pointed at `forms.id` from `tickets` before, so the cascade reached
+    nothing and the risk was theoretical. Now that these tickets exist it is
+    not, and RESTRICT plus this check keeps the deletion from happening.
+    """
+    from aexy.services.forms_service import FormHasTicketsError, FormsService
+
+    ws = await _workspace(db_session, "undeletable-ws")
+    form = await _forms_form(db_session, ws)
+
+    number = await next_ticket_number(db_session, ws.id)
+    db_session.add(_ticket(ws.id, number, forms_form_id=form.id))
+    await db_session.flush()
+
+    with pytest.raises(FormHasTicketsError) as excinfo:
+        await FormsService(db_session).delete_form(form.id)
+    assert excinfo.value.ticket_count == 1
+    assert "Support Request" in str(excinfo.value)
+
+    # The row is still there.
+    assert (
+        await db_session.execute(select(Form).where(Form.id == form.id))
+    ).scalars().first() is not None
+
+
+@pytest.mark.asyncio
+async def test_a_form_with_no_tickets_still_deletes(db_session: AsyncSession):
+    """The guard must not turn into "forms can never be deleted"."""
+    from aexy.services.forms_service import FormsService
+
+    ws = await _workspace(db_session, "deletable-ws")
+    form = await _forms_form(db_session, ws)
+
+    assert await FormsService(db_session).delete_form(form.id) is True
+    assert (
+        await db_session.execute(select(Form).where(Form.id == form.id))
+    ).scalars().first() is None
+
+
+@pytest.mark.asyncio
+async def test_the_public_view_reads_labels_from_a_forms_module_form(
+    db_session: AsyncSession,
+):
+    """The share page read `ticket.form` only, which these tickets never have.
+
+    Without this it fell back to humanising the stored keys — "field 4" for a
+    question labelled "Phone Number" — and reported no form name at all.
+    """
+    from aexy.api.public_tickets import shared_ticket_to_response
+    from aexy.services.ticket_service import TicketService
+
+    ws = await _workspace(db_session, "public-view-ws")
+    form = await _forms_form(db_session, ws)
+    # `phone` is a Forms module type that `TicketFieldType` has no name for.
+    db_session.add(
+        FormField(
+            id=str(uuid.uuid4()),
+            form_id=form.id,
+            name="Phone Number",
+            field_key="field_4",
+            field_type="phone",
+            is_required=False,
+            validation_rules={},
+            position=2,
+            is_visible=True,
+            width="full",
+            external_mappings={},
+        )
+    )
+    number = await next_ticket_number(db_session, ws.id)
+    ticket = _ticket(ws.id, number, forms_form_id=form.id)
+    db_session.add(ticket)
+    await db_session.flush()
+
+    loaded = await TicketService(db_session).get_ticket(ticket.id)
+    response = shared_ticket_to_response(loaded, can_reply=False)
+
+    assert response.form_name == "Support Request"
+    by_key = {field.field_key: field for field in response.fields}
+    assert by_key["field_4"].name == "Phone Number"
+    # Displayed as the nearest ticket-form type rather than failing the
+    # response with a validation error the visitor would see as a 500.
+    assert by_key["field_4"].field_type == "text"
+
+
+@pytest.mark.asyncio
+async def test_filtering_by_form_finds_tickets_from_either_system(
+    db_session: AsyncSession,
+):
+    """`filters.form_id` only matched `form_id`, so these were unfilterable."""
+    from aexy.schemas.ticketing import TicketFilters
+    from aexy.services.ticket_service import TicketService
+
+    ws = await _workspace(db_session, "filter-ws")
+    forms_form = await _forms_form(db_session, ws)
+    ticket_form = await _ticket_form(db_session, ws)
+
+    db_session.add(
+        _ticket(
+            ws.id,
+            await next_ticket_number(db_session, ws.id),
+            forms_form_id=forms_form.id,
+        )
+    )
+    db_session.add(
+        _ticket(
+            ws.id,
+            await next_ticket_number(db_session, ws.id),
+            form_id=ticket_form.id,
+        )
+    )
+    await db_session.flush()
+
+    service = TicketService(db_session)
+    found, total = await service.list_tickets(
+        ws.id, filters=TicketFilters(form_id=forms_form.id)
+    )
+    assert total == 1
+    assert found[0].forms_form_id == forms_form.id
+
+    found, total = await service.list_tickets(
+        ws.id, filters=TicketFilters(form_id=ticket_form.id)
+    )
+    assert total == 1
+    assert found[0].form_id == ticket_form.id

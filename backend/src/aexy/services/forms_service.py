@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from aexy.models.forms import (
     Form,
+    FormAuthMode,
     FormField,
     FormSubmission,
     FormAutomationLink,
@@ -19,6 +20,7 @@ from aexy.models.forms import (
     TicketAssignmentMode,
 )
 from aexy.models.crm import CRMObject, CRMAttribute, CRMAutomation
+from aexy.models.ticketing import Ticket
 from aexy.schemas.forms import (
     FormCreate,
     FormUpdate,
@@ -30,6 +32,56 @@ from aexy.schemas.forms import (
     AutomationLinkCreate,
     FormDuplicate,
 )
+
+
+class FormHasTicketsError(Exception):
+    """Raised when deleting a form would strand or destroy its tickets.
+
+    The API turns this into a 409 naming the count, so the operator is told
+    what is in the way instead of seeing a foreign-key violation.
+    """
+
+    def __init__(self, *, form_name: str, ticket_count: int):
+        self.form_name = form_name
+        self.ticket_count = ticket_count
+        super().__init__(
+            f"{form_name} has raised {ticket_count} "
+            f"ticket{'s' if ticket_count != 1 else ''}"
+        )
+
+
+def validate_contact_settings(
+    *,
+    collect_name: bool,
+    require_name: bool,
+    collect_email: bool,
+    require_email: bool,
+    auth_mode: str,
+) -> None:
+    """Refuse contact-block settings that make a form unsubmittable.
+
+    The database enforces all three, but an IntegrityError reaches the caller
+    as a 500 with a constraint name in it. Checking here turns each into a 400
+    that says which toggle is the problem.
+
+    Raises:
+        ValueError: with a message safe to show the operator.
+    """
+    if require_name and not collect_name:
+        raise ValueError(
+            "A form cannot require a name it never asks for — "
+            "turn on 'Ask for name' or turn off 'Required'."
+        )
+    if require_email and not collect_email:
+        raise ValueError(
+            "A form cannot require an email address it never asks for — "
+            "turn on 'Ask for email address' or turn off 'Required'."
+        )
+    if auth_mode == FormAuthMode.EMAIL_VERIFICATION.value and not collect_email:
+        raise ValueError(
+            "Email verification needs an address to verify — "
+            "this form must ask for an email address."
+        )
 
 
 def slugify(text: str) -> str:
@@ -340,7 +392,19 @@ class FormsService:
         created_by_id: str,
         form_data: FormCreate,
     ) -> Form:
-        """Create a new form."""
+        """Create a new form.
+
+        Raises:
+            ValueError: if the contact-block settings are unsubmittable.
+        """
+        validate_contact_settings(
+            collect_name=form_data.collect_name,
+            require_name=form_data.require_name,
+            collect_email=form_data.collect_email,
+            require_email=form_data.require_email,
+            auth_mode=form_data.auth_mode,
+        )
+
         # Generate slug from name
         slug = slugify(form_data.name)
 
@@ -357,6 +421,11 @@ class FormsService:
             description=form_data.description,
             template_type=form_data.template_type,
             auth_mode=form_data.auth_mode,
+            # These were accepted by FormCreate and then dropped on the floor:
+            # a form created with collect_name=False came back collecting one.
+            collect_name=form_data.collect_name,
+            require_name=form_data.require_name,
+            collect_email=form_data.collect_email,
             require_email=form_data.require_email,
             theme=form_data.theme.model_dump() if form_data.theme else {},
             success_message=form_data.success_message,
@@ -476,12 +545,30 @@ class FormsService:
         return forms, total or 0
 
     async def update_form(self, form_id: str, form_data: FormUpdate) -> Form | None:
-        """Update a form."""
+        """Update a form.
+
+        Raises:
+            ValueError: if the contact-block settings would be unsubmittable.
+        """
         form = await self.get_form(form_id, include_fields=False)
         if not form:
             return None
 
         update_data = form_data.model_dump(exclude_unset=True)
+
+        # Validate against the merged result, not the patch: clearing
+        # `collect_email` on a form that already requires one is only visible
+        # once the two are put together.
+        def _merged(key: str):
+            return update_data[key] if key in update_data else getattr(form, key)
+
+        validate_contact_settings(
+            collect_name=_merged("collect_name"),
+            require_name=_merged("require_name"),
+            collect_email=_merged("collect_email"),
+            require_email=_merged("require_email"),
+            auth_mode=_merged("auth_mode"),
+        )
 
         # Handle nested objects
         if "theme" in update_data and update_data["theme"]:
@@ -501,10 +588,27 @@ class FormsService:
         return form
 
     async def delete_form(self, form_id: str) -> bool:
-        """Delete a form."""
+        """Delete a form, unless it has raised tickets.
+
+        A form that creates tickets accumulates support history: replies, SLA
+        clocks, share links customers hold. Deleting the form must not take
+        that with it, so `tickets.forms_form_id` is ON DELETE RESTRICT and this
+        refuses before the database has to.
+
+        Raises:
+            FormHasTicketsError: if any ticket references this form.
+        """
         form = await self.get_form(form_id, include_fields=False)
         if not form:
             return False
+
+        ticket_count = await self.db.scalar(
+            select(func.count())
+            .select_from(Ticket)
+            .where(Ticket.forms_form_id == form_id)
+        )
+        if ticket_count:
+            raise FormHasTicketsError(form_name=form.name, ticket_count=ticket_count)
 
         await self.db.delete(form)
         await self.db.flush()

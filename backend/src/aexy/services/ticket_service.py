@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from aexy.core.config import settings
 from aexy.models.developer import Developer
+from aexy.models.forms import Form
 from aexy.models.ticketing import (
     EscalationMatrix,
     SLAPolicy,
@@ -330,6 +331,10 @@ class TicketService:
             .where(Ticket.id == ticket_id)
             .options(
                 selectinload(Ticket.form),
+                # A ticket raised through the Forms module has no ticket form.
+                # The public share view reads field labels off whichever one is
+                # set, so load both here rather than lazily on a closed session.
+                selectinload(Ticket.forms_form).selectinload(Form.fields),
                 selectinload(Ticket.assignee),
                 selectinload(Ticket.team),
                 selectinload(Ticket.responses),
@@ -355,6 +360,7 @@ class TicketService:
             )
             .options(
                 selectinload(Ticket.form),
+                selectinload(Ticket.forms_form),
                 selectinload(Ticket.assignee),
                 selectinload(Ticket.team),
             )
@@ -389,7 +395,14 @@ class TicketService:
 
         if filters:
             if filters.form_id:
-                base_stmt = base_stmt.where(Ticket.form_id == filters.form_id)
+                # Either origin: the id belongs to `ticket_forms` or to
+                # `forms`, and the caller has no reason to know which.
+                base_stmt = base_stmt.where(
+                    or_(
+                        Ticket.form_id == filters.form_id,
+                        Ticket.forms_form_id == filters.form_id,
+                    )
+                )
             if filters.status:
                 base_stmt = base_stmt.where(Ticket.status.in_(filters.status))
             if filters.priority:
@@ -453,7 +466,11 @@ class TicketService:
         # Get paginated results
         stmt = (
             base_stmt
-            .options(selectinload(Ticket.form), selectinload(Ticket.assignee))
+            .options(
+                selectinload(Ticket.form),
+                selectinload(Ticket.forms_form),
+                selectinload(Ticket.assignee),
+            )
             .order_by(*_ticket_order(filters))
             .limit(limit)
             .offset(offset)

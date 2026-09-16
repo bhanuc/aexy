@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from aexy.core.database import get_db
 from aexy.api.developers import get_optional_current_developer
-from aexy.api.tickets import safe_attachment, stream_attachment
+from aexy.api.tickets import origin_form_name, safe_attachment, stream_attachment
 from aexy.models.developer import Developer
 from aexy.schemas.ticketing import (
     PublicTicketComment,
@@ -36,34 +36,60 @@ def _extract_subject(field_values: dict) -> str | None:
     return headline_from_field_values(field_values)
 
 
+# The Forms module has field types ticket forms never had, and
+# `TicketFieldType` is a closed Literal. This view is read-only — the type only
+# picks how a stored answer is displayed — so an unrepresentable type maps to
+# the nearest one that exists rather than failing the whole response with a
+# validation error the visitor would see as a 500.
+_DISPLAY_FIELD_TYPE = {
+    "phone": "text",
+    "url": "text",
+    "radio": "select",
+    "hidden": "text",
+}
+
+
+def _origin_form_fields(ticket) -> list:
+    """The field definitions of whichever form raised the ticket.
+
+    Only `ticket.form` was read here, so a ticket raised through the Forms
+    module had no definitions at all: the page fell back to humanising the
+    stored keys, showing "field 4" for a question labelled "Phone Number" and
+    a choice's stored value in place of its label.
+    """
+    if ticket.form and ticket.form.fields:
+        return list(ticket.form.fields)
+    if ticket.forms_form and ticket.forms_form.fields:
+        return list(ticket.forms_form.fields)
+    return []
+
+
 def shared_ticket_to_response(ticket, *, can_reply: bool) -> PublicTicketResponse:
     """Build the filtered public view of a ticket."""
     field_values = ticket.field_values or {}
 
-    fields = []
-    if ticket.form and ticket.form.fields:
-        fields = [
-            TicketFormFieldResponse(
-                id=str(field.id),
-                form_id=str(field.form_id),
-                name=field.name,
-                field_key=field.field_key,
-                field_type=field.field_type,
-                placeholder=field.placeholder,
-                default_value=field.default_value,
-                help_text=field.help_text,
-                is_required=field.is_required,
-                validation_rules=field.validation_rules or {},
-                options=field.options,
-                position=field.position,
-                is_visible=field.is_visible,
-                external_mappings={},
-                created_at=field.created_at,
-                updated_at=field.updated_at,
-            )
-            for field in sorted(ticket.form.fields, key=lambda f: f.position)
-            if field.is_visible
-        ]
+    fields = [
+        TicketFormFieldResponse(
+            id=str(field.id),
+            form_id=str(field.form_id),
+            name=field.name,
+            field_key=field.field_key,
+            field_type=_DISPLAY_FIELD_TYPE.get(field.field_type, field.field_type),
+            placeholder=field.placeholder,
+            default_value=field.default_value,
+            help_text=field.help_text,
+            is_required=field.is_required,
+            validation_rules=field.validation_rules or {},
+            options=field.options,
+            position=field.position,
+            is_visible=field.is_visible,
+            external_mappings={},
+            created_at=field.created_at,
+            updated_at=field.updated_at,
+        )
+        for field in sorted(_origin_form_fields(ticket), key=lambda f: f.position)
+        if field.is_visible
+    ]
 
     responses = [
         PublicTicketComment(
@@ -87,7 +113,7 @@ def shared_ticket_to_response(ticket, *, can_reply: bool) -> PublicTicketRespons
         field_values=field_values,
         fields=fields,
         attachments=[safe_attachment(a) for a in (ticket.attachments or [])],
-        form_name=ticket.form.name if ticket.form else None,
+        form_name=origin_form_name(ticket),
         workspace_name=ticket.workspace.name if ticket.workspace else None,
         responses=responses,
         created_at=ticket.created_at,
