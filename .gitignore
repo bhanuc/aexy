@@ -52,6 +52,8 @@ mailagent/uv.lock
 # Python virtualenvs
 .venv/
 **/.venv/
+venv/
+**/venv/
 
 # Local code-review notes
 REVIEW_*.md

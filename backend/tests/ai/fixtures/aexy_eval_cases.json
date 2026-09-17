@@ -3,7 +3,7 @@
     "task_id": "ask_001",
     "feature": "ask_ai",
     "domain": "single_tool",
-    "prompt": "Show me high-priority open tickets.",
+    "prompt": "Show me high-priority new tickets.",
     "acceptable_tool_sets": [
       ["list_tickets"]
     ],
@@ -22,7 +22,7 @@
     "task_id": "ask_002",
     "feature": "ask_ai",
     "domain": "single_tool",
-    "prompt": "Show me low-priority open tickets.",
+    "prompt": "Show me low-priority new tickets.",
     "acceptable_tool_sets": [
       ["list_tickets"]
     ],

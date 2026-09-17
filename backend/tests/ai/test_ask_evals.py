@@ -88,12 +88,27 @@ RESULTS_FILE = (
 
 EVAL_PROVIDER = os.getenv(
     "AEXY_EVAL_PROVIDER",
-    "ollama",
+    # Fall back to LLM_PROVIDER (the same var tests/ai/conftest.py's
+    # liveness probe reads) rather than a second, independent default.
+    # Two separate hardcoded defaults ("lmstudio" here vs "ollama" there,
+    # or vice versa) let the probe and the actual eval run drift apart, so
+    # the local_llm skip marker stops reflecting what will actually run.
+    os.getenv("LLM_PROVIDER", "lmstudio"),
 )
 
 EVAL_MODEL = os.getenv(
     "AEXY_EVAL_MODEL",
 )
+
+# The sampling temperature AskService actually sends per streaming family.
+# _stream_openai and _stream_gemini hardcode 0.7; _stream_anthropic sends no
+# temperature at all, so Anthropic falls back to its own API default (1.0).
+# Keep this in sync with backend/src/aexy/services/ask_service.py.
+STREAM_FAMILY_TEMPERATURE = {
+    "openai": 0.7,
+    "gemini": 0.7,
+    "anthropic": 1.0,
+}
 
 # Initial harness validation:
 # one run per case.
@@ -246,7 +261,7 @@ def save_eval_result(
     )
 
     with RESULTS_FILE.open(
-        "w",
+        "a",
         encoding="utf-8",
     ) as file:
 
@@ -287,12 +302,14 @@ async def run_ask_case(
             "task_id": task_id,
             "run_index": run_index,
             "provider": provider_name,
+            # Filled in below, once the real AskService reveals which model
+            # and streaming family it actually resolved to.
             "model_version": EVAL_MODEL or "unknown",
             "git_sha": get_git_sha(),
             "prompt_version": "ask_system_prompt_v1",
             "judge_version": None,
             "pricing_version": None,
-            "temperature": 0.7,
+            "temperature": None,
             "top_p": None,
             "timestamp": datetime.now(
                 timezone.utc
@@ -308,6 +325,12 @@ async def run_ask_case(
             db=ai_db_session,
         )
 
+        # Record the model AskService actually resolved to (not just the
+        # requested env var) and the temperature it will actually send for
+        # that streaming family.
+        base_result["model_version"] = service._model or EVAL_MODEL or "unknown"
+        base_result["temperature"] = STREAM_FAMILY_TEMPERATURE.get(service._provider)
+
         expected_family = {
             "claude": "anthropic",
             "anthropic": "anthropic",
@@ -316,8 +339,10 @@ async def run_ask_case(
             "deepseek": "openai",
             "openrouter": "openai",
             "lmstudio": "openai",
-            "ollama": "ollama",
-
+            # Ollama exposes an OpenAI-compatible API, so AskService routes
+            # it through the same "openai" streaming family (see
+            # AskService._resolve_provider).
+            "ollama": "openai",
         }[provider_name]
 
         if service._provider != expected_family:
@@ -472,8 +497,7 @@ async def run_ask_case(
             actual_tool_calls=actual_tool_calls,
         )
 
-        if metrics["iterations_exceeded"]:
-            path_ok = False
+        path_ok = metrics["path_success"] and not metrics["iterations_exceeded"]
 
         # --------------------------------------------------------------------
         # 8. DETERMINE CURRENT TASK SUCCESS

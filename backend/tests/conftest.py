@@ -146,7 +146,7 @@ async def _reset_pg_schema(conn):
     await conn.run_sync(Base.metadata.create_all)
 
 
-@pytest_asyncio.fixture(scope="function", autouse=True)
+@pytest_asyncio.fixture(scope="session", loop_scope="session", autouse=True)
 async def _pg_schema_once():
     """For Postgres: build the schema ONCE per session.
 
