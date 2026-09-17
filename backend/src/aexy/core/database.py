@@ -1,7 +1,9 @@
 """Database configuration and session management."""
 
+import asyncio
 import logging
 import os
+import weakref
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager, contextmanager
 from typing import Generator
@@ -54,9 +56,28 @@ class Base(DeclarativeBase):
     pass
 
 
-# Store engine per-process to handle forked workers correctly.
-# asyncpg connections cannot be shared across forked processes.
-_engine_cache: dict[int, tuple] = {}
+# Store engine per (process, event loop) to handle forked workers correctly.
+# asyncpg connections cannot be shared across forked processes -- and, less
+# obviously, not across event loops either. Keying on pid alone was fine when
+# a process has exactly one loop for its lifetime (the normal FastAPI/Temporal
+# case), but anything that runs multiple event loops in the same process --
+# pytest-asyncio's per-test loop being the case that actually hit this --
+# would reuse an engine whose pooled asyncpg connections belong to a loop
+# that has since closed, failing every query with "Event loop is closed" on
+# the very next test.
+#
+# The per-pid map holds a WeakKeyDictionary keyed on the loop object itself,
+# not id(loop): id() is a memory address, and a garbage-collected loop's
+# address can be handed to an unrelated loop created moments later -- which
+# would silently collide two different loops onto the same cache entry and
+# hand the new one an engine bound to the old, already-closed loop. Keying on
+# the object's identity while it's alive sidesteps that, and the entry is
+# evicted automatically once its loop is collected, so this doesn't grow
+# without bound across a long test run either.
+_engine_cache: dict[int, "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, tuple]"] = {}
+# Callers with no running loop (sync scripts) fall back to this, keyed on pid
+# alone -- there's only ever one such caller per process at a time.
+_engine_cache_no_loop: dict[int, tuple] = {}
 
 
 def _pool_kwargs(url: str) -> dict:
@@ -85,27 +106,44 @@ def _pool_kwargs(url: str) -> dict:
     }
 
 
-def _get_engine():
-    """Get or create the async engine for the current process.
+def _new_engine_and_session_maker():
+    settings = get_settings()
+    engine = create_async_engine(
+        settings.database_url,
+        echo=settings.database_echo,
+        **_pool_kwargs(settings.database_url),
+    )
+    session_maker = async_sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+    return engine, session_maker
 
-    This ensures each forked worker gets its own engine instance,
-    avoiding asyncpg connection conflicts across processes.
+
+def _get_engine():
+    """Get or create the async engine for the current process and event loop.
+
+    This ensures each forked worker gets its own engine instance, avoiding
+    asyncpg connection conflicts across processes -- and that a caller on a
+    new event loop gets its own engine too, rather than one whose pooled
+    connections belong to a loop that already closed.
     """
     pid = os.getpid()
-    if pid not in _engine_cache:
-        settings = get_settings()
-        engine = create_async_engine(
-            settings.database_url,
-            echo=settings.database_echo,
-            **_pool_kwargs(settings.database_url),
-        )
-        session_maker = async_sessionmaker(
-            engine,
-            class_=AsyncSession,
-            expire_on_commit=False,
-        )
-        _engine_cache[pid] = (engine, session_maker)
-    return _engine_cache[pid]
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop is None:
+        if pid not in _engine_cache_no_loop:
+            _engine_cache_no_loop[pid] = _new_engine_and_session_maker()
+        return _engine_cache_no_loop[pid]
+
+    per_loop = _engine_cache.setdefault(pid, weakref.WeakKeyDictionary())
+    if loop not in per_loop:
+        per_loop[loop] = _new_engine_and_session_maker()
+    return per_loop[loop]
 
 
 def get_engine():

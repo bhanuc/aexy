@@ -15,6 +15,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from aexy.core.config import get_settings
 from aexy.models.ask import AskConversation, AskConversationParticipant, AskMessage, AskShareLink
 from aexy.models.developer import Developer
 from aexy.services.ask_collaboration_service import get_ask_collaboration_service
@@ -90,6 +91,11 @@ class AskService:
         self._api_key: str | None = None
         self._model: str = ""
         self._api_url: str = OPENAI_API_URL
+        # None means "leave each streaming path's own default alone" (0.7 for
+        # OpenAI-compatible/Gemini, the API's own default for Anthropic). Only
+        # ever overridden via LLM_TEMPERATURE, for reproducible eval runs --
+        # not meant to change live traffic.
+        self._temperature: float | None = None
         # The tools offered on the current request: `current_time` plus the
         # MCP surface this person holds in this workspace. Resolved per request
         # in `stream_response`, because it depends on who is asking and where.
@@ -119,6 +125,7 @@ class AskService:
         # reports no chat-completions URL for them and those two streaming paths
         # build their own from GEMINI_API_URL / ANTHROPIC_API_URL.
         self._api_url = resolved.chat_completions_url or OPENAI_API_URL
+        self._temperature = get_settings().llm.llm_temperature
         return None
 
     # --- CRUD ---
@@ -646,7 +653,7 @@ class AskService:
                 "messages": messages,
                 "tools": _openai_tool_defs(self._tools),
                 "max_tokens": 4096,
-                "temperature": 0.7,
+                "temperature": self._temperature if self._temperature is not None else 0.7,
                 "stream": True,
                 "stream_options": {"include_usage": True},
             }
@@ -664,8 +671,8 @@ class AskService:
                     if response.status_code != 200:
                         body = await response.aread()
                         logger.error(f"OpenAI API error {response.status_code}: {body.decode()}")
-                        yield self._sse({"type": "text_delta", "text": f"API error: {response.status_code}"})
-                        break
+                        yield self._sse({"type": "error", "message": f"API error: {response.status_code}"})
+                        return
 
                     # Track tool call assembly during streaming
                     tc_index_map: dict[int, dict] = {}
@@ -880,7 +887,7 @@ class AskService:
                 "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
                 "generationConfig": {
                     "maxOutputTokens": 4096,
-                    "temperature": 0.7,
+                    "temperature": self._temperature if self._temperature is not None else 0.7,
                 },
             }
 
@@ -893,8 +900,8 @@ class AskService:
 
                 if response.status_code != 200:
                     logger.error(f"Gemini API error {response.status_code}: {response.text}")
-                    yield self._sse({"type": "text_delta", "text": f"API error: {response.status_code}"})
-                    break
+                    yield self._sse({"type": "error", "message": f"API error: {response.status_code}"})
+                    return
 
                 data = response.json()
 
@@ -1073,11 +1080,16 @@ class AskService:
         for iteration in range(MAX_TOOL_ITERATIONS):
             tool_calls_this_round = []
             text_this_round = ""
+            stream_error: str | None = None
 
             async for event in self._call_anthropic_stream(api_messages):
                 event_type = event.get("type")
 
-                if event_type == "text_delta":
+                if event_type == "error":
+                    stream_error = event.get("message", "Unknown Anthropic error")
+                    yield self._sse({"type": "error", "message": stream_error})
+
+                elif event_type == "text_delta":
                     text = event.get("text", "")
                     text_this_round += text
                     yield self._sse({"type": "text_delta", "text": text})
@@ -1111,6 +1123,9 @@ class AskService:
                 elif event_type == "usage":
                     total_input_tokens += event.get("input_tokens", 0)
                     total_output_tokens += event.get("output_tokens", 0)
+
+            if stream_error:
+                return
 
             full_text += text_this_round
 
@@ -1196,6 +1211,10 @@ class AskService:
             "tools": _anthropic_tool_defs(self._tools),
             "stream": True,
         }
+        # Anthropic defaults to 1.0 when omitted. Only set it when overridden,
+        # so production behavior is unchanged from before this field existed.
+        if self._temperature is not None:
+            payload["temperature"] = self._temperature
 
         async with httpx.AsyncClient(timeout=120.0) as client:
             async with client.stream(
@@ -1211,7 +1230,7 @@ class AskService:
                 if response.status_code != 200:
                     body = await response.aread()
                     logger.error(f"Anthropic API error {response.status_code}: {body.decode()}")
-                    yield {"type": "text_delta", "text": f"API error: {response.status_code}"}
+                    yield {"type": "error", "message": f"API error: {response.status_code}"}
                     return
 
                 current_block_type = None

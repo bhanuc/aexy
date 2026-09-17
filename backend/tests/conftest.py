@@ -82,11 +82,21 @@ async def _no_engine_outlives_its_event_loop():
     from aexy.core import database
 
     database._engine_cache.clear()
+    database._engine_cache_no_loop.clear()
     database._sync_engine_cache.clear()
     try:
         yield
     finally:
-        for engine, _ in list(database._engine_cache.values()):
+        # `_engine_cache` is now keyed per (pid, event loop): each pid maps to
+        # a WeakKeyDictionary of loop -> (engine, session_maker), not directly
+        # to a single tuple. Disposal has to walk both levels.
+        for per_loop in list(database._engine_cache.values()):
+            for engine, _ in list(per_loop.values()):
+                try:
+                    await engine.dispose()
+                except Exception:
+                    pass
+        for engine, _ in list(database._engine_cache_no_loop.values()):
             try:
                 await engine.dispose()
             except Exception:
@@ -97,6 +107,7 @@ async def _no_engine_outlives_its_event_loop():
             except Exception:
                 pass
         database._engine_cache.clear()
+        database._engine_cache_no_loop.clear()
         database._sync_engine_cache.clear()
 
 
@@ -127,12 +138,6 @@ requires_postgres = pytest.mark.skipif(
 )
 
 
-@pytest.fixture(scope="session")
-def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
-    """Create an event loop for the test session."""
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
 
 
 async def _reset_pg_schema(conn):
@@ -152,7 +157,7 @@ async def _reset_pg_schema(conn):
     await conn.run_sync(Base.metadata.create_all)
 
 
-@pytest_asyncio.fixture(scope="session", autouse=True)
+@pytest_asyncio.fixture(scope="session", loop_scope="session", autouse=True)
 async def _pg_schema_once():
     """For Postgres: build the schema ONCE per session.
 
