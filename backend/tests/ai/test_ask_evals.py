@@ -325,34 +325,6 @@ async def run_ask_case(
             db=ai_db_session,
         )
 
-        # Record the model AskService actually resolved to (not just the
-        # requested env var) and the temperature it will actually send for
-        # that streaming family.
-        base_result["model_version"] = service._model or EVAL_MODEL or "unknown"
-        base_result["temperature"] = STREAM_FAMILY_TEMPERATURE.get(service._provider)
-
-        expected_family = {
-            "claude": "anthropic",
-            "anthropic": "anthropic",
-            "openai": "openai",
-            "gemini": "gemini",
-            "deepseek": "openai",
-            "openrouter": "openai",
-            "lmstudio": "openai",
-            # Ollama exposes an OpenAI-compatible API, so AskService routes
-            # it through the same "openai" streaming family (see
-            # AskService._resolve_provider).
-            "ollama": "openai",
-        }[provider_name]
-
-        if service._provider != expected_family:
-            raise RuntimeError(
-                f"Requested provider {provider_name!r}, "
-                f"but AskService resolved to {service._provider!r}."
-            )
-
-        
-    
         # --------------------------------------------------------------------
         # 2. CREATE A NEW CONVERSATION
         # --------------------------------------------------------------------
@@ -424,6 +396,43 @@ async def run_ask_case(
                 "AskService stream completed without "
                 "returning a final message_id."
             )
+
+        # --------------------------------------------------------------------
+        # 4b. VERIFY PROVIDER, RECORD ACTUAL MODEL/TEMPERATURE
+        # --------------------------------------------------------------------
+        #
+        # AskService resolves its provider/model lazily, inside
+        # stream_response() on its first iteration (it depends on the
+        # workspace: kill switch, BYOK, per-feature overrides). service._provider
+        # is "none" until the stream above has actually run, so this check
+        # has to happen after the stream completes, not right after
+        # construction.
+
+        expected_family = {
+            "claude": "anthropic",
+            "anthropic": "anthropic",
+            "openai": "openai",
+            "gemini": "gemini",
+            "deepseek": "openai",
+            "openrouter": "openai",
+            "lmstudio": "openai",
+            # Ollama exposes an OpenAI-compatible API, so AskService routes
+            # it through the same "openai" streaming family (see
+            # aexy.llm.resolution.platform_config).
+            "ollama": "openai",
+        }[provider_name]
+
+        if service._provider != expected_family:
+            raise RuntimeError(
+                f"Requested provider {provider_name!r}, "
+                f"but AskService resolved to {service._provider!r}."
+            )
+
+        # Record the model AskService actually resolved to (not just the
+        # requested env var) and the temperature it will actually send for
+        # that streaming family.
+        base_result["model_version"] = service._model or EVAL_MODEL or "unknown"
+        base_result["temperature"] = STREAM_FAMILY_TEMPERATURE.get(service._provider)
 
         # --------------------------------------------------------------------
         # 5. LOAD SAVED ASSISTANT MESSAGE

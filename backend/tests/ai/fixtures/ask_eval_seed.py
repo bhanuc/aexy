@@ -17,7 +17,7 @@ results can be compared against known expected outcomes.
 
 from datetime import datetime, timezone
 import pytest_asyncio
-from aexy.models.workspace import Workspace
+from aexy.models.workspace import Workspace, WorkspaceMember
 from aexy.models.developer import Developer
 from aexy.models.team import Team
 from aexy.models.sprint import Sprint, SprintTask
@@ -67,6 +67,25 @@ async def ask_eval_seed(ai_db_session):
     )
 
     ai_db_session.add(workspace)
+    await ai_db_session.flush()
+
+    # `owner_id` on the Workspace row alone grants nothing: AppAccessService
+    # resolves access from a `WorkspaceMember` row (see
+    # AppAccessService.get_effective_access), and with no member at all it
+    # returns empty access for every app — the Ask AI tool catalogue would
+    # then only ever offer `current_time`, since every MCP capability is
+    # gated behind app access. An "owner" member with no department profile
+    # or override falls through to AppAccessService's default-open path,
+    # which is enough to grant every app (including service_desk, which
+    # backs the `aexy_sd_open_tickets` tool these benchmarks call).
+    workspace_member = WorkspaceMember(
+        workspace_id=workspace.id,
+        developer_id=developer.id,
+        role="owner",
+        status="active",
+    )
+
+    ai_db_session.add(workspace_member)
     await ai_db_session.flush()
 
     # ======================================================================

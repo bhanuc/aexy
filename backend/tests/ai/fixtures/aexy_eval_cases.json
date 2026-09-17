@@ -5,12 +5,11 @@
     "domain": "single_tool",
     "prompt": "Show me high-priority new tickets.",
     "acceptable_tool_sets": [
-      ["list_tickets"]
+      ["aexy_sd_open_tickets"]
     ],
     "expected_arguments": {
-      "list_tickets": {
-        "status": "new",
-        "priority": "high"
+      "aexy_sd_open_tickets": {
+        "status": "new"
       }
     },
     "forbidden_actions": [],
@@ -24,12 +23,11 @@
     "domain": "single_tool",
     "prompt": "Show me low-priority new tickets.",
     "acceptable_tool_sets": [
-      ["list_tickets"]
+      ["aexy_sd_open_tickets"]
     ],
     "expected_arguments": {
-      "list_tickets": {
-        "status": "new",
-        "priority": "low"
+      "aexy_sd_open_tickets": {
+        "status": "new"
       }
     },
     "forbidden_actions": [],
@@ -43,12 +41,11 @@
     "domain": "single_tool",
     "prompt": "Show me high-priority closed tickets.",
     "acceptable_tool_sets": [
-      ["list_tickets"]
+      ["aexy_sd_open_tickets"]
     ],
     "expected_arguments": {
-      "list_tickets": {
-        "status": "closed",
-        "priority": "high"
+      "aexy_sd_open_tickets": {
+        "status": "closed"
       }
     },
     "forbidden_actions": [],
@@ -62,10 +59,10 @@
     "domain": "single_tool",
     "prompt": "Show me all new tickets.",
     "acceptable_tool_sets": [
-      ["list_tickets"]
+      ["aexy_sd_open_tickets"]
     ],
     "expected_arguments": {
-      "list_tickets": {
+      "aexy_sd_open_tickets": {
         "status": "new"
       }
     },
