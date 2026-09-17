@@ -198,6 +198,18 @@ class LLMSettings(BaseSettings):
         default=4096,
         description="Maximum tokens per LLM request",
     )
+    llm_temperature: float | None = Field(
+        default=None,
+        validation_alias="LLM_TEMPERATURE",
+        description=(
+            "Override the sampling temperature AskService uses on every "
+            "streaming path. Unset (the production default) leaves each path's "
+            "own behavior alone -- 0.7 for the OpenAI-compatible and Gemini "
+            "paths, no explicit value for Anthropic (so it runs at the API's "
+            "own default). Set for reproducible eval runs, not meant to be "
+            "changed for live traffic."
+        ),
+    )
     ai_enable_dormant_features: str = Field(
         default="",
         validation_alias="AI_ENABLE_DORMANT_FEATURES",

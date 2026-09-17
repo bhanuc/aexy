@@ -82,11 +82,21 @@ async def _no_engine_outlives_its_event_loop():
     from aexy.core import database
 
     database._engine_cache.clear()
+    database._engine_cache_no_loop.clear()
     database._sync_engine_cache.clear()
     try:
         yield
     finally:
-        for engine, _ in list(database._engine_cache.values()):
+        # `_engine_cache` is now keyed per (pid, event loop): each pid maps to
+        # a WeakKeyDictionary of loop -> (engine, session_maker), not directly
+        # to a single tuple. Disposal has to walk both levels.
+        for per_loop in list(database._engine_cache.values()):
+            for engine, _ in list(per_loop.values()):
+                try:
+                    await engine.dispose()
+                except Exception:
+                    pass
+        for engine, _ in list(database._engine_cache_no_loop.values()):
             try:
                 await engine.dispose()
             except Exception:
@@ -97,6 +107,7 @@ async def _no_engine_outlives_its_event_loop():
             except Exception:
                 pass
         database._engine_cache.clear()
+        database._engine_cache_no_loop.clear()
         database._sync_engine_cache.clear()
 
 

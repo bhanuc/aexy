@@ -169,7 +169,7 @@ def argument_accuracy(
 
         matching_calls = [
             call
-            for call in tool_calls
+            for call in actual_tool_calls
             if call.get("tool_name") == tool_name
         ]
 

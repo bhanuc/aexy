@@ -100,16 +100,6 @@ EVAL_MODEL = os.getenv(
     "AEXY_EVAL_MODEL",
 )
 
-# The sampling temperature AskService actually sends per streaming family.
-# _stream_openai and _stream_gemini hardcode 0.7; _stream_anthropic sends no
-# temperature at all, so Anthropic falls back to its own API default (1.0).
-# Keep this in sync with backend/src/aexy/services/ask_service.py.
-STREAM_FAMILY_TEMPERATURE = {
-    "openai": 0.7,
-    "gemini": 0.7,
-    "anthropic": 1.0,
-}
-
 # Initial harness validation:
 # one run per case.
 #
@@ -429,10 +419,17 @@ async def run_ask_case(
             )
 
         # Record the model AskService actually resolved to (not just the
-        # requested env var) and the temperature it will actually send for
-        # that streaming family.
+        # requested env var) and the temperature it will actually send. This
+        # harness always pins LLM_TEMPERATURE=0 above, so service._temperature
+        # is set; the per-family fallback below only matters if that pin is
+        # ever removed, mirroring AskService's own "use my override, else
+        # each path's own default" logic.
         base_result["model_version"] = service._model or EVAL_MODEL or "unknown"
-        base_result["temperature"] = STREAM_FAMILY_TEMPERATURE.get(service._provider)
+        base_result["temperature"] = (
+            service._temperature
+            if service._temperature is not None
+            else (1.0 if service._provider == "anthropic" else 0.7)
+        )
 
         # --------------------------------------------------------------------
         # 5. LOAD SAVED ASSISTANT MESSAGE
@@ -688,7 +685,10 @@ async def run_ask_case(
 
             task_success=False,
 
-            error=str(exc),
+            # Some exceptions (asyncio.TimeoutError, CancelledError) stringify
+            # to "" -- record the type too, or a failed run looks identical
+            # to a successful one in the printed summary and JSONL.
+            error=f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__,
 
             metadata={},
         )
@@ -751,6 +751,13 @@ async def test_ask_eval_case(
             model_env,
             EVAL_MODEL,
         )
+
+    # Pin sampling to 0 for eval runs. A single run of a stochastic model at
+    # a non-zero temperature isn't a score -- it's one sample. Pinning to 0
+    # makes that one run deterministic and reproducible instead; the
+    # alternative (repeating each case N times and reporting a pass rate)
+    # is real future work but out of scope for this harness-validation pass.
+    monkeypatch.setenv("LLM_TEMPERATURE", "0")
 
     # get_settings() is cached, so force it to read
     # the temporary environment values above.
