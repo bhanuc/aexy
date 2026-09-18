@@ -87,3 +87,92 @@ class TestTheFixtureItself:
         workers cannot share an asyncpg connection, which is why it exists."""
         assert isinstance(database._engine_cache, dict)
         assert "pid" in inspect.getsource(database._get_engine)
+
+
+class TestDisposalOfPerLoopEngines:
+    """`_get_engine` keys on the running loop, so a sync caller that spins up a
+    loop gets an engine nothing else will ever close.
+
+    The trap is that the disposal has to be resolved *from inside* the loop. The
+    obvious spelling — `get_engine()` in a `finally`, where no loop is running —
+    resolves `_engine_cache_no_loop` instead, disposes an engine that never
+    served a query, and leaves the real one holding its connections. Two call
+    sites shipped exactly that, so these tests pin the behaviour rather than the
+    spelling.
+    """
+
+    def test_repeated_runs_do_not_accumulate_engines(self):
+        """The leak, stated directly: N calls must not leave N engines cached.
+
+        Without disposal this grows by one entry per call, each holding a pool
+        of up to `pool_size + max_overflow` connections.
+        """
+
+        async def _work():
+            database.get_engine()
+
+        for _ in range(5):
+            database.run_in_new_event_loop(_work())
+
+        cached = sum(len(per_loop) for per_loop in database._engine_cache.values())
+        assert cached == 0, f"{cached} engine(s) survived their event loop"
+
+    def test_it_disposes_the_engine_that_actually_ran(self):
+        """Not merely *an* engine. `dispose()` swaps the pool for a fresh one,
+        so a changed pool identity is the observable proof that this engine —
+        the one the coroutine used — is the one that was disposed."""
+        seen = {}
+
+        async def _work():
+            engine = database.get_engine()
+            seen["engine"] = engine
+            seen["pool"] = engine.pool
+
+        database.run_in_new_event_loop(_work())
+
+        assert seen["engine"].pool is not seen["pool"]
+
+    def test_it_never_resolves_the_no_loop_cache(self):
+        """The original bug in one assertion. Disposing from sync context
+        populates `_engine_cache_no_loop` with an engine created purely to be
+        thrown away; nothing on this path should ever touch it."""
+
+        async def _work():
+            database.get_engine()
+
+        database.run_in_new_event_loop(_work())
+
+        assert database._engine_cache_no_loop == {}
+
+    def test_a_failing_coroutine_still_disposes(self):
+        """A task that raises is exactly when disposal matters most: the
+        exception propagates, and the retry that follows gets a fresh loop."""
+
+        async def _boom():
+            database.get_engine()
+            raise RuntimeError("task failed")
+
+        with pytest.raises(RuntimeError, match="task failed"):
+            database.run_in_new_event_loop(_boom())
+
+        cached = sum(len(per_loop) for per_loop in database._engine_cache.values())
+        assert cached == 0
+
+    def test_no_other_module_drives_its_own_event_loop(self):
+        """Structural, because the failure is invisible at the call site: a new
+        `asyncio.new_event_loop()` anywhere in `src/` silently reintroduces the
+        leak, and nothing about the code that does it looks wrong.
+
+        `run_in_new_event_loop` is the one place allowed to create a loop,
+        because it is the one place that disposes what the loop created.
+        """
+        offenders = sorted(
+            str(path.relative_to("src"))
+            for path in Path("src/aexy").rglob("*.py")
+            if "new_event_loop()" in path.read_text()
+            and path.name != "database.py"
+        )
+        assert offenders == [], (
+            "these modules create their own event loop instead of calling "
+            f"aexy.core.database.run_in_new_event_loop: {offenders}"
+        )

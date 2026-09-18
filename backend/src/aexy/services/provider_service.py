@@ -1099,8 +1099,6 @@ class ProviderService:
         Returns:
             Dict with success, message_id, or error
         """
-        import asyncio
-
         # Get provider
         result = self.db.execute(
             select(EmailProvider).where(EmailProvider.id == provider_id)
@@ -1128,23 +1126,19 @@ class ProviderService:
 
         try:
             # Run async send in event loop
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            from aexy.core.database import run_in_new_event_loop
 
-            try:
-                send_result = loop.run_until_complete(
-                    client.send_email(
-                        to_email=to_email,
-                        from_email=from_email,
-                        from_name=from_name,
-                        subject=subject,
-                        html_body=html_body,
-                        text_body=text_body,
-                        reply_to=reply_to,
-                    )
+            send_result = run_in_new_event_loop(
+                client.send_email(
+                    to_email=to_email,
+                    from_email=from_email,
+                    from_name=from_name,
+                    subject=subject,
+                    html_body=html_body,
+                    text_body=text_body,
+                    reply_to=reply_to,
                 )
-            finally:
-                loop.close()
+            )
 
             # Increment counter
             provider.current_daily_sends += 1

@@ -5,7 +5,6 @@ These functions are retained as plain functions so other processing modules
 can import and use the run_async helper and inner async functions.
 """
 
-import asyncio
 import logging
 from typing import Any
 
@@ -18,29 +17,17 @@ def run_async(coro):
     """Run an async coroutine in a sync context.
 
     Always creates a new event loop to avoid conflicts between
-    concurrent tasks sharing the same worker process.
+    concurrent tasks sharing the same worker process, and disposes the
+    database engine bound to that loop before closing it — otherwise each
+    task strands its connection pool.
 
-    IMPORTANT: This disposes the database connection pool after each run
-    to prevent asyncpg connections created on one event loop from being
-    reused on a different loop (which causes "Future attached to a
-    different loop" errors).
+    Both halves live in `aexy.core.database.run_in_new_event_loop`, which is
+    the only place that can dispose the right engine: the engine is keyed on
+    the running loop, so the lookup has to happen from inside it.
     """
-    from aexy.core.database import get_engine
+    from aexy.core.database import run_in_new_event_loop
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        # Dispose all pooled connections before closing the loop.
-        # This prevents asyncpg connections from being reused on a
-        # different event loop in the next task execution.
-        try:
-            engine = get_engine()
-            loop.run_until_complete(engine.dispose())
-        except Exception:
-            pass  # Best effort - don't fail the task if disposal fails
-        loop.close()
+    return run_in_new_event_loop(coro)
 
 
 def analyze_commit_task(developer_id: str, commit_id: str) -> dict[str, Any]:

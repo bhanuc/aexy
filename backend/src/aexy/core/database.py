@@ -151,6 +151,75 @@ def get_engine():
     return _get_engine()[0]
 
 
+async def dispose_engine_for_loop(loop=None) -> bool:
+    """Dispose and forget the engine bound to `loop` (default: the running one).
+
+    The per-loop cache above evicts an entry once its loop is garbage
+    collected, but eviction only drops the reference — it never closes the
+    pooled connections, because closing them is a coroutine and by then there
+    is no loop left to run it on. So a caller that spins up a loop, runs work
+    on it and closes it must dispose its engine first, while the loop is still
+    alive. `run_in_new_event_loop` does that; call this directly only if you
+    are driving a loop by hand.
+
+    Returns True if an engine was disposed, False if the loop had none.
+    """
+    if loop is None:
+        loop = asyncio.get_running_loop()
+
+    per_loop = _engine_cache.get(os.getpid())
+    if per_loop is None:
+        return False
+
+    entry = per_loop.pop(loop, None)
+    if entry is None:
+        return False
+
+    engine, _ = entry
+    await engine.dispose()
+    return True
+
+
+def run_in_new_event_loop(coro):
+    """Run `coro` on a throwaway event loop, disposing the engine it created.
+
+    Sync entry points — Temporal activities, the legacy `processing.*` task
+    functions — need a loop to run async work on, and each must be a *fresh*
+    loop: an asyncpg connection belongs to the loop that opened it, so reusing
+    a previous task's loop (or its connections) fails with "Event loop is
+    closed" / "Future attached to a different loop".
+
+    Because `_get_engine` now keys on the running loop, each such call also
+    creates its own engine. Nothing else will ever close that engine's pool, so
+    disposal has to happen here, before `loop.close()` — otherwise every
+    invocation strands a pool of up to `pool_size + max_overflow` PostgreSQL
+    connections that are released only whenever the objects are finalised.
+
+    Note the disposal runs *through the loop* (`run_until_complete`), not from
+    the surrounding sync frame. `dispose_engine_for_loop()` called bare from
+    here would see no running loop, resolve `_engine_cache_no_loop` instead,
+    and dispose an unrelated engine while leaving this loop's behind — which is
+    exactly the bug this helper exists to prevent.
+    """
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        try:
+            loop.run_until_complete(dispose_engine_for_loop(loop))
+        except Exception:
+            # Best effort: a failure to dispose must not turn a task that
+            # succeeded into a task that raised. It is still worth knowing
+            # about, because it means connections were stranded.
+            logger.warning(
+                "Failed to dispose the engine bound to this event loop; "
+                "its pooled connections are stranded.",
+                exc_info=True,
+            )
+        loop.close()
+
+
 def async_session_maker():
     """Get a new async session for the current process."""
     _, session_factory = _get_engine()

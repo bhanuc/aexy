@@ -1406,20 +1406,17 @@ class AgentService:
         """
         # Run the async method in a new event loop
         try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                return loop.run_until_complete(
-                    self._execute_agent_internal(
-                        agent_type=agent_type,
-                        agent_id=agent_id,
-                        input_data=input_data,
-                        workspace_id=workspace_id,
-                        record_id=record_id,
-                    )
+            from aexy.core.database import run_in_new_event_loop
+
+            return run_in_new_event_loop(
+                self._execute_agent_internal(
+                    agent_type=agent_type,
+                    agent_id=agent_id,
+                    input_data=input_data,
+                    workspace_id=workspace_id,
+                    record_id=record_id,
                 )
-            finally:
-                loop.close()
+            )
         except Exception as e:
             logger.exception(f"Sync agent execution failed: {e}")
             return {
@@ -1632,28 +1629,24 @@ class SyncAgentService:
 
         try:
             # Run async agent in sync context
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                from aexy.agents.tools.mcp_tools import attach_to_agent
+            from aexy.agents.tools.mcp_tools import attach_to_agent
+            from aexy.core.database import run_in_new_event_loop
 
-                async def _attach_and_run():
-                    await attach_to_agent(
-                        agent_instance,
-                        self.db,
-                        workspace_id=workspace_id,
-                        developer_id=input_data.get("user_id"),
-                        principal_id=getattr(agent, "principal_id", None) if agent else None,
-                    )
-                    return await agent_instance.run(
-                        record_id=record_id,
-                        record_data=record_data,
-                        context=input_data,
-                    )
+            async def _attach_and_run():
+                await attach_to_agent(
+                    agent_instance,
+                    self.db,
+                    workspace_id=workspace_id,
+                    developer_id=input_data.get("user_id"),
+                    principal_id=getattr(agent, "principal_id", None) if agent else None,
+                )
+                return await agent_instance.run(
+                    record_id=record_id,
+                    record_data=record_data,
+                    context=input_data,
+                )
 
-                result = loop.run_until_complete(_attach_and_run())
-            finally:
-                loop.close()
+            result = run_in_new_event_loop(_attach_and_run())
 
             # Update execution record if we have one
             if execution:

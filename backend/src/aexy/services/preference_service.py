@@ -555,16 +555,11 @@ class PreferenceService:
         category_slug: str | None = None,
     ) -> tuple[bool, str | None]:
         """Synchronous version for Temporal activities."""
-        import asyncio
+        from aexy.core.database import run_in_new_event_loop
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            return loop.run_until_complete(
-                self.can_send_to(workspace_id, email, category_slug)
-            )
-        finally:
-            loop.close()
+        return run_in_new_event_loop(
+            self.can_send_to(workspace_id, email, category_slug)
+        )
 
     # =========================================================================
     # IMPORT/EXPORT

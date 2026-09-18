@@ -5,7 +5,6 @@ These functions are retained as plain functions so Temporal activities can
 import and call the inner async helpers (e.g. _cleanup_orphaned_entities).
 """
 
-import asyncio
 import logging
 from typing import Any
 
@@ -18,22 +17,17 @@ def run_async(coro):
     """Run an async coroutine in a sync context.
 
     Always creates a new event loop to avoid conflicts between
-    concurrent tasks sharing the same worker process.
-    """
-    from aexy.core.database import get_engine
+    concurrent tasks sharing the same worker process, and disposes the
+    database engine bound to that loop before closing it — otherwise each
+    task strands its connection pool.
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        # Dispose all pooled connections before closing the loop.
-        try:
-            engine = get_engine()
-            loop.run_until_complete(engine.dispose())
-        except Exception:
-            pass
-        loop.close()
+    Both halves live in `aexy.core.database.run_in_new_event_loop`, which is
+    the only place that can dispose the right engine: the engine is keyed on
+    the running loop, so the lookup has to happen from inside it.
+    """
+    from aexy.core.database import run_in_new_event_loop
+
+    return run_in_new_event_loop(coro)
 
 
 def extract_knowledge_from_document_task(
