@@ -50,6 +50,16 @@ if not _IS_SQLITE and "test" not in TEST_DATABASE_URL.rsplit("/", 1)[-1].lower()
 # Redirecting settings also brings those call sites under the guard above — the
 # schema a test may drop and the database the application talks to are now the
 # same one, which is the property the guard was written to protect.
+#
+# The environment variable is set first, and it is the half that actually holds.
+# Assigning the attribute mutates the one cached `Settings` instance, so any test
+# that calls `get_settings.cache_clear()` throws the redirect away and the next
+# `get_settings()` rebuilds from `backend/.env` — the developer's own database.
+# `tests/ai/test_ask_evals.py` clears the cache autouse, before every case, which
+# is how its tool calls came to re-enter the application against a real database
+# rather than the rows the eval had just seeded. `Settings` reads DATABASE_URL
+# from the environment, so a rebuild lands back here instead.
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 get_settings().database_url = TEST_DATABASE_URL
 
 

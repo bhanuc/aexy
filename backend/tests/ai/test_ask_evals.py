@@ -39,7 +39,7 @@ from aexy.services.ask_service import AskService
 from aexy.core.config import get_settings
 
 from tests.ai.fixtures.ask_eval_seed import ask_eval_seed  # noqa: F401
-from tests.ai.utils.eval_metrics import evaluate_tool_calls
+from tests.ai.utils.eval_metrics import evaluate_outcome, evaluate_tool_calls
 from tests.ai.utils.eval_result import EvalResult
 
 pytestmark = pytest.mark.local_llm
@@ -127,9 +127,17 @@ def load_eval_cases() -> list[dict]:
     ) as file:
         cases = json.load(file)
 
+    # The generated fixture is an object carrying a `_meta` provenance block
+    # beside its cases, the way every other generated file in this repo does
+    # (`dump_app_catalog.py`, `dump_mcp_catalog.py`). A bare array is still
+    # accepted so a hand-written file keeps working.
+    if isinstance(cases, dict):
+        cases = cases.get("cases")
+
     if not isinstance(cases, list):
         raise ValueError(
-            "aexy_eval_cases.json must contain a JSON array."
+            "aexy_eval_cases.json must contain a JSON array, or an object "
+            "with a `cases` array."
         )
 
     if not cases:
@@ -149,6 +157,21 @@ def load_eval_cases() -> list[dict]:
             )
 
     return cases
+
+
+def load_universe() -> dict:
+    """Every entity the corpus contains, for telling a wrong answer from an
+    invented one.
+
+    Written into the fixture by `scripts/generate_eval_cases.py`. A hand-written
+    fixture has no such block, and the metrics then decline to call anything
+    invented rather than guessing.
+    """
+    with CASES_FILE.open("r", encoding="utf-8") as file:
+        data = json.load(file)
+    if isinstance(data, dict):
+        return data.get("_meta", {}).get("universe", {})
+    return {}
 
 
 def pytest_generate_tests(metafunc):
@@ -273,7 +296,7 @@ def save_eval_result(
 async def run_ask_case(
     *,
     case: dict,
-    ai_db_session,
+    eval_db_session,
     seed: dict,
     run_index: int,
 ) -> EvalResult:
@@ -312,7 +335,7 @@ async def run_ask_case(
         # --------------------------------------------------------------------
 
         service = AskService(
-            db=ai_db_session,
+            db=eval_db_session,
         )
 
         # --------------------------------------------------------------------
@@ -325,7 +348,7 @@ async def run_ask_case(
             title=f"AexyEval {task_id}",
         )
 
-        await ai_db_session.flush()
+        await eval_db_session.flush()
 
         # --------------------------------------------------------------------
         # 3. RUN REAL ASK AI
@@ -441,7 +464,7 @@ async def run_ask_case(
             AskMessage.id == final_message_id
         )
 
-        db_result = await ai_db_session.execute(
+        db_result = await eval_db_session.execute(
             statement
         )
 
@@ -514,22 +537,29 @@ async def run_ask_case(
             "both",
         )
 
+        # Outcome grading is what separates two questions that produce the same
+        # call. `aexy_sd_open_tickets` has no `priority` argument, so "which new
+        # tickets are high priority" and "which are low priority" are identical
+        # on the path and differ only in the rows the answer names.
+        outcome = evaluate_outcome(
+            case=case,
+            response=response_text,
+            universe=load_universe(),
+        )
+
+        outcome_ok = outcome["outcome_success"]
+
         if grading_mode == "path":
 
             task_success = path_ok
 
         elif grading_mode == "both":
 
-            # Outcome grading has not yet been implemented.
-            #
-            # For the initial harness, path success is used
-            # temporarily as task success.
-            task_success = path_ok
+            task_success = path_ok and outcome_ok
 
         elif grading_mode == "outcome":
 
-            # Do not pretend outcome grading exists.
-            task_success = False
+            task_success = outcome_ok
 
         else:
 
@@ -606,7 +636,7 @@ async def run_ask_case(
 
             path_success=path_ok,
 
-            outcome_success=None,
+            outcome_success=outcome_ok,
 
             task_success=task_success,
 
@@ -618,6 +648,15 @@ async def run_ask_case(
 
             metadata={
                 "grading_mode": grading_mode,
+
+                "answer_recall": outcome["answer_recall"],
+
+                "answer_precision": outcome["answer_precision"],
+
+                "hallucinated_entities":
+                    outcome["hallucinated_entities"],
+
+                "expected_count": outcome["expected_count"],
 
                 "best_expected_tool_set":
                     metrics[
@@ -681,7 +720,7 @@ async def run_ask_case(
 
             path_success=False,
 
-            outcome_success=None,
+            outcome_success=outcome_ok,
 
             task_success=False,
 
@@ -700,7 +739,7 @@ async def run_ask_case(
 
 async def test_ask_eval_case(
     case,
-    ai_db_session,
+    eval_db_session,
     ask_eval_seed,
     monkeypatch,
 ):
@@ -791,7 +830,7 @@ async def test_ask_eval_case(
 
     result = await run_ask_case(
         case=case,
-        ai_db_session=ai_db_session,
+        eval_db_session=eval_db_session,
         seed=ask_eval_seed,
         run_index=RUN_INDEX,
     )

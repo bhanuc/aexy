@@ -1,0 +1,157 @@
+{
+  "_meta": {
+    "base_url": "http://172.25.224.1:1234/v1",
+    "generated_at": "2026-09-19T09:42:44+00:00",
+    "generator": "scripts/generate_eval_corpus.py",
+    "model": "qwen/qwen3.8-27b",
+    "note": "Generated prose, frozen on purpose. Facts live in tests/ai/evalcorpus/shape.py; nothing here is graded. Regenerate with scripts/generate_eval_corpus.py --refresh.",
+    "shape_fingerprint": "sha256:b491683ff0cb8d63e15b361b7e48e4a91deaf13d39be499367cd728c3c830265"
+  },
+  "accounts": {
+    "contoso-cloud": {
+      "domain": "contoso-cloud.example.com",
+      "name": "Contoso Cloudworks"
+    },
+    "northwind-logistics": {
+      "domain": "northwind-logistics.example.com",
+      "name": "Northwind Freight & Logistics"
+    },
+    "northwind-traders": {
+      "domain": "northwind-traders.example.com",
+      "name": "Northwind Trading Partners"
+    }
+  },
+  "blockers": {
+    "b-design-signoff": {
+      "summary": "The team is stuck because design signoff is pending, so implementation cannot be finalized or released."
+    },
+    "b-staging-db": {
+      "summary": "The team is stuck because the staging database is blocked by an unfinished migration, preventing deployment and testing."
+    },
+    "b-vendor-api-key": {
+      "summary": "The team is stuck because the vendor API key is missing or expired, so integration calls fail and end-to-end validation cannot proceed."
+    }
+  },
+  "people": {
+    "analyst": {
+      "name": "Selin Veyra"
+    },
+    "dana": {
+      "name": "Dana Okafor"
+    },
+    "mina": {
+      "name": "Mina Kael"
+    },
+    "ravi": {
+      "name": "Ravi Soren"
+    }
+  },
+  "sprints": {
+    "autumn-hardening": {
+      "name": "Autumn Hardening"
+    },
+    "summer-cleanup": {
+      "name": "Summer Cleanup"
+    }
+  },
+  "tasks": {
+    "t-audit-log": {
+      "description": "Record actor, target, before/after values, and timestamp whenever an administrator grants or revokes a role. Ensure entries are immutable and queryable from the admin dashboard.",
+      "title": "Add audit logging for admin permission changes"
+    },
+    "t-auth-api": {
+      "description": "Add login, logout, and token refresh endpoints with secure session handling. Include validation and error responses for invalid credentials.",
+      "title": "Implement authentication API endpoints"
+    },
+    "t-config-split": {
+      "description": "Break the shared config bundle into separate files for API, worker, and frontend environments. Provide a loader that validates required keys and fails fast on missing values.",
+      "title": "Split monolithic configuration into service-specific files"
+    },
+    "t-dashboard-load": {
+      "description": "Reduce first paint by lazy loading noncritical widgets and caching aggregate data. Ensure the main view remains usable on slow connections.",
+      "title": "Optimize dashboard initial load time"
+    },
+    "t-flaky-e2e": {
+      "description": "Identify timing and state dependencies causing intermittent failures in the checkout e2e suite. Add deterministic fixtures and retry-safe assertions so the suite passes consistently in CI.",
+      "title": "Stabilize flaky end-to-end checkout tests"
+    },
+    "t-legacy-purge": {
+      "description": "Delete unused v1 import routes and related handlers after confirming no traffic remains. Update documentation and add a redirect or clear error for clients still calling the old paths.",
+      "title": "Remove deprecated legacy import endpoints"
+    },
+    "t-migration-script": {
+      "description": "Write a reversible migration that adds the new columns and backfills default values. Verify checksums and rollback behavior in a staging environment.",
+      "title": "Create database migration script for schema changes"
+    },
+    "t-rate-limit": {
+      "description": "Enforce per-client request limits using a sliding window or token bucket. Return standard 429 responses with retry-after metadata.",
+      "title": "Add rate limiting to public API routes"
+    }
+  },
+  "tickets": {
+    "sd-billing-question": {
+      "body": "I’m trying to understand why our invoice shows a higher usage charge than last month. Can you explain which metrics are included and where we can see the breakdown? We want to make sure we are not being billed for unexpected activity.",
+      "subject": "How are usage charges calculated on the monthly invoice?"
+    },
+    "sd-bulk-edit": {
+      "body": "We would like a way to update multiple customer records at once. Currently we have to edit each record individually, which is slow. Please consider adding a bulk edit option.",
+      "subject": "Request bulk edit for customer records"
+    },
+    "sd-dark-mode": {
+      "body": "I would like a dark mode option for the dashboard. It would help reduce eye strain during evening use. A simple toggle in settings would be enough.",
+      "subject": "Add dark mode option"
+    },
+    "sd-export-timeout": {
+      "body": "When exporting a report with more than 200 pages, the request times out and no file is downloaded. The same export works for smaller reports. This is slowing down our monthly reporting.",
+      "subject": "Export to PDF times out after a few minutes"
+    },
+    "sd-import-crash": {
+      "body": "The application stops and shows a generic error when importing a CSV with about 50,000 rows. Smaller files import successfully, but the crash happens consistently. We need this fixed urgently because data entry is blocked.",
+      "subject": "Import crashes when uploading a large CSV"
+    },
+    "sd-invoice-query": {
+      "body": "I need to retrieve the invoice for my last subscription payment. Could you tell me where the invoice is available? I have not been able to find it in the account area.",
+      "subject": "How can I download an invoice?"
+    },
+    "sd-legacy-crash": {
+      "body": "When we run the legacy data import, the service stops responding and returns a 500 error. The crash happens consistently on the production environment and blocks all downstream reporting. We need this fixed urgently because operations cannot continue.",
+      "subject": "Legacy import crashes the application"
+    },
+    "sd-login-outage": {
+      "body": "Since this morning, all users are seeing a blank screen after entering credentials. The login endpoint returns a 500 error, and no one can access their accounts. This is blocking all work.",
+      "subject": "Users cannot log in to the dashboard"
+    },
+    "sd-old-vpn-access": {
+      "body": "I need access to the legacy VPN network for a one-time maintenance task. The current VPN does not include the required internal hosts. Please let me know what approval is needed to enable access.",
+      "subject": "Request access to the old VPN network"
+    },
+    "sd-onboarding-howto": {
+      "body": "I am new to the product and not sure what steps are required to finish setup. Could you point me to the onboarding checklist? I want to make sure I have configured everything correctly.",
+      "subject": "How do I complete onboarding?"
+    },
+    "sd-payment-outage": {
+      "body": "Since this morning, every checkout attempt returns a payment gateway timeout and no orders are completing. We are losing revenue and customers are reporting failed transactions across multiple regions. Please treat this as an active outage and restore payment processing as soon as possible.",
+      "subject": "Payments are failing for all customers"
+    },
+    "sd-report-mismatch": {
+      "body": "The exported report shows different totals than the dashboard for the last week. The discrepancy appeared after the latest update. We need the incident reviewed so reporting is accurate again.",
+      "subject": "Daily report totals do not match dashboard"
+    },
+    "sd-sso-access": {
+      "body": "Our team needs single sign-on enabled for the new workspace. We are blocked from onboarding users until access is granted. Please help us get SSO configured as soon as possible.",
+      "subject": "Need SSO access for new team members"
+    },
+    "sd-timezone-display": {
+      "body": "The activity log shows times that do not match my local clock. Can you explain how the timezone is determined? I would like to know if I can change the display to my own timezone.",
+      "subject": "Why are timestamps shown in a different timezone?"
+    },
+    "sd-vendor-latency": {
+      "body": "Since this morning, calls to the vendor API are consistently timing out after 30 seconds. This is blocking order synchronization for all users. We need the latency issue investigated urgently.",
+      "subject": "Vendor integration requests are timing out"
+    },
+    "sd-webhook-retry": {
+      "body": "When our endpoint returns a 503, the webhook is not retried and the event is lost. The documentation says failed deliveries should be retried with backoff. This is causing missed notifications.",
+      "subject": "Webhook deliveries are not retried after a failure"
+    }
+  }
+}

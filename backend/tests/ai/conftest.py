@@ -219,6 +219,35 @@ async def ai_db_session() -> AsyncGenerator[AsyncSession, None]:
     await engine.dispose()
 
 
+@pytest_asyncio.fixture(scope="function")
+async def eval_db_session(db_session) -> AsyncSession:
+    """A session on the database the *application* will also read.
+
+    `ai_db_session` above is deliberately private: its engine is nobody else's,
+    which is what an isolated service-level test wants. The evals cannot use it.
+    A catalogue tool is not executed against the session it is handed —
+    `McpToolExecutor._send` re-enters the FastAPI app over ASGI, and the endpoint
+    resolves its own session from `settings.database_url`. Rows written to a
+    private in-memory engine are invisible there, so every tool call failed and
+    the harness scored a model on tools that never ran.
+
+    So the eval tier uses the shared test database instead, and needs one the two
+    engines can both reach. Two `sqlite+aiosqlite:///:memory:` engines are two
+    different databases, so that is not it: the tier requires Postgres, and says
+    so rather than silently grading an empty world.
+    """
+    from tests.conftest import _IS_SQLITE
+
+    if _IS_SQLITE:
+        pytest.skip(
+            "The eval tier needs a database the application can reach too. "
+            "In-memory SQLite gives the application its own empty copy, so "
+            "every tool call would fail. Re-run with e.g. TEST_DATABASE_URL="
+            "postgresql+asyncpg://postgres:postgres@postgres:5432/aexy_eval_test"
+        )
+    return db_session
+
+
 # ─── LM Studio fixtures ────────────────────────────────────────────────
 
 

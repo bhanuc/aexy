@@ -1,89 +1,839 @@
-[
-  {
-    "task_id": "ask_001",
-    "feature": "ask_ai",
-    "domain": "single_tool",
-    "prompt": "Show me high-priority new tickets.",
-    "acceptable_tool_sets": [
-      ["aexy_sd_open_tickets"]
-    ],
-    "expected_arguments": {
-      "aexy_sd_open_tickets": {
-        "status": "new"
-      }
+{
+  "_meta": {
+    "generator": "scripts/generate_eval_cases.py",
+    "source": "tests/ai/evalcorpus/shape.py",
+    "universe": {
+      "ticket_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16
+      ],
+      "ids": [
+        "0310a904-5b58-5e6f-a043-1ef5bc6d2df3",
+        "0727e361-f834-58ed-a153-7d954356f161",
+        "1361cc88-9f35-55b9-a841-7e40aa77b516",
+        "1663731f-b1e0-5d58-b19a-1603fe9e3b5f",
+        "1eaf5fe7-a194-5bb0-8bb8-6370c2017fc5",
+        "1f81c63e-a674-5b23-aace-53abae83dc41",
+        "257d5937-b9f6-5d62-a75e-07a866599bbb",
+        "263db9d4-3f4b-a741-a8cf-9bd46ef9deda",
+        "27ce955f-92e5-5c6a-8db1-a141230cc2ec",
+        "2d0b1ea7-d654-a014-aa48-cbf27ed592fd",
+        "335d16d2-f715-a218-bcce-fbd61c21bbb2",
+        "3c797a92-2e7e-57f3-a82f-d005377ebe03",
+        "465dcca5-a91b-a351-a680-bf8e18eeb56f",
+        "485d9530-39e0-56e4-b1d8-f12a01e28da1",
+        "4d0c2985-23c4-a652-90f4-d43a9c22b0e3",
+        "6b699469-92a0-547a-89d4-992117bfd663",
+        "71c76afe-2c44-5f82-a844-3a59974faa3b",
+        "75cf2b94-10d4-5abf-bc03-8357e9518301",
+        "a471628c-fe54-528a-a548-decb78999c85",
+        "b9131693-a450-a468-a742-a7320299028e",
+        "ca0aef45-c4f5-56a1-b8a2-5d57e1fddedc",
+        "cefaf927-fd08-58a7-a086-62ff7528963a",
+        "d3708e93-50ff-56bd-a661-e9c88a60c2c6",
+        "d5afff4c-28b7-543c-b6ba-94a497181b50",
+        "d97d2bcf-1b25-5aac-8d18-ef20434b587c",
+        "ea60b7d2-a203-a062-b132-896702bb4610",
+        "f59e93f6-938e-59ba-ad65-71147267cf6c"
+      ]
     },
-    "forbidden_actions": [],
-    "grading_mode": "both",
-    "max_iterations": 2
+    "note": "Generated. Expected answers are derived by filtering the corpus, not written by hand — edit shape.py or the CASES table in the generator and re-run it."
   },
-
-  {
-    "task_id": "ask_002",
-    "feature": "ask_ai",
-    "domain": "single_tool",
-    "prompt": "Show me low-priority new tickets.",
-    "acceptable_tool_sets": [
-      ["aexy_sd_open_tickets"]
-    ],
-    "expected_arguments": {
-      "aexy_sd_open_tickets": {
-        "status": "new"
-      }
+  "cases": [
+    {
+      "task_id": "sd_new",
+      "feature": "ask_ai",
+      "domain": "service_desk",
+      "prompt": "Show me the new tickets on the service desk.",
+      "acceptable_tool_sets": [
+        [
+          "aexy_sd_open_tickets"
+        ],
+        [
+          "aexy_service_desk"
+        ],
+        [
+          "aexy_call"
+        ]
+      ],
+      "expected_arguments": {
+        "aexy_sd_open_tickets": {
+          "status": "new"
+        }
+      },
+      "expected_outcome": {
+        "kind": "tickets",
+        "count": 6,
+        "slugs": [
+          "sd-import-crash",
+          "sd-webhook-retry",
+          "sd-sso-access",
+          "sd-report-mismatch",
+          "sd-bulk-edit",
+          "sd-onboarding-howto"
+        ],
+        "ticket_numbers": [
+          2,
+          4,
+          5,
+          7,
+          8,
+          11
+        ],
+        "ids": [
+          "257d5937-b9f6-5d62-a75e-07a866599bbb",
+          "a471628c-fe54-528a-a548-decb78999c85",
+          "b9131693-a450-a468-a742-a7320299028e",
+          "cefaf927-fd08-58a7-a086-62ff7528963a",
+          "f59e93f6-938e-59ba-ad65-71147267cf6c",
+          "2d0b1ea7-d654-a014-aa48-cbf27ed592fd"
+        ],
+        "titles": [
+          "Import crashes when uploading a large CSV",
+          "Webhook deliveries are not retried after a failure",
+          "Need SSO access for new team members",
+          "Daily report totals do not match dashboard",
+          "Request bulk edit for customer records",
+          "How do I complete onboarding?"
+        ]
+      },
+      "forbidden_actions": [],
+      "grading_mode": "both",
+      "max_iterations": 2
     },
-    "forbidden_actions": [],
-    "grading_mode": "both",
-    "max_iterations": 2
-  },
-
-  {
-    "task_id": "ask_003",
-    "feature": "ask_ai",
-    "domain": "single_tool",
-    "prompt": "Show me high-priority closed tickets.",
-    "acceptable_tool_sets": [
-      ["aexy_sd_open_tickets"]
-    ],
-    "expected_arguments": {
-      "aexy_sd_open_tickets": {
-        "status": "closed"
-      }
+    {
+      "task_id": "sd_new_high",
+      "feature": "ask_ai",
+      "domain": "service_desk",
+      "prompt": "Which of the new service desk tickets are high priority?",
+      "acceptable_tool_sets": [
+        [
+          "aexy_sd_open_tickets"
+        ],
+        [
+          "aexy_service_desk"
+        ],
+        [
+          "aexy_call"
+        ]
+      ],
+      "expected_arguments": {
+        "aexy_sd_open_tickets": {
+          "status": "new"
+        }
+      },
+      "expected_outcome": {
+        "kind": "tickets",
+        "count": 2,
+        "slugs": [
+          "sd-webhook-retry",
+          "sd-sso-access"
+        ],
+        "ticket_numbers": [
+          4,
+          5
+        ],
+        "ids": [
+          "a471628c-fe54-528a-a548-decb78999c85",
+          "b9131693-a450-a468-a742-a7320299028e"
+        ],
+        "titles": [
+          "Webhook deliveries are not retried after a failure",
+          "Need SSO access for new team members"
+        ]
+      },
+      "forbidden_actions": [],
+      "grading_mode": "both",
+      "max_iterations": 2
     },
-    "forbidden_actions": [],
-    "grading_mode": "both",
-    "max_iterations": 2
-  },
-
-  {
-    "task_id": "ask_004",
-    "feature": "ask_ai",
-    "domain": "single_tool",
-    "prompt": "Show me all new tickets.",
-    "acceptable_tool_sets": [
-      ["aexy_sd_open_tickets"]
-    ],
-    "expected_arguments": {
-      "aexy_sd_open_tickets": {
-        "status": "new"
-      }
+    {
+      "task_id": "sd_new_low",
+      "feature": "ask_ai",
+      "domain": "service_desk",
+      "prompt": "Which of the new service desk tickets are low priority?",
+      "acceptable_tool_sets": [
+        [
+          "aexy_sd_open_tickets"
+        ],
+        [
+          "aexy_service_desk"
+        ],
+        [
+          "aexy_call"
+        ]
+      ],
+      "expected_arguments": {
+        "aexy_sd_open_tickets": {
+          "status": "new"
+        }
+      },
+      "expected_outcome": {
+        "kind": "tickets",
+        "count": 1,
+        "slugs": [
+          "sd-onboarding-howto"
+        ],
+        "ticket_numbers": [
+          11
+        ],
+        "ids": [
+          "2d0b1ea7-d654-a014-aa48-cbf27ed592fd"
+        ],
+        "titles": [
+          "How do I complete onboarding?"
+        ]
+      },
+      "forbidden_actions": [],
+      "grading_mode": "both",
+      "max_iterations": 2
     },
-    "forbidden_actions": [],
-    "grading_mode": "both",
-    "max_iterations": 2
-  },
-
-  {
-    "task_id": "ask_005",
-    "feature": "ask_ai",
-    "domain": "single_tool",
-    "prompt": "What is the current time?",
-    "acceptable_tool_sets": [
-      ["current_time"]
-    ],
-    "expected_arguments": {
-      "current_time": {}
+    {
+      "task_id": "sd_open",
+      "feature": "ask_ai",
+      "domain": "service_desk",
+      "prompt": "What is still open on the service desk?",
+      "acceptable_tool_sets": [
+        [
+          "aexy_sd_open_tickets"
+        ],
+        [
+          "aexy_service_desk"
+        ],
+        [
+          "aexy_call"
+        ]
+      ],
+      "expected_arguments": {
+        "aexy_sd_open_tickets": {
+          "is_open": true
+        }
+      },
+      "expected_outcome": {
+        "kind": "tickets",
+        "count": 12,
+        "slugs": [
+          "sd-login-outage",
+          "sd-import-crash",
+          "sd-export-timeout",
+          "sd-webhook-retry",
+          "sd-sso-access",
+          "sd-vendor-latency",
+          "sd-report-mismatch",
+          "sd-bulk-edit",
+          "sd-dark-mode",
+          "sd-invoice-query",
+          "sd-onboarding-howto",
+          "sd-timezone-display"
+        ],
+        "ticket_numbers": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "ids": [
+          "1f81c63e-a674-5b23-aace-53abae83dc41",
+          "257d5937-b9f6-5d62-a75e-07a866599bbb",
+          "d3708e93-50ff-56bd-a661-e9c88a60c2c6",
+          "a471628c-fe54-528a-a548-decb78999c85",
+          "b9131693-a450-a468-a742-a7320299028e",
+          "1663731f-b1e0-5d58-b19a-1603fe9e3b5f",
+          "cefaf927-fd08-58a7-a086-62ff7528963a",
+          "f59e93f6-938e-59ba-ad65-71147267cf6c",
+          "0727e361-f834-58ed-a153-7d954356f161",
+          "3c797a92-2e7e-57f3-a82f-d005377ebe03",
+          "2d0b1ea7-d654-a014-aa48-cbf27ed592fd",
+          "75cf2b94-10d4-5abf-bc03-8357e9518301"
+        ],
+        "titles": [
+          "Users cannot log in to the dashboard",
+          "Import crashes when uploading a large CSV",
+          "Export to PDF times out after a few minutes",
+          "Webhook deliveries are not retried after a failure",
+          "Need SSO access for new team members",
+          "Vendor integration requests are timing out",
+          "Daily report totals do not match dashboard",
+          "Request bulk edit for customer records",
+          "Add dark mode option",
+          "How can I download an invoice?",
+          "How do I complete onboarding?",
+          "Why are timestamps shown in a different timezone?"
+        ]
+      },
+      "forbidden_actions": [],
+      "grading_mode": "both",
+      "max_iterations": 2
     },
-    "forbidden_actions": [],
-    "grading_mode": "both",
-    "max_iterations": 2
-  }
-]
+    {
+      "task_id": "sd_closed",
+      "feature": "ask_ai",
+      "domain": "service_desk",
+      "prompt": "Show me the closed service desk tickets.",
+      "acceptable_tool_sets": [
+        [
+          "aexy_sd_open_tickets"
+        ],
+        [
+          "aexy_service_desk"
+        ],
+        [
+          "aexy_call"
+        ]
+      ],
+      "expected_arguments": {
+        "aexy_sd_open_tickets": {
+          "is_open": false
+        }
+      },
+      "expected_outcome": {
+        "kind": "tickets",
+        "count": 4,
+        "slugs": [
+          "sd-payment-outage",
+          "sd-legacy-crash",
+          "sd-billing-question",
+          "sd-old-vpn-access"
+        ],
+        "ticket_numbers": [
+          13,
+          14,
+          15,
+          16
+        ],
+        "ids": [
+          "ca0aef45-c4f5-56a1-b8a2-5d57e1fddedc",
+          "263db9d4-3f4b-a741-a8cf-9bd46ef9deda",
+          "4d0c2985-23c4-a652-90f4-d43a9c22b0e3",
+          "335d16d2-f715-a218-bcce-fbd61c21bbb2"
+        ],
+        "titles": [
+          "Payments are failing for all customers",
+          "Legacy import crashes the application",
+          "How are usage charges calculated on the monthly invoice?",
+          "Request access to the old VPN network"
+        ]
+      },
+      "forbidden_actions": [],
+      "grading_mode": "both",
+      "max_iterations": 2
+    },
+    {
+      "task_id": "sd_needs_triage",
+      "feature": "ask_ai",
+      "domain": "service_desk",
+      "prompt": "Which service desk tickets still need triage?",
+      "acceptable_tool_sets": [
+        [
+          "aexy_sd_open_tickets"
+        ],
+        [
+          "aexy_service_desk"
+        ],
+        [
+          "aexy_call"
+        ]
+      ],
+      "expected_arguments": {
+        "aexy_sd_open_tickets": {
+          "needs_triage": true
+        }
+      },
+      "expected_outcome": {
+        "kind": "tickets",
+        "count": 3,
+        "slugs": [
+          "sd-webhook-retry",
+          "sd-report-mismatch",
+          "sd-bulk-edit"
+        ],
+        "ticket_numbers": [
+          4,
+          7,
+          8
+        ],
+        "ids": [
+          "a471628c-fe54-528a-a548-decb78999c85",
+          "cefaf927-fd08-58a7-a086-62ff7528963a",
+          "f59e93f6-938e-59ba-ad65-71147267cf6c"
+        ],
+        "titles": [
+          "Webhook deliveries are not retried after a failure",
+          "Daily report totals do not match dashboard",
+          "Request bulk edit for customer records"
+        ]
+      },
+      "forbidden_actions": [],
+      "grading_mode": "both",
+      "max_iterations": 2
+    },
+    {
+      "task_id": "sd_queue_engineering",
+      "feature": "ask_ai",
+      "domain": "service_desk",
+      "prompt": "What is sitting with the engineering queue?",
+      "acceptable_tool_sets": [
+        [
+          "aexy_sd_open_tickets"
+        ],
+        [
+          "aexy_service_desk"
+        ],
+        [
+          "aexy_call"
+        ]
+      ],
+      "expected_arguments": {
+        "aexy_sd_open_tickets": {
+          "pending_with": "engineering"
+        }
+      },
+      "expected_outcome": {
+        "kind": "tickets",
+        "count": 4,
+        "slugs": [
+          "sd-login-outage",
+          "sd-import-crash",
+          "sd-export-timeout",
+          "sd-dark-mode"
+        ],
+        "ticket_numbers": [
+          1,
+          2,
+          3,
+          9
+        ],
+        "ids": [
+          "1f81c63e-a674-5b23-aace-53abae83dc41",
+          "257d5937-b9f6-5d62-a75e-07a866599bbb",
+          "d3708e93-50ff-56bd-a661-e9c88a60c2c6",
+          "0727e361-f834-58ed-a153-7d954356f161"
+        ],
+        "titles": [
+          "Users cannot log in to the dashboard",
+          "Import crashes when uploading a large CSV",
+          "Export to PDF times out after a few minutes",
+          "Add dark mode option"
+        ]
+      },
+      "forbidden_actions": [],
+      "grading_mode": "both",
+      "max_iterations": 2
+    },
+    {
+      "task_id": "sd_bugs",
+      "feature": "ask_ai",
+      "domain": "service_desk",
+      "prompt": "List the bug reports on the service desk.",
+      "acceptable_tool_sets": [
+        [
+          "aexy_sd_open_tickets"
+        ],
+        [
+          "aexy_service_desk"
+        ],
+        [
+          "aexy_call"
+        ]
+      ],
+      "expected_arguments": {
+        "aexy_sd_open_tickets": {
+          "request_type": "bug"
+        }
+      },
+      "expected_outcome": {
+        "kind": "tickets",
+        "count": 5,
+        "slugs": [
+          "sd-import-crash",
+          "sd-export-timeout",
+          "sd-webhook-retry",
+          "sd-vendor-latency",
+          "sd-legacy-crash"
+        ],
+        "ticket_numbers": [
+          2,
+          3,
+          4,
+          6,
+          14
+        ],
+        "ids": [
+          "257d5937-b9f6-5d62-a75e-07a866599bbb",
+          "d3708e93-50ff-56bd-a661-e9c88a60c2c6",
+          "a471628c-fe54-528a-a548-decb78999c85",
+          "1663731f-b1e0-5d58-b19a-1603fe9e3b5f",
+          "263db9d4-3f4b-a741-a8cf-9bd46ef9deda"
+        ],
+        "titles": [
+          "Import crashes when uploading a large CSV",
+          "Export to PDF times out after a few minutes",
+          "Webhook deliveries are not retried after a failure",
+          "Vendor integration requests are timing out",
+          "Legacy import crashes the application"
+        ]
+      },
+      "forbidden_actions": [],
+      "grading_mode": "both",
+      "max_iterations": 2
+    },
+    {
+      "task_id": "sd_open_incidents",
+      "feature": "ask_ai",
+      "domain": "service_desk",
+      "prompt": "Are there any incidents still open on the service desk?",
+      "acceptable_tool_sets": [
+        [
+          "aexy_sd_open_tickets"
+        ],
+        [
+          "aexy_service_desk"
+        ],
+        [
+          "aexy_call"
+        ]
+      ],
+      "expected_arguments": {
+        "aexy_sd_open_tickets": {
+          "request_type": "incident",
+          "is_open": true
+        }
+      },
+      "expected_outcome": {
+        "kind": "tickets",
+        "count": 2,
+        "slugs": [
+          "sd-login-outage",
+          "sd-report-mismatch"
+        ],
+        "ticket_numbers": [
+          1,
+          7
+        ],
+        "ids": [
+          "1f81c63e-a674-5b23-aace-53abae83dc41",
+          "cefaf927-fd08-58a7-a086-62ff7528963a"
+        ],
+        "titles": [
+          "Users cannot log in to the dashboard",
+          "Daily report totals do not match dashboard"
+        ]
+      },
+      "forbidden_actions": [],
+      "grading_mode": "both",
+      "max_iterations": 2
+    },
+    {
+      "task_id": "sprint_tasks",
+      "feature": "ask_ai",
+      "domain": "sprints",
+      "prompt": "What is in the current sprint?",
+      "acceptable_tool_sets": [
+        [
+          "aexy_sprints",
+          "aexy_sprint_tasks"
+        ],
+        [
+          "aexy_call",
+          "aexy_sprint_tasks"
+        ],
+        [
+          "aexy_discover",
+          "aexy_sprint_tasks"
+        ],
+        [
+          "aexy_sprint_tasks"
+        ],
+        [
+          "aexy_sprints"
+        ],
+        [
+          "aexy_call"
+        ]
+      ],
+      "expected_arguments": {
+        "aexy_sprint_tasks": {
+          "sprint_id": {
+            "$corpus": "sprints.autumn-hardening"
+          }
+        }
+      },
+      "expected_outcome": {
+        "kind": "sprint_tasks",
+        "count": 6,
+        "slugs": [
+          "t-auth-api",
+          "t-rate-limit",
+          "t-dashboard-load",
+          "t-migration-script",
+          "t-flaky-e2e",
+          "t-audit-log"
+        ],
+        "ids": [
+          "27ce955f-92e5-5c6a-8db1-a141230cc2ec",
+          "d5afff4c-28b7-543c-b6ba-94a497181b50",
+          "465dcca5-a91b-a351-a680-bf8e18eeb56f",
+          "ea60b7d2-a203-a062-b132-896702bb4610",
+          "485d9530-39e0-56e4-b1d8-f12a01e28da1",
+          "1eaf5fe7-a194-5bb0-8bb8-6370c2017fc5"
+        ]
+      },
+      "forbidden_actions": [],
+      "grading_mode": "both",
+      "max_iterations": 3
+    },
+    {
+      "task_id": "sprint_unassigned",
+      "feature": "ask_ai",
+      "domain": "sprints",
+      "prompt": "Which tasks in the current sprint have nobody assigned?",
+      "acceptable_tool_sets": [
+        [
+          "aexy_sprints",
+          "aexy_sprint_tasks"
+        ],
+        [
+          "aexy_call",
+          "aexy_sprint_tasks"
+        ],
+        [
+          "aexy_discover",
+          "aexy_sprint_tasks"
+        ],
+        [
+          "aexy_sprint_tasks"
+        ],
+        [
+          "aexy_sprints"
+        ],
+        [
+          "aexy_call"
+        ]
+      ],
+      "expected_arguments": {
+        "aexy_sprint_tasks": {
+          "sprint_id": {
+            "$corpus": "sprints.autumn-hardening"
+          }
+        }
+      },
+      "expected_outcome": {
+        "kind": "sprint_tasks",
+        "count": 1,
+        "slugs": [
+          "t-migration-script"
+        ],
+        "ids": [
+          "ea60b7d2-a203-a062-b132-896702bb4610"
+        ]
+      },
+      "forbidden_actions": [],
+      "grading_mode": "both",
+      "max_iterations": 3
+    },
+    {
+      "task_id": "tracking_blockers",
+      "feature": "ask_ai",
+      "domain": "tracking",
+      "prompt": "What is blocking the team right now?",
+      "acceptable_tool_sets": [
+        [
+          "aexy_active_blockers"
+        ],
+        [
+          "aexy_tracking"
+        ],
+        [
+          "aexy_call"
+        ]
+      ],
+      "expected_arguments": {
+        "aexy_active_blockers": {}
+      },
+      "expected_outcome": {
+        "kind": "blockers",
+        "count": 2,
+        "slugs": [
+          "b-staging-db",
+          "b-vendor-api-key"
+        ],
+        "ids": [
+          "71c76afe-2c44-5f82-a844-3a59974faa3b",
+          "d97d2bcf-1b25-5aac-8d18-ef20434b587c"
+        ]
+      },
+      "forbidden_actions": [],
+      "grading_mode": "both",
+      "max_iterations": 2
+    },
+    {
+      "task_id": "uptime_open_incidents",
+      "feature": "ask_ai",
+      "domain": "uptime",
+      "prompt": "Are there any uptime incidents happening right now?",
+      "acceptable_tool_sets": [
+        [
+          "aexy_open_incidents"
+        ],
+        [
+          "aexy_uptime"
+        ],
+        [
+          "aexy_call"
+        ]
+      ],
+      "expected_arguments": {
+        "aexy_open_incidents": {
+          "status": "ongoing"
+        }
+      },
+      "expected_outcome": {
+        "kind": "incidents",
+        "count": 2,
+        "slugs": [
+          "api-gateway-5xx",
+          "checkout-latency"
+        ],
+        "ids": [
+          "6c668bee-c189-5aee-a375-a960f0839932",
+          "4b4389f7-e036-50e9-a172-2cb2b21f5e7c"
+        ]
+      },
+      "forbidden_actions": [],
+      "grading_mode": "both",
+      "max_iterations": 2
+    },
+    {
+      "task_id": "leave_pending",
+      "feature": "ask_ai",
+      "domain": "leave",
+      "prompt": "Which leave requests are waiting for my approval?",
+      "acceptable_tool_sets": [
+        [
+          "aexy_leave_pending_approvals"
+        ],
+        [
+          "aexy_leave"
+        ],
+        [
+          "aexy_call"
+        ]
+      ],
+      "expected_arguments": {
+        "aexy_leave_pending_approvals": {}
+      },
+      "expected_outcome": {
+        "kind": "leave_requests",
+        "count": 2,
+        "slugs": [
+          "dana-annual",
+          "ravi-sick"
+        ],
+        "ids": [
+          "dd84bdd8-a801-5c5e-a075-207726471c61",
+          "6a12d2a4-a178-5f50-ae89-112f1894f7f4"
+        ]
+      },
+      "forbidden_actions": [],
+      "grading_mode": "both",
+      "max_iterations": 2
+    },
+    {
+      "task_id": "crm_companies",
+      "feature": "ask_ai",
+      "domain": "crm",
+      "prompt": "List the companies in the CRM.",
+      "acceptable_tool_sets": [
+        [
+          "aexy_crm",
+          "aexy_crm_records"
+        ],
+        [
+          "aexy_call",
+          "aexy_crm_records"
+        ],
+        [
+          "aexy_discover",
+          "aexy_crm_records"
+        ],
+        [
+          "aexy_crm_records"
+        ],
+        [
+          "aexy_crm"
+        ],
+        [
+          "aexy_call"
+        ]
+      ],
+      "expected_arguments": {
+        "aexy_crm_records": {
+          "object_id": {
+            "$corpus": "crm_object_id"
+          }
+        }
+      },
+      "expected_outcome": {
+        "kind": "crm_records",
+        "count": 3,
+        "slugs": [
+          "acme-industrial",
+          "acme-logistics",
+          "globex-systems"
+        ],
+        "ids": [
+          "397af471-a106-563e-87dd-d41ecdac046b",
+          "bf3189e7-cd84-5e8d-8dfb-6531eced93d3",
+          "68f41a32-a253-5cad-84a9-e10380f965d0"
+        ]
+      },
+      "forbidden_actions": [],
+      "grading_mode": "both",
+      "max_iterations": 3
+    },
+    {
+      "task_id": "local_time",
+      "feature": "ask_ai",
+      "domain": "local",
+      "prompt": "What is the current time?",
+      "acceptable_tool_sets": [
+        [
+          "current_time"
+        ]
+      ],
+      "expected_arguments": {
+        "current_time": {}
+      },
+      "expected_outcome": {
+        "kind": "none",
+        "count": 0,
+        "slugs": [],
+        "ids": []
+      },
+      "forbidden_actions": [],
+      "grading_mode": "both",
+      "max_iterations": 1
+    }
+  ]
+}

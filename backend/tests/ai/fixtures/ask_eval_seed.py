@@ -27,7 +27,7 @@ from aexy.models.ticketing import Ticket, TicketForm, TicketStatus
 
 
 @pytest_asyncio.fixture
-async def ask_eval_seed(ai_db_session):
+async def ask_eval_seed(eval_db_session):
     """
     Create deterministic application state for AexyEval.
 
@@ -46,8 +46,8 @@ async def ask_eval_seed(ai_db_session):
         account_type="internal",
     )
 
-    ai_db_session.add(developer)
-    await ai_db_session.flush()
+    eval_db_session.add(developer)
+    await eval_db_session.flush()
 
     # ======================================================================
     # 2. WORKSPACE
@@ -66,8 +66,8 @@ async def ask_eval_seed(ai_db_session):
         is_active=True,
     )
 
-    ai_db_session.add(workspace)
-    await ai_db_session.flush()
+    eval_db_session.add(workspace)
+    await eval_db_session.flush()
 
     # `owner_id` on the Workspace row alone grants nothing: AppAccessService
     # resolves access from a `WorkspaceMember` row (see
@@ -85,8 +85,8 @@ async def ask_eval_seed(ai_db_session):
         status="active",
     )
 
-    ai_db_session.add(workspace_member)
-    await ai_db_session.flush()
+    eval_db_session.add(workspace_member)
+    await eval_db_session.flush()
 
     # ======================================================================
     # 3. TEAM
@@ -106,8 +106,8 @@ async def ask_eval_seed(ai_db_session):
         is_active=True,
     )
 
-    ai_db_session.add(team)
-    await ai_db_session.flush()
+    eval_db_session.add(team)
+    await eval_db_session.flush()
 
     # ======================================================================
     # 4. ACTIVE SPRINT
@@ -141,8 +141,8 @@ async def ask_eval_seed(ai_db_session):
         created_by_id=developer.id,
     )
 
-    ai_db_session.add(active_sprint)
-    await ai_db_session.flush()
+    eval_db_session.add(active_sprint)
+    await eval_db_session.flush()
 
     # ======================================================================
     # 5. COMPLETED SPRINT
@@ -176,8 +176,8 @@ async def ask_eval_seed(ai_db_session):
         created_by_id=developer.id,
     )
 
-    ai_db_session.add(completed_sprint)
-    await ai_db_session.flush()
+    eval_db_session.add(completed_sprint)
+    await eval_db_session.flush()
 
     # ======================================================================
     # 6. ACTIVE SPRINT TASK 1
@@ -313,7 +313,7 @@ async def ask_eval_seed(ai_db_session):
         ),
     )
 
-    ai_db_session.add_all(
+    eval_db_session.add_all(
         [
             active_task_1,
             active_task_2,
@@ -321,7 +321,7 @@ async def ask_eval_seed(ai_db_session):
         ]
     )
 
-    await ai_db_session.flush()
+    await eval_db_session.flush()
 
     # ======================================================================
     # 9. TICKET FORM
@@ -371,8 +371,8 @@ async def ask_eval_seed(ai_db_session):
         created_by_id=developer.id,
     )
 
-    ai_db_session.add(ticket_form)
-    await ai_db_session.flush()
+    eval_db_session.add(ticket_form)
+    await eval_db_session.flush()
 
     # ======================================================================
     # 10. NEW + HIGH PRIORITY TICKET
@@ -512,7 +512,7 @@ async def ask_eval_seed(ai_db_session):
         sla_breached=False,
     )
 
-    ai_db_session.add_all(
+    eval_db_session.add_all(
         [
             new_high_ticket,
             new_low_ticket,
@@ -520,13 +520,13 @@ async def ask_eval_seed(ai_db_session):
         ]
     )
 
-    await ai_db_session.flush()
+    await eval_db_session.flush()
 
     # ======================================================================
     # 13. COMMIT CONTROLLED DATABASE STATE
     # ======================================================================
 
-    await ai_db_session.commit()
+    await eval_db_session.commit()
 
     # ======================================================================
     # 14. RETURN BENCHMARK STATE

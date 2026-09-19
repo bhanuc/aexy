@@ -21,6 +21,7 @@ Aexy tool-call structure:
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 
@@ -396,4 +397,169 @@ def evaluate_tool_calls(
         "iterations_exceeded": iterations_exceeded,
 
         "path_success": successful_path,
+    }
+
+# ===========================================================================
+# OUTCOME METRICS
+# ===========================================================================
+#
+# Tool metrics answer "did it make the right call". These answer "did it say
+# the right thing", which for a class of questions is the only thing that can
+# be answered at all: `aexy_sd_open_tickets` has no `priority` argument, so
+# "which new tickets are high priority" and "which are low priority" produce an
+# identical call. Path grading scores them the same however the model answers.
+#
+# The anchors are the ticket numbers and ids a generated case derives from the
+# corpus. Numbers are what a model actually writes — it quotes "#4", not a uuid
+# — so they carry most of the weight, with ids accepted when a model echoes the
+# tool result verbatim. Titles are the strongest anchor of the three and are not
+# here yet: they come from the generated corpus text.
+
+# `#4`, `# 4`, `#004`, `ticket 4`, `Ticket #4`. Deliberately not a bare number:
+# "there are 2 tickets" is a count, not a reference, and matching it would
+# manufacture recall out of any answer that summarised itself.
+_TICKET_REFERENCE = re.compile(r"(?:#|\bticket\s+#?)\s*0*(\d+)\b", re.IGNORECASE)
+_UUID_REFERENCE = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.IGNORECASE)
+
+
+def referenced_numbers(response: str) -> set[int]:
+    """Every `#N` the answer mentions."""
+    return {int(match) for match in _TICKET_REFERENCE.findall(response or "")}
+
+
+def referenced_ids(response: str) -> set[str]:
+    return {match.lower() for match in _UUID_REFERENCE.findall(response or "")}
+
+
+def _expected_anchors(
+    expected_outcome: dict[str, Any],
+) -> list[tuple[int | None, str | None, str | None]]:
+    """One (number, id, title) triple per row the answer is supposed to name.
+
+    The lists are emitted in corpus row order by the generator precisely so they
+    can be zipped here. Titles carry the most weight in practice: a model writes
+    "Webhook deliveries are not retried after a failure", sometimes a number,
+    and almost never a uuid.
+    """
+    numbers = expected_outcome.get("ticket_numbers") or []
+    ids = expected_outcome.get("ids") or []
+    titles = expected_outcome.get("titles") or []
+    length = max(len(numbers), len(ids), len(titles))
+
+    def at(values: list, index: int):
+        return values[index] if index < len(values) else None
+
+    return [(at(numbers, i), at(ids, i), at(titles, i)) for i in range(length)]
+
+
+def answer_recall(
+    expected_outcome: dict[str, Any],
+    response: str,
+) -> float:
+    """How much of the correct answer the model actually said.
+
+    1.0 when the case expects nothing, so a question with no rows to name is
+    not scored as a miss.
+    """
+    anchors = _expected_anchors(expected_outcome)
+    if not anchors:
+        return 1.0
+
+    numbers = referenced_numbers(response)
+    ids = referenced_ids(response)
+
+    lowered = (response or "").lower()
+    found = sum(
+        1
+        for number, entity_id, title in anchors
+        if (number is not None and number in numbers)
+        or (entity_id is not None and entity_id.lower() in ids)
+        or (title is not None and title.lower() in lowered)
+    )
+    return found / len(anchors)
+
+
+def answer_precision(
+    expected_outcome: dict[str, Any],
+    response: str,
+    universe: dict[str, Any] | None = None,
+) -> float:
+    """Of the rows the answer named, how many belonged in it.
+
+    Recall alone is not enough. Asked for the two high-priority tickets, a model
+    that lists all six new ones has named both of them and would score a perfect
+    recall while being wrong. Only references the corpus recognises are counted,
+    so an invented number is a hallucination rather than a precision miss — the
+    two are different failures and are reported separately.
+    """
+    anchors = _expected_anchors(expected_outcome)
+    if not anchors:
+        return 1.0
+
+    known_numbers = set((universe or {}).get("ticket_numbers") or [])
+    known_ids = {i.lower() for i in (universe or {}).get("ids") or []}
+
+    said_numbers = referenced_numbers(response) & known_numbers if known_numbers else referenced_numbers(response)
+    said_ids = referenced_ids(response) & known_ids if known_ids else referenced_ids(response)
+    if not said_numbers and not said_ids:
+        return 0.0
+
+    expected_numbers = {n for n, _, _ in anchors if n is not None}
+    expected_ids = {i.lower() for _, i, _ in anchors if i is not None}
+
+    said = {("n", n) for n in said_numbers} | {("i", i) for i in said_ids}
+    correct = {("n", n) for n in said_numbers & expected_numbers} | {
+        ("i", i) for i in said_ids & expected_ids
+    }
+    return len(correct) / len(said)
+
+
+def hallucinated_entities(
+    response: str,
+    universe: dict[str, Any] | None = None,
+) -> list[str]:
+    """References in the answer that exist nowhere in the corpus.
+
+    A model naming ticket #42 in a workspace with sixteen tickets has invented
+    it, which is a different and worse failure than naming the wrong real one.
+    Without a universe to check against nothing can be called invented, so the
+    answer is an empty list rather than a guess.
+    """
+    if not universe:
+        return []
+
+    known_numbers = set(universe.get("ticket_numbers") or [])
+    known_ids = {i.lower() for i in (universe.get("ids") or [])}
+
+    invented = [f"#{n}" for n in sorted(referenced_numbers(response) - known_numbers)]
+    invented += sorted(referenced_ids(response) - known_ids)
+    return invented
+
+
+def outcome_success(
+    expected_outcome: dict[str, Any],
+    response: str,
+    universe: dict[str, Any] | None = None,
+) -> bool:
+    """The whole correct answer, nothing that does not belong, nothing invented."""
+    return (
+        answer_recall(expected_outcome, response) == 1.0
+        and answer_precision(expected_outcome, response, universe) == 1.0
+        and not hallucinated_entities(response, universe)
+    )
+
+
+def evaluate_outcome(
+    case: dict[str, Any],
+    response: str,
+    universe: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Outcome metrics for one case, in the shape `evaluate_tool_calls` uses."""
+    expected_outcome = case.get("expected_outcome") or {}
+    return {
+        "expected_count": expected_outcome.get("count"),
+        "answer_recall": answer_recall(expected_outcome, response),
+        "answer_precision": answer_precision(expected_outcome, response, universe),
+        "hallucinated_entities": hallucinated_entities(response, universe),
+        "outcome_success": outcome_success(expected_outcome, response, universe),
     }

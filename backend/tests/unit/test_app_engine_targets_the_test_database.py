@@ -21,6 +21,7 @@ wrong reason on any machine with a healthy dev database.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -75,6 +76,53 @@ class TestTheRedirectIsWhereItHasToBe:
         engine; pointing settings at the same URL is what extends it to the ~40
         call sites."""
         assert get_settings().database_url == TEST_DATABASE_URL
+
+
+class TestTheRedirectSurvivesACacheClear:
+    """The half this file originally missed.
+
+    Assigning `get_settings().database_url` mutates the one cached `Settings`
+    instance, and the redirect lives exactly as long as that instance does. Any
+    test calling `get_settings.cache_clear()` throws it away, and the next
+    `get_settings()` rebuilds from `backend/.env`.
+
+    `tests/ai/test_ask_evals.py` does that autouse, before every eval case, to
+    pick up a monkeypatched LLM provider. Its tool calls re-enter the
+    application over ASGI, so they were served from the developer's own
+    database — which is the exposure the rest of this file was written to close,
+    reopened from a different direction. Observed directly: before the fix the
+    URL went from `sqlite+aiosqlite:///:memory:` to
+    `postgresql+asyncpg://postgres:postgres@localhost:5432/aexy`.
+
+    Setting the environment variable as well is what holds, because a rebuilt
+    `Settings` reads `DATABASE_URL` from the environment.
+    """
+
+    def test_settings_still_point_at_the_test_database(self):
+        get_settings.cache_clear()
+        try:
+            assert get_settings().database_url == TEST_DATABASE_URL
+        finally:
+            get_settings.cache_clear()
+
+    def test_the_environment_carries_it_not_just_the_cached_object(self):
+        assert os.environ.get("DATABASE_URL") == TEST_DATABASE_URL
+
+    def test_conftest_sets_the_environment_before_any_fixture(self):
+        source = Path("tests/conftest.py").read_text()
+        assert 'os.environ["DATABASE_URL"] = TEST_DATABASE_URL' in source
+
+        line = next(
+            index
+            for index, text in enumerate(source.splitlines())
+            if 'os.environ["DATABASE_URL"] = TEST_DATABASE_URL' in text
+        )
+        first_fixture = next(
+            index
+            for index, text in enumerate(source.splitlines())
+            if text.startswith("@pytest")
+        )
+        assert line < first_fixture
 
 
 class TestPoolArgumentsFollowTheDriver:
